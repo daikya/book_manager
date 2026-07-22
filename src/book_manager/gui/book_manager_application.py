@@ -1,14 +1,15 @@
-"""書籍管理アプリケーションのメインGUI。"""
-
 from __future__ import annotations
 
+"""書籍管理アプリケーションのメインGUI。"""
+
 import tkinter as tk
-from tkinter import ttk
+import traceback
+from tkinter import messagebox, ttk
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from book_manager.models.book_item import BookItem
     from book_manager.services.book_service import BookService
-
 
 class BookManagerApplication:
     """書籍管理アプリケーションのメインウィンドウを管理する。"""
@@ -102,6 +103,7 @@ class BookManagerApplication:
 
         self._configure_root()
         self._create_widgets()
+        self._load_all_books()
 
         self._title_entry.focus_set()
 
@@ -861,26 +863,266 @@ class BookManagerApplication:
             sticky="e",
         )
 
+    def _load_all_books(self) -> None:
+        """全書籍を取得して一覧へ表示する。"""
+        try:
+            books = self._service.get_all_books()
+            self._display_books(
+                books,
+                status_prefix="全",
+            )
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "読み込みエラー",
+                "書籍情報を読み込めませんでした。",
+                parent=self._root,
+            )
+
+    def _display_books(
+        self,
+        books: list[BookItem],
+        *,
+        status_prefix: str,
+    ) -> None:
+        """書籍一覧をTreeViewへ表示する。
+
+        Args:
+            books: 表示する書籍一覧。
+            status_prefix: 件数表示の先頭文字列。
+        """
+        for item_id in self._book_tree.get_children():
+            self._book_tree.delete(
+                item_id,
+            )
+
+        displayed_count = 0
+
+        for book in books:
+            if book.id is None:
+                continue
+
+            self._book_tree.insert(
+                "",
+                "end",
+                iid=str(book.id),
+                values=(
+                    book.id,
+                    book.title,
+                    book.author or "",
+                    book.publisher or "",
+                    book.publication_format or "",
+                    book.isbn or "",
+                    book.magazine_code or "",
+                    book.completion_month or "",
+                ),
+            )
+            displayed_count += 1
+
+        self._count_status_var.set(
+            f"{status_prefix} {displayed_count}件",
+        )
+
+    def _display_book_in_form(
+        self,
+        book_item: BookItem,
+    ) -> None:
+        """BookItemの内容を入力フォームへ表示する。
+
+        Args:
+            book_item: 表示する書籍。
+        """
+        if book_item.id is None:
+            raise ValueError(
+                "表示対象のBookItemにはidが必要です。",
+            )
+
+        self._title_var.set(
+            book_item.title,
+        )
+        self._isbn_var.set(
+            book_item.isbn or "",
+        )
+        self._magazine_code_var.set(
+            book_item.magazine_code or "",
+        )
+        self._author_var.set(
+            book_item.author or "",
+        )
+        self._publisher_var.set(
+            book_item.publisher or "",
+        )
+        self._publication_format_var.set(
+            book_item.publication_format or "",
+        )
+        self._completion_month_var.set(
+            book_item.completion_month or "",
+        )
+
+        self._replace_text(
+            self._description_text,
+            book_item.description,
+        )
+        self._replace_text(
+            self._notes_text,
+            book_item.notes,
+        )
+
+        self._selected_book_id = book_item.id
+        self._edit_status_var.set(
+            f"編集中：ID {book_item.id}",
+        )
+
+    @staticmethod
+    def _replace_text(
+        text_widget: tk.Text,
+        value: str | None,
+    ) -> None:
+        """Textウィジェットの内容を置き換える。"""
+        text_widget.delete(
+            "1.0",
+            tk.END,
+        )
+        text_widget.insert(
+            "1.0",
+            value or "",
+        )
+
+    def _select_book_in_tree(
+        self,
+        book_id: int,
+    ) -> None:
+        """指定された書籍をTreeView上で選択する。
+
+        Args:
+            book_id: 選択する書籍ID。
+        """
+        iid = str(book_id)
+
+        if not self._book_tree.exists(iid):
+            return
+
+        self._book_tree.selection_set(
+            iid,
+        )
+        self._book_tree.focus(
+            iid,
+        )
+        self._book_tree.see(
+            iid,
+        )
+
+    def _clear_selected_book(self) -> None:
+        """一覧選択と編集対象IDを解除する。"""
+        selected_items = self._book_tree.selection()
+
+        if selected_items:
+            self._book_tree.selection_remove(
+                *selected_items,
+            )
+
+        self._selected_book_id = None
+        self._edit_status_var.set(
+            "新規登録",
+        )
+
+    def _clear_form(self) -> None:
+        """入力フォームと選択状態を初期化する。"""
+        self._title_var.set("")
+        self._isbn_var.set("")
+        self._magazine_code_var.set("")
+        self._author_var.set("")
+        self._publisher_var.set("")
+        self._publication_format_var.set("")
+        self._completion_month_var.set("")
+
+        self._description_text.delete(
+            "1.0",
+            tk.END,
+        )
+        self._notes_text.delete(
+            "1.0",
+            tk.END,
+        )
+
+        selected_items = self._book_tree.selection()
+
+        if selected_items:
+            self._book_tree.selection_remove(
+                *selected_items,
+            )
+
+        self._selected_book_id = None
+        self._edit_status_var.set(
+            "新規登録",
+        )
+
+
+
+
+
+
+
+
     def _on_search(
         self,
         _event: tk.Event[tk.Misc] | None = None,
     ) -> None:
-        """検索操作を受け付ける。
+        """指定された条件で書籍を検索する。"""
+        search_type = self._search_type_var.get()
+        keyword = self._search_keyword_var.get()
 
-        検索処理は後続工程で実装する。
-        """
-        self._count_status_var.set(
-            "検索機能は後続工程で実装します。",
-        )
+        try:
+            if search_type == "書籍名":
+                books = self._service.search_books_by_title(
+                    keyword,
+                )
+            elif search_type == "ISBN":
+                books = self._service.find_books_by_isbn(
+                    keyword,
+                )
+            elif search_type == "雑誌コード":
+                books = (
+                    self._service.find_books_by_magazine_code(
+                        keyword,
+                    )
+                )
+            else:
+                messagebox.showerror(
+                    "検索エラー",
+                    "検索種類が正しくありません。",
+                    parent=self._root,
+                )
+                return
+
+            self._display_books(
+                books,
+                status_prefix="検索結果",
+            )
+            self._clear_form()
+
+        except ValueError as error:
+            messagebox.showerror(
+                "検索エラー",
+                str(error),
+                parent=self._root,
+            )
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "検索エラー",
+                "書籍情報を検索できませんでした。",
+                parent=self._root,
+            )
 
     def _on_show_all(self) -> None:
-        """全件表示操作を受け付ける。
-
-        一覧取得処理は後続工程で実装する。
-        """
-        self._count_status_var.set(
-            "全件表示機能は後続工程で実装します。",
+        """検索条件を初期化して全書籍を表示する。"""
+        self._search_type_var.set(
+            self.SEARCH_TYPES[0],
         )
+        self._search_keyword_var.set("")
+
+        self._load_all_books()
 
     def _on_clear_search(self) -> None:
         """検索条件を初期状態へ戻す。"""
@@ -894,10 +1136,54 @@ class BookManagerApplication:
         self,
         _event: tk.Event[tk.Misc],
     ) -> None:
-        """書籍一覧の選択操作を受け付ける。
+        """選択された書籍を入力フォームへ表示する。"""
+        selected_items = self._book_tree.selection()
 
-        選択データ取得は後続工程で実装する。
-        """
+        if not selected_items:
+            return
+
+        selected_iid = selected_items[0]
+
+        try:
+            book_id = int(selected_iid)
+        except ValueError:
+            traceback.print_exc()
+            messagebox.showerror(
+                "選択エラー",
+                "選択された書籍を識別できませんでした。",
+                parent=self._root,
+            )
+            return
+
+        try:
+            book_item = self._service.get_book(
+                book_id,
+            )
+
+            if book_item is None:
+                messagebox.showwarning(
+                    "書籍が見つかりません",
+                    (
+                        "選択された書籍が見つかりませんでした。\n"
+                        "一覧を再読み込みします。"
+                    ),
+                    parent=self._root,
+                )
+                self._load_all_books()
+                self._clear_form()
+                return
+
+            self._display_book_in_form(
+                book_item,
+            )
+
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "読み込みエラー",
+                "選択された書籍情報を読み込めませんでした。",
+                parent=self._root,
+            )
 
     def _on_add(self) -> None:
         """新規登録操作を受け付ける。
@@ -928,43 +1214,26 @@ class BookManagerApplication:
 
     def _on_clear(self) -> None:
         """入力フォームを初期状態へ戻す。"""
-        self._title_var.set("")
-        self._isbn_var.set("")
-        self._magazine_code_var.set("")
-        self._author_var.set("")
-        self._publisher_var.set("")
-        self._publication_format_var.set("")
-        self._completion_month_var.set("")
-
-        self._description_text.delete(
-            "1.0",
-            tk.END,
-        )
-        self._notes_text.delete(
-            "1.0",
-            tk.END,
-        )
-
-        selected_items = self._book_tree.selection()
-        if selected_items:
-            self._book_tree.selection_remove(
-                *selected_items,
-            )
-
-        self._selected_book_id = None
-        self._edit_status_var.set(
-            "新規登録",
-        )
+        self._clear_form()
         self._title_entry.focus_set()
 
     def _on_reload(self) -> None:
-        """一覧再読み込み操作を受け付ける。
+        """書籍一覧を最新状態へ更新する。"""
+        selected_book_id = self._selected_book_id
 
-        再読み込み処理は後続工程で実装する。
-        """
-        self._count_status_var.set(
-            "再読み込み機能は後続工程で実装します。",
-        )
+        self._load_all_books()
+
+        if selected_book_id is None:
+            return
+
+        if self._book_tree.exists(
+            str(selected_book_id),
+        ):
+            self._select_book_in_tree(
+                selected_book_id,
+            )
+        else:
+            self._clear_form()
 
     def _on_exit(self) -> None:
         """アプリケーションを終了する。"""
