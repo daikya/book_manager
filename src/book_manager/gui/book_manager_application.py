@@ -1,0 +1,971 @@
+"""書籍管理アプリケーションのメインGUI。"""
+
+from __future__ import annotations
+
+import tkinter as tk
+from tkinter import ttk
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from book_manager.services.book_service import BookService
+
+
+class BookManagerApplication:
+    """書籍管理アプリケーションのメインウィンドウを管理する。"""
+
+    WINDOW_TITLE = "書籍管理"
+    WINDOW_SIZE = "1200x760"
+    MINIMUM_WIDTH = 1000
+    MINIMUM_HEIGHT = 650
+
+    SEARCH_TYPES = (
+        "書籍名",
+        "ISBN",
+        "雑誌コード",
+    )
+
+    PUBLICATION_FORMATS = (
+        "",
+        "文庫",
+        "単行本",
+        "新書",
+        "雑誌",
+        "電子書籍",
+        "その他",
+    )
+
+    TREE_COLUMNS = (
+        "id",
+        "title",
+        "author",
+        "publisher",
+        "publication_format",
+        "isbn",
+        "magazine_code",
+        "completion_month",
+    )
+
+    def __init__(
+        self,
+        root: tk.Tk,
+        service: BookService,
+    ) -> None:
+        """GUIを初期化する。
+
+        Args:
+            root: Tkinterのルートウィンドウ。
+            service: 書籍管理処理を提供するBookService。
+        """
+        self._root = root
+        self._service = service
+
+        self._selected_book_id: int | None = None
+
+        self._search_type_var = tk.StringVar(
+            master=self._root,
+            value=self.SEARCH_TYPES[0],
+        )
+        self._search_keyword_var = tk.StringVar(
+            master=self._root,
+        )
+
+        self._title_var = tk.StringVar(
+            master=self._root,
+        )
+        self._isbn_var = tk.StringVar(
+            master=self._root,
+        )
+        self._magazine_code_var = tk.StringVar(
+            master=self._root,
+        )
+        self._author_var = tk.StringVar(
+            master=self._root,
+        )
+        self._publisher_var = tk.StringVar(
+            master=self._root,
+        )
+        self._publication_format_var = tk.StringVar(
+            master=self._root,
+        )
+        self._completion_month_var = tk.StringVar(
+            master=self._root,
+        )
+
+        self._count_status_var = tk.StringVar(
+            master=self._root,
+            value="全 0件",
+        )
+        self._edit_status_var = tk.StringVar(
+            master=self._root,
+            value="新規登録",
+        )
+
+        self._configure_root()
+        self._create_widgets()
+
+        self._title_entry.focus_set()
+
+    def _configure_root(self) -> None:
+        """メインウィンドウを設定する。"""
+        self._root.title(self.WINDOW_TITLE)
+        self._root.geometry(self.WINDOW_SIZE)
+        self._root.minsize(
+            self.MINIMUM_WIDTH,
+            self.MINIMUM_HEIGHT,
+        )
+
+        self._root.rowconfigure(
+            0,
+            weight=1,
+        )
+        self._root.columnconfigure(
+            0,
+            weight=1,
+        )
+
+        self._root.protocol(
+            "WM_DELETE_WINDOW",
+            self._on_exit,
+        )
+
+    def _create_widgets(self) -> None:
+        """メインウィンドウ内のウィジェットを作成する。"""
+        main_frame = ttk.Frame(
+            self._root,
+            padding=10,
+        )
+        main_frame.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+        )
+
+        main_frame.columnconfigure(
+            0,
+            weight=1,
+        )
+        main_frame.rowconfigure(
+            1,
+            weight=3,
+        )
+        main_frame.rowconfigure(
+            2,
+            weight=2,
+        )
+
+        self._create_search_frame(
+            main_frame,
+        )
+        self._create_list_frame(
+            main_frame,
+        )
+        self._create_form_frame(
+            main_frame,
+        )
+        self._create_button_frame(
+            main_frame,
+        )
+        self._create_status_frame(
+            main_frame,
+        )
+
+    def _create_search_frame(
+        self,
+        parent: ttk.Frame,
+    ) -> None:
+        """検索領域を作成する。"""
+        search_frame = ttk.LabelFrame(
+            parent,
+            text="検索",
+            padding=8,
+        )
+        search_frame.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+            pady=(0, 8),
+        )
+
+        search_frame.columnconfigure(
+            2,
+            weight=1,
+        )
+
+        ttk.Label(
+            search_frame,
+            text="検索種類",
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w",
+            padx=(0, 6),
+        )
+
+        self._search_type_combobox = ttk.Combobox(
+            search_frame,
+            textvariable=self._search_type_var,
+            values=self.SEARCH_TYPES,
+            state="readonly",
+            width=12,
+        )
+        self._search_type_combobox.grid(
+            row=0,
+            column=1,
+            sticky="w",
+            padx=(0, 10),
+        )
+
+        self._search_entry = ttk.Entry(
+            search_frame,
+            textvariable=self._search_keyword_var,
+        )
+        self._search_entry.grid(
+            row=0,
+            column=2,
+            sticky="ew",
+            padx=(0, 8),
+        )
+        self._search_entry.bind(
+            "<Return>",
+            self._on_search,
+        )
+
+        self._search_button = ttk.Button(
+            search_frame,
+            text="検索",
+            command=self._on_search,
+        )
+        self._search_button.grid(
+            row=0,
+            column=3,
+            padx=(0, 6),
+        )
+
+        self._show_all_button = ttk.Button(
+            search_frame,
+            text="全件表示",
+            command=self._on_show_all,
+        )
+        self._show_all_button.grid(
+            row=0,
+            column=4,
+            padx=(0, 6),
+        )
+
+        self._clear_search_button = ttk.Button(
+            search_frame,
+            text="検索条件クリア",
+            command=self._on_clear_search,
+        )
+        self._clear_search_button.grid(
+            row=0,
+            column=5,
+        )
+
+    def _create_list_frame(
+        self,
+        parent: ttk.Frame,
+    ) -> None:
+        """書籍一覧領域を作成する。"""
+        list_frame = ttk.LabelFrame(
+            parent,
+            text="書籍一覧",
+            padding=8,
+        )
+        list_frame.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+            pady=(0, 8),
+        )
+
+        list_frame.rowconfigure(
+            0,
+            weight=1,
+        )
+        list_frame.columnconfigure(
+            0,
+            weight=1,
+        )
+
+        self._book_tree = ttk.Treeview(
+            list_frame,
+            columns=self.TREE_COLUMNS,
+            show="headings",
+            selectmode="browse",
+        )
+
+        self._configure_tree_columns()
+
+        vertical_scrollbar = ttk.Scrollbar(
+            list_frame,
+            orient="vertical",
+            command=self._book_tree.yview,
+        )
+        horizontal_scrollbar = ttk.Scrollbar(
+            list_frame,
+            orient="horizontal",
+            command=self._book_tree.xview,
+        )
+
+        self._book_tree.configure(
+            yscrollcommand=vertical_scrollbar.set,
+            xscrollcommand=horizontal_scrollbar.set,
+        )
+
+        self._book_tree.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+        )
+        vertical_scrollbar.grid(
+            row=0,
+            column=1,
+            sticky="ns",
+        )
+        horizontal_scrollbar.grid(
+            row=1,
+            column=0,
+            sticky="ew",
+        )
+
+        self._book_tree.bind(
+            "<<TreeviewSelect>>",
+            self._on_tree_select,
+        )
+
+    def _configure_tree_columns(self) -> None:
+        """書籍一覧の列を設定する。"""
+        column_definitions = {
+            "id": {
+                "heading": "ID",
+                "width": 60,
+                "minwidth": 50,
+                "anchor": "center",
+                "stretch": False,
+            },
+            "title": {
+                "heading": "書籍名",
+                "width": 250,
+                "minwidth": 160,
+                "anchor": "w",
+                "stretch": True,
+            },
+            "author": {
+                "heading": "著者名",
+                "width": 160,
+                "minwidth": 100,
+                "anchor": "w",
+                "stretch": True,
+            },
+            "publisher": {
+                "heading": "出版社",
+                "width": 140,
+                "minwidth": 100,
+                "anchor": "w",
+                "stretch": True,
+            },
+            "publication_format": {
+                "heading": "出版形態",
+                "width": 90,
+                "minwidth": 80,
+                "anchor": "center",
+                "stretch": False,
+            },
+            "isbn": {
+                "heading": "ISBN",
+                "width": 130,
+                "minwidth": 110,
+                "anchor": "w",
+                "stretch": False,
+            },
+            "magazine_code": {
+                "heading": "雑誌コード",
+                "width": 100,
+                "minwidth": 90,
+                "anchor": "center",
+                "stretch": False,
+            },
+            "completion_month": {
+                "heading": "読了年月",
+                "width": 90,
+                "minwidth": 80,
+                "anchor": "center",
+                "stretch": False,
+            },
+        }
+
+        for column_name, definition in column_definitions.items():
+            self._book_tree.heading(
+                column_name,
+                text=definition["heading"],
+            )
+            self._book_tree.column(
+                column_name,
+                width=definition["width"],
+                minwidth=definition["minwidth"],
+                anchor=definition["anchor"],
+                stretch=definition["stretch"],
+            )
+
+    def _create_form_frame(
+        self,
+        parent: ttk.Frame,
+    ) -> None:
+        """書籍情報入力領域を作成する。"""
+        form_frame = ttk.LabelFrame(
+            parent,
+            text="書籍情報",
+            padding=8,
+        )
+        form_frame.grid(
+            row=2,
+            column=0,
+            sticky="nsew",
+            pady=(0, 8),
+        )
+
+        form_frame.columnconfigure(
+            1,
+            weight=1,
+        )
+        form_frame.columnconfigure(
+            3,
+            weight=1,
+        )
+        form_frame.rowconfigure(
+            4,
+            weight=1,
+        )
+        form_frame.rowconfigure(
+            5,
+            weight=1,
+        )
+
+        ttk.Label(
+            form_frame,
+            text="書籍名 *",
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w",
+            padx=(0, 6),
+            pady=4,
+        )
+
+        self._title_entry = ttk.Entry(
+            form_frame,
+            textvariable=self._title_var,
+        )
+        self._title_entry.grid(
+            row=0,
+            column=1,
+            columnspan=3,
+            sticky="ew",
+            pady=4,
+        )
+
+        ttk.Label(
+            form_frame,
+            text="著者名",
+        ).grid(
+            row=1,
+            column=0,
+            sticky="w",
+            padx=(0, 6),
+            pady=4,
+        )
+
+        self._author_entry = ttk.Entry(
+            form_frame,
+            textvariable=self._author_var,
+        )
+        self._author_entry.grid(
+            row=1,
+            column=1,
+            sticky="ew",
+            padx=(0, 12),
+            pady=4,
+        )
+
+        ttk.Label(
+            form_frame,
+            text="出版社",
+        ).grid(
+            row=1,
+            column=2,
+            sticky="w",
+            padx=(0, 6),
+            pady=4,
+        )
+
+        self._publisher_entry = ttk.Entry(
+            form_frame,
+            textvariable=self._publisher_var,
+        )
+        self._publisher_entry.grid(
+            row=1,
+            column=3,
+            sticky="ew",
+            pady=4,
+        )
+
+        ttk.Label(
+            form_frame,
+            text="出版形態",
+        ).grid(
+            row=2,
+            column=0,
+            sticky="w",
+            padx=(0, 6),
+            pady=4,
+        )
+
+        self._publication_format_combobox = ttk.Combobox(
+            form_frame,
+            textvariable=self._publication_format_var,
+            values=self.PUBLICATION_FORMATS,
+        )
+        self._publication_format_combobox.grid(
+            row=2,
+            column=1,
+            sticky="ew",
+            padx=(0, 12),
+            pady=4,
+        )
+
+        ttk.Label(
+            form_frame,
+            text="読了年月",
+        ).grid(
+            row=2,
+            column=2,
+            sticky="w",
+            padx=(0, 6),
+            pady=4,
+        )
+
+        completion_month_frame = ttk.Frame(
+            form_frame,
+        )
+        completion_month_frame.grid(
+            row=2,
+            column=3,
+            sticky="ew",
+            pady=4,
+        )
+        completion_month_frame.columnconfigure(
+            0,
+            weight=1,
+        )
+
+        self._completion_month_entry = ttk.Entry(
+            completion_month_frame,
+            textvariable=self._completion_month_var,
+        )
+        self._completion_month_entry.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+        )
+
+        ttk.Label(
+            completion_month_frame,
+            text="例：2026-07",
+        ).grid(
+            row=0,
+            column=1,
+            sticky="w",
+            padx=(6, 0),
+        )
+
+        ttk.Label(
+            form_frame,
+            text="ISBN",
+        ).grid(
+            row=3,
+            column=0,
+            sticky="w",
+            padx=(0, 6),
+            pady=4,
+        )
+
+        self._isbn_entry = ttk.Entry(
+            form_frame,
+            textvariable=self._isbn_var,
+        )
+        self._isbn_entry.grid(
+            row=3,
+            column=1,
+            sticky="ew",
+            padx=(0, 12),
+            pady=4,
+        )
+
+        ttk.Label(
+            form_frame,
+            text="雑誌コード",
+        ).grid(
+            row=3,
+            column=2,
+            sticky="w",
+            padx=(0, 6),
+            pady=4,
+        )
+
+        self._magazine_code_entry = ttk.Entry(
+            form_frame,
+            textvariable=self._magazine_code_var,
+        )
+        self._magazine_code_entry.grid(
+            row=3,
+            column=3,
+            sticky="ew",
+            pady=4,
+        )
+
+        ttk.Label(
+            form_frame,
+            text="内容紹介",
+        ).grid(
+            row=4,
+            column=0,
+            sticky="nw",
+            padx=(0, 6),
+            pady=4,
+        )
+
+        description_frame = ttk.Frame(
+            form_frame,
+        )
+        description_frame.grid(
+            row=4,
+            column=1,
+            columnspan=3,
+            sticky="nsew",
+            pady=4,
+        )
+        description_frame.rowconfigure(
+            0,
+            weight=1,
+        )
+        description_frame.columnconfigure(
+            0,
+            weight=1,
+        )
+
+        self._description_text = tk.Text(
+            description_frame,
+            height=4,
+            wrap="word",
+        )
+        description_scrollbar = ttk.Scrollbar(
+            description_frame,
+            orient="vertical",
+            command=self._description_text.yview,
+        )
+        self._description_text.configure(
+            yscrollcommand=description_scrollbar.set,
+        )
+
+        self._description_text.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+        )
+        description_scrollbar.grid(
+            row=0,
+            column=1,
+            sticky="ns",
+        )
+
+        ttk.Label(
+            form_frame,
+            text="備考",
+        ).grid(
+            row=5,
+            column=0,
+            sticky="nw",
+            padx=(0, 6),
+            pady=4,
+        )
+
+        notes_frame = ttk.Frame(
+            form_frame,
+        )
+        notes_frame.grid(
+            row=5,
+            column=1,
+            columnspan=3,
+            sticky="nsew",
+            pady=4,
+        )
+        notes_frame.rowconfigure(
+            0,
+            weight=1,
+        )
+        notes_frame.columnconfigure(
+            0,
+            weight=1,
+        )
+
+        self._notes_text = tk.Text(
+            notes_frame,
+            height=4,
+            wrap="word",
+        )
+        notes_scrollbar = ttk.Scrollbar(
+            notes_frame,
+            orient="vertical",
+            command=self._notes_text.yview,
+        )
+        self._notes_text.configure(
+            yscrollcommand=notes_scrollbar.set,
+        )
+
+        self._notes_text.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+        )
+        notes_scrollbar.grid(
+            row=0,
+            column=1,
+            sticky="ns",
+        )
+
+    def _create_button_frame(
+        self,
+        parent: ttk.Frame,
+    ) -> None:
+        """操作ボタン領域を作成する。"""
+        button_frame = ttk.Frame(
+            parent,
+        )
+        button_frame.grid(
+            row=3,
+            column=0,
+            sticky="ew",
+            pady=(0, 8),
+        )
+
+        button_frame.columnconfigure(
+            6,
+            weight=1,
+        )
+
+        self._add_button = ttk.Button(
+            button_frame,
+            text="新規登録",
+            command=self._on_add,
+        )
+        self._add_button.grid(
+            row=0,
+            column=0,
+            padx=(0, 6),
+        )
+
+        self._update_button = ttk.Button(
+            button_frame,
+            text="更新",
+            command=self._on_update,
+        )
+        self._update_button.grid(
+            row=0,
+            column=1,
+            padx=(0, 6),
+        )
+
+        self._delete_button = ttk.Button(
+            button_frame,
+            text="削除",
+            command=self._on_delete,
+        )
+        self._delete_button.grid(
+            row=0,
+            column=2,
+            padx=(0, 6),
+        )
+
+        self._clear_button = ttk.Button(
+            button_frame,
+            text="入力クリア",
+            command=self._on_clear,
+        )
+        self._clear_button.grid(
+            row=0,
+            column=3,
+            padx=(0, 6),
+        )
+
+        self._reload_button = ttk.Button(
+            button_frame,
+            text="再読み込み",
+            command=self._on_reload,
+        )
+        self._reload_button.grid(
+            row=0,
+            column=4,
+            padx=(0, 6),
+        )
+
+        self._exit_button = ttk.Button(
+            button_frame,
+            text="終了",
+            command=self._on_exit,
+        )
+        self._exit_button.grid(
+            row=0,
+            column=7,
+            sticky="e",
+        )
+
+    def _create_status_frame(
+        self,
+        parent: ttk.Frame,
+    ) -> None:
+        """状態表示領域を作成する。"""
+        status_frame = ttk.Frame(
+            parent,
+            relief="sunken",
+            padding=(6, 3),
+        )
+        status_frame.grid(
+            row=4,
+            column=0,
+            sticky="ew",
+        )
+
+        status_frame.columnconfigure(
+            0,
+            weight=1,
+        )
+
+        ttk.Label(
+            status_frame,
+            textvariable=self._count_status_var,
+            anchor="w",
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w",
+        )
+
+        ttk.Label(
+            status_frame,
+            textvariable=self._edit_status_var,
+            anchor="e",
+        ).grid(
+            row=0,
+            column=1,
+            sticky="e",
+        )
+
+    def _on_search(
+        self,
+        _event: tk.Event[tk.Misc] | None = None,
+    ) -> None:
+        """検索操作を受け付ける。
+
+        検索処理は後続工程で実装する。
+        """
+        self._count_status_var.set(
+            "検索機能は後続工程で実装します。",
+        )
+
+    def _on_show_all(self) -> None:
+        """全件表示操作を受け付ける。
+
+        一覧取得処理は後続工程で実装する。
+        """
+        self._count_status_var.set(
+            "全件表示機能は後続工程で実装します。",
+        )
+
+    def _on_clear_search(self) -> None:
+        """検索条件を初期状態へ戻す。"""
+        self._search_type_var.set(
+            self.SEARCH_TYPES[0],
+        )
+        self._search_keyword_var.set("")
+        self._search_entry.focus_set()
+
+    def _on_tree_select(
+        self,
+        _event: tk.Event[tk.Misc],
+    ) -> None:
+        """書籍一覧の選択操作を受け付ける。
+
+        選択データ取得は後続工程で実装する。
+        """
+
+    def _on_add(self) -> None:
+        """新規登録操作を受け付ける。
+
+        登録処理は後続工程で実装する。
+        """
+        self._edit_status_var.set(
+            "新規登録機能は後続工程で実装します。",
+        )
+
+    def _on_update(self) -> None:
+        """更新操作を受け付ける。
+
+        更新処理は後続工程で実装する。
+        """
+        self._edit_status_var.set(
+            "更新機能は後続工程で実装します。",
+        )
+
+    def _on_delete(self) -> None:
+        """削除操作を受け付ける。
+
+        削除処理は後続工程で実装する。
+        """
+        self._edit_status_var.set(
+            "削除機能は後続工程で実装します。",
+        )
+
+    def _on_clear(self) -> None:
+        """入力フォームを初期状態へ戻す。"""
+        self._title_var.set("")
+        self._isbn_var.set("")
+        self._magazine_code_var.set("")
+        self._author_var.set("")
+        self._publisher_var.set("")
+        self._publication_format_var.set("")
+        self._completion_month_var.set("")
+
+        self._description_text.delete(
+            "1.0",
+            tk.END,
+        )
+        self._notes_text.delete(
+            "1.0",
+            tk.END,
+        )
+
+        selected_items = self._book_tree.selection()
+        if selected_items:
+            self._book_tree.selection_remove(
+                *selected_items,
+            )
+
+        self._selected_book_id = None
+        self._edit_status_var.set(
+            "新規登録",
+        )
+        self._title_entry.focus_set()
+
+    def _on_reload(self) -> None:
+        """一覧再読み込み操作を受け付ける。
+
+        再読み込み処理は後続工程で実装する。
+        """
+        self._count_status_var.set(
+            "再読み込み機能は後続工程で実装します。",
+        )
+
+    def _on_exit(self) -> None:
+        """アプリケーションを終了する。"""
+        self._root.destroy()
