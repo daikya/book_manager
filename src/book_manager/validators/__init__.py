@@ -1,0 +1,1 @@
+"""Validation functions for book data."""
