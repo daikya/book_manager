@@ -126,12 +126,14 @@ class BookService:
     def find_duplicate_candidates(
         self,
         *,
+        title: str | None = None,
         isbn: str | None = None,
         magazine_code: str | None = None,
     ) -> list[BookItem]:
-        """ISBNまたは雑誌コードが一致する重複候補を取得する。
+        """書籍名、ISBN、雑誌コードが一致する重複候補を取得する。
 
         Args:
+            title: 書籍名。
             isbn: ISBN。
             magazine_code: 雑誌コード。
 
@@ -141,10 +143,15 @@ class BookService:
         Raises:
             ValueError: 入力値が正しくない場合。
         """
-        normalized_isbn = self._normalize_isbn(isbn)
+        normalized_title = self._normalize_optional_text(
+            title,
+        )
+        normalized_isbn = self._normalize_isbn(
+            isbn,
+        )
         normalized_magazine_code = (
             self._normalize_optional_text(
-                magazine_code
+                magazine_code,
             )
         )
 
@@ -156,17 +163,31 @@ class BookService:
 
         candidates: list[BookItem] = []
 
+        if normalized_title is not None:
+            title_candidates = (
+                self._repository.search_by_title(
+                    normalized_title,
+                )
+            )
+
+            candidates.extend(
+                candidate
+                for candidate in title_candidates
+                if candidate.title.strip()
+                == normalized_title
+            )
+
         if normalized_isbn is not None:
             candidates.extend(
                 self._repository.find_by_isbn(
-                    normalized_isbn
+                    normalized_isbn,
                 )
             )
 
         if normalized_magazine_code is not None:
             candidates.extend(
                 self._repository.find_by_magazine_code(
-                    normalized_magazine_code
+                    normalized_magazine_code,
                 )
             )
 

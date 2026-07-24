@@ -1,15 +1,17 @@
-from __future__ import annotations
-
 """書籍管理アプリケーションのメインGUI。"""
+
+from __future__ import annotations
 
 import tkinter as tk
 import traceback
 from tkinter import messagebox, ttk
 from typing import TYPE_CHECKING
 
+from book_manager.models.book_item import BookItem
+
 if TYPE_CHECKING:
-    from book_manager.models.book_item import BookItem
     from book_manager.services.book_service import BookService
+
 
 class BookManagerApplication:
     """書籍管理アプリケーションのメインウィンドウを管理する。"""
@@ -167,8 +169,25 @@ class BookManagerApplication:
         self._create_button_frame(
             main_frame,
         )
+        self._set_edit_buttons_enabled(
+            False,
+        )
         self._create_status_frame(
             main_frame,
+        )
+
+    def _set_edit_buttons_enabled(
+        self,
+        enabled: bool,
+    ) -> None:
+        """更新・削除ボタンの有効状態を設定する。"""
+        state = "normal" if enabled else "disabled"
+
+        self._update_button.configure(
+            state=state,
+        )
+        self._delete_button.configure(
+            state=state,
         )
 
     def _create_search_frame(
@@ -972,6 +991,9 @@ class BookManagerApplication:
         self._edit_status_var.set(
             f"編集中：ID {book_item.id}",
         )
+        self._set_edit_buttons_enabled(
+            True,
+        )
 
     @staticmethod
     def _replace_text(
@@ -1056,13 +1078,150 @@ class BookManagerApplication:
         self._edit_status_var.set(
             "新規登録",
         )
+        self._set_edit_buttons_enabled(
+            False,
+        )
+
+    def _get_form_values(self) -> dict[str, str | None]:
+        """入力フォームの値を取得する。"""
+        return {
+            "title": self._title_var.get(),
+            "isbn": self._isbn_var.get(),
+            "magazine_code": self._magazine_code_var.get(),
+            "author": self._author_var.get(),
+            "publisher": self._publisher_var.get(),
+            "publication_format": (
+                self._publication_format_var.get()
+            ),
+            "description": self._description_text.get(
+                "1.0",
+                tk.END,
+            ).rstrip("\n"),
+            "completion_month": (
+                self._completion_month_var.get()
+            ),
+            "notes": self._notes_text.get(
+                "1.0",
+                tk.END,
+            ).rstrip("\n"),
+        }
+
+    def _create_book_item_from_form(
+        self,
+        *,
+        book_id: int | None = None,
+    ) -> BookItem:
+        """入力フォームの値からBookItemを作成する。"""
+        values = self._get_form_values()
+
+        return BookItem(
+            id=book_id,
+            title=str(values["title"] or ""),
+            isbn=values["isbn"],
+            magazine_code=values["magazine_code"],
+            author=values["author"],
+            publisher=values["publisher"],
+            publication_format=values["publication_format"],
+            description=values["description"],
+            completion_month=values["completion_month"],
+            notes=values["notes"],
+        )
+
+    def _confirm_duplicate_candidates(
+        self,
+        *,
+        values: dict[str, str | None],
+        exclude_book_id: int | None = None,
+    ) -> bool:
+        """重複候補を確認し、処理を続行するか判定する。"""
+        candidates = self._service.find_duplicate_candidates(
+            title=values["title"],
+            isbn=values["isbn"],
+            magazine_code=values["magazine_code"],
+        )
+
+        if exclude_book_id is not None:
+            candidates = [
+                candidate
+                for candidate in candidates
+                if candidate.id != exclude_book_id
+            ]
+
+        if not candidates:
+            return True
+
+        candidate_lines: list[str] = []
+
+        for candidate in candidates[:10]:
+            candidate_id = (
+                str(candidate.id)
+                if candidate.id is not None
+                else "-"
+            )
+            title = candidate.title or "書籍名なし"
+            isbn = candidate.isbn or "-"
+            magazine_code = candidate.magazine_code or "-"
+
+            candidate_lines.append(
+                (
+                    f"ID: {candidate_id}\n"
+                    f"書籍名: {title}\n"
+                    f"ISBN: {isbn}\n"
+                    f"雑誌コード: {magazine_code}"
+                )
+            )
+
+        candidate_text = "\n\n".join(
+            candidate_lines,
+        )
+
+        if len(candidates) > 10:
+            candidate_text += (
+                f"\n\nほか {len(candidates) - 10}件"
+            )
+
+        return messagebox.askyesno(
+            "重複候補の確認",
+            (
+                "同じ書籍の可能性があるデータが"
+                "見つかりました。\n\n"
+                f"{candidate_text}\n\n"
+                "このまま処理を続けますか？"
+            ),
+            parent=self._root,
+        )
+
+    def _reload_and_select_book(
+        self,
+        book_id: int,
+    ) -> None:
+        """一覧を再読み込みして指定書籍を選択する。"""
+        self._load_all_books()
+
+        if not self._book_tree.exists(
+            str(book_id),
+        ):
+            self._clear_form()
+            return
+
+        self._select_book_in_tree(
+            book_id,
+        )
+
+        book_item = self._service.get_book(
+            book_id,
+        )
+
+        if book_item is not None:
+            self._display_book_in_form(
+                book_item,
+            )
 
 
 
 
 
-
-
+# ここからイベントハンドラ
 
     def _on_search(
         self,
@@ -1186,31 +1345,246 @@ class BookManagerApplication:
             )
 
     def _on_add(self) -> None:
-        """新規登録操作を受け付ける。
+        """入力内容を新しい書籍として登録する。"""
+        values = self._get_form_values()
 
-        登録処理は後続工程で実装する。
-        """
-        self._edit_status_var.set(
-            "新規登録機能は後続工程で実装します。",
-        )
+        title = str(values["title"] or "").strip()
+
+        if title == "":
+            messagebox.showwarning(
+                "入力不足",
+                "書籍名を入力してください。",
+                parent=self._root,
+            )
+            self._title_entry.focus_set()
+            return
+
+        if self._selected_book_id is not None:
+            continue_registration = messagebox.askyesno(
+                "新規登録の確認",
+                (
+                    "現在、既存の書籍を編集中です。\n"
+                    "入力内容を別の書籍として"
+                    "新規登録しますか？"
+                ),
+                parent=self._root,
+            )
+
+            if not continue_registration:
+                return
+        
+        try:
+            if not self._confirm_duplicate_candidates(
+                values=values,
+            ):
+                return
+
+            registered_book = self._service.add_book(
+                title=values["title"],
+                isbn=values["isbn"],
+                magazine_code=values["magazine_code"],
+                author=values["author"],
+                publisher=values["publisher"],
+                publication_format=(
+                    values["publication_format"]
+                ),
+                description=values["description"],
+                completion_month=(
+                    values["completion_month"]
+                ),
+                notes=values["notes"],
+            )
+
+            if registered_book.id is None:
+                raise RuntimeError(
+                    "登録済み書籍のIDを取得できませんでした。",
+                )
+
+            registered_book_id = registered_book.id
+
+            self._reload_and_select_book(
+                registered_book_id,
+            )
+
+            messagebox.showinfo(
+                "登録完了",
+                "書籍を登録しました。",
+                parent=self._root,
+            )
+
+        except ValueError as error:
+            messagebox.showerror(
+                "入力エラー",
+                str(error),
+                parent=self._root,
+            )
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "登録エラー",
+                "書籍を登録できませんでした。",
+                parent=self._root,
+            )
+
 
     def _on_update(self) -> None:
-        """更新操作を受け付ける。
+        """選択中の書籍を入力内容で更新する。"""
+        if self._selected_book_id is None:
+            messagebox.showwarning(
+                "更新対象なし",
+                (
+                    "更新する書籍が選択されていません。\n"
+                    "書籍一覧から更新対象を選択してください。"
+                ),
+                parent=self._root,
+            )
+            return
 
-        更新処理は後続工程で実装する。
-        """
-        self._edit_status_var.set(
-            "更新機能は後続工程で実装します。",
-        )
+        book_id = self._selected_book_id
+        values = self._get_form_values()
+        title = str(values["title"] or "").strip()
+
+        if title == "":
+            messagebox.showwarning(
+                "入力不足",
+                "書籍名を入力してください。",
+                parent=self._root,
+            )
+            self._title_entry.focus_set()
+            return
+
+        try:
+            if not self._confirm_duplicate_candidates(
+                values=values,
+                exclude_book_id=book_id,
+            ):
+                return
+
+            confirmed = messagebox.askyesno(
+                "更新の確認",
+                "選択中の書籍情報を更新しますか？",
+                parent=self._root,
+            )
+
+            if not confirmed:
+                return
+
+            book_item = self._create_book_item_from_form(
+                book_id=book_id,
+            )
+
+            updated = self._service.update_book(
+                book_item,
+            )
+
+            if not updated:
+                messagebox.showwarning(
+                    "書籍が見つかりません",
+                    (
+                        "更新対象の書籍が見つかりませんでした。\n"
+                        "一覧を再読み込みします。"
+                    ),
+                    parent=self._root,
+                )
+                self._load_all_books()
+                self._clear_form()
+                return
+
+            self._reload_and_select_book(
+                book_id,
+            )
+
+            messagebox.showinfo(
+                "更新完了",
+                "書籍情報を更新しました。",
+                parent=self._root,
+            )
+
+        except ValueError as error:
+            messagebox.showerror(
+                "入力エラー",
+                str(error),
+                parent=self._root,
+            )
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "更新エラー",
+                "書籍情報を更新できませんでした。",
+                parent=self._root,
+            )
 
     def _on_delete(self) -> None:
-        """削除操作を受け付ける。
+        """選択中の書籍を削除する。"""
+        if self._selected_book_id is None:
+            messagebox.showwarning(
+                "削除対象なし",
+                (
+                    "削除する書籍が選択されていません。\n"
+                    "書籍一覧から削除対象を選択してください。"
+                ),
+                parent=self._root,
+            )
+            return
 
-        削除処理は後続工程で実装する。
-        """
-        self._edit_status_var.set(
-            "削除機能は後続工程で実装します。",
+        book_id = self._selected_book_id
+        title = self._title_var.get().strip()
+
+        display_title = title or f"ID {book_id}"
+
+        confirmed = messagebox.askyesno(
+            "削除の確認",
+            (
+                "次の書籍を削除しますか？\n\n"
+                f"{display_title}\n\n"
+                "この操作は取り消せません。"
+            ),
+            parent=self._root,
         )
+
+        if not confirmed:
+            return
+
+        try:
+            deleted = self._service.delete_book(
+                book_id,
+            )
+
+            if deleted is False:
+                messagebox.showwarning(
+                    "書籍が見つかりません",
+                    (
+                        "削除対象の書籍が見つかりませんでした。\n"
+                        "一覧を再読み込みします。"
+                    ),
+                    parent=self._root,
+                )
+                self._load_all_books()
+                self._clear_form()
+                return
+
+            self._clear_form()
+            self._load_all_books()
+
+            messagebox.showinfo(
+                "削除完了",
+                "書籍を削除しました。",
+                parent=self._root,
+            )
+
+        except ValueError as error:
+            messagebox.showerror(
+                "削除エラー",
+                str(error),
+                parent=self._root,
+            )
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "削除エラー",
+                "書籍を削除できませんでした。",
+                parent=self._root,
+            )
 
     def _on_clear(self) -> None:
         """入力フォームを初期状態へ戻す。"""
