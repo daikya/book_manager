@@ -7,6 +7,7 @@ import traceback
 from tkinter import messagebox, ttk
 from typing import TYPE_CHECKING
 from PIL import Image, ImageTk
+from pathlib import Path
 
 from book_manager.models.book_item import BookItem
 from book_manager.models.fetched_book_data import (
@@ -75,6 +76,8 @@ class BookManagerApplication:
 
         self._selected_book_id: int | None = None
         self._cover_photo: tk.PhotoImage | None = None
+        self._current_cover_image_url: str | None = None
+        self._current_cover_image_path: str | None = None
         self._search_type_var = tk.StringVar(
             master=self._root,
             value=self.SEARCH_TYPES[0],
@@ -1055,7 +1058,16 @@ class BookManagerApplication:
         self._set_edit_buttons_enabled(
             True,
         )
-        self._clear_cover_image()
+        self._current_cover_image_url = (
+            book_item.cover_image_url
+        )
+        self._current_cover_image_path = (
+            book_item.cover_image_path
+        )
+
+        self._display_saved_cover_image(
+            self._current_cover_image_path,
+        )
 
     @staticmethod
     def _replace_text(
@@ -1170,6 +1182,37 @@ class BookManagerApplication:
             text="画像なし",
         )
 
+    def _clear_cover_state(self) -> None:
+        """表紙画像の表示と内部状態を初期化する。"""
+        self._current_cover_image_url = None
+        self._current_cover_image_path = None
+        self._clear_cover_image()
+
+    def _display_saved_cover_image(
+        self,
+        cover_image_path: str | None,
+    ) -> None:
+        """保存済みの表紙画像を表示する。"""
+        if cover_image_path is None:
+            self._clear_cover_image()
+            return
+
+        image_path = Path(
+            cover_image_path,
+        )
+
+        if not image_path.is_file():
+            self._clear_cover_image()
+            return
+
+        try:
+            self._display_cover_image(
+                str(image_path),
+            )
+        except Exception:
+            traceback.print_exc()
+            self._clear_cover_image()
+
     def _select_book_in_tree(
         self,
         book_id: int,
@@ -1241,7 +1284,7 @@ class BookManagerApplication:
         self._set_edit_buttons_enabled(
             False,
         )
-        self._clear_cover_image()
+        self._clear_cover_state()
 
     def _get_form_values(self) -> dict[str, str | None]:
         """入力フォームの値を取得する。"""
@@ -1258,6 +1301,12 @@ class BookManagerApplication:
                 "1.0",
                 tk.END,
             ).rstrip("\n"),
+            "cover_image_url": (
+                self._current_cover_image_url
+            ),
+            "cover_image_path": (
+                self._current_cover_image_path
+            ),
             "completion_month": (
                 self._completion_month_var.get()
             ),
@@ -1284,6 +1333,8 @@ class BookManagerApplication:
             publisher=values["publisher"],
             publication_format=values["publication_format"],
             description=values["description"],
+            cover_image_url=values["cover_image_url"],
+            cover_image_path=values["cover_image_path"],
             completion_month=values["completion_month"],
             notes=values["notes"],
         )
@@ -1550,6 +1601,8 @@ class BookManagerApplication:
                     values["publication_format"]
                 ),
                 description=values["description"],
+                cover_image_url=values["cover_image_url"],
+                cover_image_path=values["cover_image_path"],
                 completion_month=(
                     values["completion_month"]
                 ),
@@ -1811,9 +1864,17 @@ class BookManagerApplication:
             )
 
             if result.cover_image_url is not None:
+                self._current_cover_image_url = (
+                    result.cover_image_url
+                )
+
                 try:
                     cover_path = self._service.fetch_cover_image(
                         result.cover_image_url,
+                    )
+
+                    self._current_cover_image_path = (
+                        cover_path.as_posix()
                     )
 
                     self._display_cover_image(
@@ -1822,6 +1883,9 @@ class BookManagerApplication:
 
                 except Exception:
                     traceback.print_exc()
+
+                    self._current_cover_image_path = None
+
                     self._clear_cover_image()
 
                     messagebox.showwarning(
@@ -1833,7 +1897,7 @@ class BookManagerApplication:
                         parent=self._root,
                     )
             else:
-                self._clear_cover_image()
+                self._clear_cover_state()
 
             self._edit_status_var.set(
                 "書誌情報を取得しました。",

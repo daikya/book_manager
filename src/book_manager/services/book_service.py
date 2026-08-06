@@ -52,6 +52,8 @@ class BookService:
         publisher: str | None = None,
         publication_format: str | None = None,
         description: str | None = None,
+        cover_image_url: str | None = None,
+        cover_image_path: str | None = None,
         completion_month: str | None = None,
         notes: str | None = None,
     ) -> BookItem:
@@ -65,6 +67,8 @@ class BookService:
             publisher: 出版社名。
             publication_format: 出版形態。
             description: 内容紹介。
+            cover_image_url: 表紙画像の取得元URL。
+            cover_image_path: キャッシュ済み表紙画像の相対パス。
             completion_month: 読了年月。
             notes: 備考。
 
@@ -99,6 +103,16 @@ class BookService:
                 description
             )
         )
+        normalized_cover_image_url = (
+            self._normalize_optional_text(
+                cover_image_url
+            )
+        )
+        normalized_cover_image_path = (
+            self._normalize_optional_text(
+                cover_image_path
+            )
+        )
         normalized_completion_month = (
             self._normalize_optional_text(
                 completion_month
@@ -126,6 +140,8 @@ class BookService:
                 normalized_publication_format
             ),
             description=normalized_description,
+            cover_image_url=normalized_cover_image_url,
+            cover_image_path=normalized_cover_image_path,
             completion_month=normalized_completion_month,
             notes=normalized_notes,
             created_at=current_timestamp,
@@ -335,6 +351,16 @@ class BookService:
                 book_item.description
             )
         )
+        normalized_cover_image_url = (
+            self._normalize_optional_text(
+                book_item.cover_image_url
+            )
+        )
+        normalized_cover_image_path = (
+            self._normalize_optional_text(
+                book_item.cover_image_path
+            )
+        )
         normalized_completion_month = (
             self._normalize_optional_text(
                 book_item.completion_month
@@ -361,6 +387,8 @@ class BookService:
                 normalized_publication_format
             ),
             description=normalized_description,
+            cover_image_url=normalized_cover_image_url,
+            cover_image_path=normalized_cover_image_path,
             completion_month=normalized_completion_month,
             notes=normalized_notes,
             created_at=existing.created_at,

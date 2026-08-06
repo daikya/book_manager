@@ -105,6 +105,12 @@ def add_sample_book(
     title: str = "吾輩は猫である",
     isbn: str | None = "9784101010014",
     magazine_code: str | None = None,
+    cover_image_url: str | None = (
+        "https://example.com/cover.jpg"
+    ),
+    cover_image_path: str | None = (
+        "cache/covers/cover.jpg"
+    ),
 ) -> BookItem:
     """テスト用の書籍を登録する。"""
     return service.add_book(
@@ -115,6 +121,8 @@ def add_sample_book(
         publisher="新潮社",
         publication_format="文庫",
         description="猫の視点から描かれた小説。",
+        cover_image_url=cover_image_url,
+        cover_image_path=cover_image_path,
         completion_month="2026-07",
         notes="テスト用データ",
     )
@@ -128,7 +136,14 @@ def test_add_book_registers_book(
     assert registered.id is not None
     assert registered.title == "吾輩は猫である"
     assert registered.isbn == "9784101010014"
-
+    assert (
+        registered.cover_image_url
+        == "https://example.com/cover.jpg"
+    )
+    assert (
+        registered.cover_image_path
+        == "cache/covers/cover.jpg"
+    )
 
 def test_add_book_sets_created_and_updated_at(
     service: BookService,
@@ -159,6 +174,8 @@ def test_add_book_normalizes_optional_text(
         publisher="  出版社名  ",
         publication_format="  文庫  ",
         description="  内容紹介  ",
+        cover_image_url="  https://example.com/cover.jpg  ",
+        cover_image_path="  cache/covers/cover.jpg  ",
         completion_month="  2026-07  ",
         notes="  備考  ",
     )
@@ -167,6 +184,14 @@ def test_add_book_normalizes_optional_text(
     assert registered.publisher == "出版社名"
     assert registered.publication_format == "文庫"
     assert registered.description == "内容紹介"
+    assert (
+        registered.cover_image_url
+        == "https://example.com/cover.jpg"
+    )
+    assert (
+        registered.cover_image_path
+        == "cache/covers/cover.jpg"
+    )
     assert registered.completion_month == "2026-07"
     assert registered.notes == "備考"
 
@@ -182,6 +207,8 @@ def test_add_book_converts_empty_optional_text_to_none(
         publisher=" ",
         publication_format=" ",
         description=" ",
+        cover_image_url=" ",
+        cover_image_path=" ",
         completion_month=" ",
         notes=" ",
     )
@@ -192,9 +219,10 @@ def test_add_book_converts_empty_optional_text_to_none(
     assert registered.publisher is None
     assert registered.publication_format is None
     assert registered.description is None
+    assert registered.cover_image_url is None
+    assert registered.cover_image_path is None
     assert registered.completion_month is None
     assert registered.notes is None
-
 
 def test_add_book_normalizes_isbn(
     service: BookService,
@@ -538,6 +566,12 @@ def test_update_book_updates_existing_book(
         publisher="  更新後の出版社  ",
         publication_format="  単行本  ",
         description="  更新後の内容紹介  ",
+        cover_image_url=(
+            "  https://example.com/updated-cover.png  "
+        ),
+        cover_image_path=(
+            "  cache/covers/updated-cover.png  "
+        ),
         completion_month=" 2026-08 ",
         notes="  更新後の備考  ",
         created_at="不正な作成日時",
@@ -562,6 +596,14 @@ def test_update_book_updates_existing_book(
     assert updated.publisher == "更新後の出版社"
     assert updated.publication_format == "単行本"
     assert updated.description == "更新後の内容紹介"
+    assert (
+        updated.cover_image_url
+        == "https://example.com/updated-cover.png"
+    )
+    assert (
+        updated.cover_image_path
+        == "cache/covers/updated-cover.png"
+    )
     assert updated.completion_month == "2026-08"
     assert updated.notes == "更新後の備考"
     assert updated.created_at == "2026-07-22 10:30:00"
@@ -581,6 +623,8 @@ def test_update_book_does_not_modify_input_model(
         id=registered.id,
         title="  更新後  ",
         isbn=" 978-4-16-391773-3 ",
+        cover_image_url="  https://example.com/cover.jpg  ",
+        cover_image_path="  cache/covers/cover.jpg  ",
         created_at="入力された作成日時",
         updated_at="入力された更新日時",
     )
@@ -602,7 +646,14 @@ def test_update_book_does_not_modify_input_model(
         update_target.updated_at
         == "入力された更新日時"
     )
-
+    assert (
+        update_target.cover_image_url
+        == "  https://example.com/cover.jpg  "
+    )
+    assert (
+        update_target.cover_image_path
+        == "  cache/covers/cover.jpg  "
+    )
 
 def test_update_book_requires_id(
     service: BookService,
