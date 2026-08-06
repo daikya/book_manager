@@ -35,6 +35,8 @@ class BookManagerApplication:
 
     SEARCH_TYPES = (
         "書籍名",
+        "著者名",
+        "出版社",
         "ISBN",
         "雑誌コード",
     )
@@ -1446,6 +1448,14 @@ class BookManagerApplication:
         try:
             if search_type == "書籍名":
                 books = self._service.search_books_by_title(
+                    keyword,
+                )
+            elif search_type == "著者名":
+                books = self._service.search_books_by_author(
+                    keyword,
+                )
+            elif search_type == "出版社":
+                books = self._service.search_books_by_publisher(
                     keyword,
                 )
             elif search_type == "ISBN":

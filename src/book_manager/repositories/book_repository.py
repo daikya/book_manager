@@ -172,6 +172,65 @@ class BookRepository:
         finally:
             connection.close()
 
+    def search_by_author(
+        self,
+        keyword: str,
+    ) -> list[BookItem]:
+        """著者名の部分一致検索を行う。"""
+        query = f"""
+            SELECT
+                {BOOK_ITEM_COLUMNS}
+            FROM book_items
+            WHERE author LIKE ?
+            ORDER BY id DESC
+        """
+
+        connection = create_connection(
+            self._database_path,
+        )
+
+        try:
+            rows = connection.execute(
+                query,
+                (f"%{keyword}%",),
+            ).fetchall()
+
+            return [
+                self._row_to_book_item(row)
+                for row in rows
+            ]
+        finally:
+            connection.close()
+    def search_by_publisher(
+        self,
+        keyword: str,
+    ) -> list[BookItem]:
+        """出版社名の部分一致検索を行う。"""
+        query = f"""
+            SELECT
+                {BOOK_ITEM_COLUMNS}
+            FROM book_items
+            WHERE publisher LIKE ?
+            ORDER BY id DESC
+        """
+
+        connection = create_connection(
+            self._database_path,
+        )
+
+        try:
+            rows = connection.execute(
+                query,
+                (f"%{keyword}%",),
+            ).fetchall()
+
+            return [
+                self._row_to_book_item(row)
+                for row in rows
+            ]
+        finally:
+            connection.close()
+
     def find_by_isbn(
         self,
         isbn: str,
