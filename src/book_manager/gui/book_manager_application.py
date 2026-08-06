@@ -1024,6 +1024,38 @@ class BookManagerApplication:
             value or "",
         )
 
+    def _has_metadata_input_values(self) -> bool:
+        """外部書誌情報の反映対象欄に入力があるか確認する。"""
+        values = (
+            self._title_var.get(),
+            self._author_var.get(),
+            self._publisher_var.get(),
+            self._publication_format_var.get(),
+            self._description_text.get(
+                "1.0",
+                tk.END,
+            ),
+        )
+
+        return any(
+            value.strip()
+            for value in values
+        )
+
+    def _confirm_metadata_overwrite(self) -> bool:
+        """入力済み書誌情報を上書きするか確認する。"""
+        if not self._has_metadata_input_values():
+            return True
+
+        return messagebox.askyesno(
+            "書誌情報の上書き確認",
+            (
+                "すでに入力されている書誌情報があります。\n"
+                "取得した書誌情報で上書きしますか？"
+            ),
+            parent=self._root,
+        )
+
     def _apply_fetched_book_data(
         self,
         fetched_data: FetchedBookData,
@@ -1687,6 +1719,12 @@ class BookManagerApplication:
             result = self._service.fetch_book_metadata(
                 isbn,
             )
+
+            if not self._confirm_metadata_overwrite():
+                self._edit_status_var.set(
+                    "書誌情報の反映をキャンセルしました。",
+                )
+                return
 
             self._apply_fetched_book_data(
                 result,
