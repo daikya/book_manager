@@ -29,6 +29,12 @@ def create_book_item(
     publisher: str | None = "新潮社",
     publication_format: str | None = "文庫",
     description: str | None = "猫の視点から人間社会を描いた作品。",
+    cover_image_url: str | None = (
+        "https://example.com/cover.jpg"
+    ),
+    cover_image_path: str | None = (
+        "cache/covers/cover.jpg"
+    ),
     completion_month: str | None = "2026-07",
     notes: str | None = "再読。",
     created_at: str = "2026-07-22 10:00:00",
@@ -43,12 +49,13 @@ def create_book_item(
         publisher=publisher,
         publication_format=publication_format,
         description=description,
+        cover_image_url=cover_image_url,
+        cover_image_path=cover_image_path,
         completion_month=completion_month,
         notes=notes,
         created_at=created_at,
         updated_at=updated_at,
     )
-
 
 def test_repository_accepts_path(
     tmp_path: Path,
@@ -120,7 +127,39 @@ def test_add_accepts_none_optional_fields(
     assert stored is not None
     assert stored.isbn is None
     assert stored.author is None
+    assert stored.cover_image_url is None
+    assert stored.cover_image_path is None
 
+def test_add_and_get_preserve_cover_image_fields(
+    repository: BookRepository,
+) -> None:
+    """表紙画像情報を登録して取得できることを確認する。"""
+    book_item = create_book_item(
+        cover_image_url=(
+            "https://example.com/books/cover.jpg"
+        ),
+        cover_image_path=(
+            "cache/covers/abc123.jpg"
+        ),
+    )
+
+    registered = repository.add(
+        book_item,
+    )
+
+    stored = repository.get_by_id(
+        registered.id  # type: ignore[arg-type]
+    )
+
+    assert stored is not None
+    assert (
+        stored.cover_image_url
+        == "https://example.com/books/cover.jpg"
+    )
+    assert (
+        stored.cover_image_path
+        == "cache/covers/abc123.jpg"
+    )
 
 def test_get_by_id_returns_book_item(
     repository: BookRepository,
@@ -335,7 +374,12 @@ def test_update_updates_existing_book(
         publisher="新潮社",
         publication_format="文庫",
         description="更新後の内容紹介。",
-        completion_month="2026-08",
+        cover_image_url=(
+            "https://example.com/updated-cover.png"
+        ),
+        cover_image_path=(
+            "cache/covers/updated-cover.png"
+        ),        completion_month="2026-08",
         notes="更新済み。",
         created_at=registered.created_at,
         updated_at="2026-07-22 12:00:00",

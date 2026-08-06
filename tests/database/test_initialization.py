@@ -43,6 +43,122 @@ def get_schema_object_names(
     finally:
         connection.close()
 
+def get_table_column_names(
+    database_path: Path,
+    table_name: str,
+) -> set[str]:
+    """指定されたテーブルの列名を取得する。"""
+    connection = sqlite3.connect(database_path)
+
+    try:
+        rows = connection.execute(
+            f"PRAGMA table_info({table_name})"
+        ).fetchall()
+
+        return {
+            str(row[1])
+            for row in rows
+        }
+    finally:
+        connection.close()
+
+def test_initialize_database_creates_cover_image_columns(
+    tmp_path: Path,
+) -> None:
+    """新規DBに表紙画像関連列を作成する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+
+    column_names = get_table_column_names(
+        database_path,
+        "book_items",
+    )
+
+    assert "cover_image_url" in column_names
+    assert "cover_image_path" in column_names
+
+def test_initialize_database_migrates_version_1_to_2(
+    tmp_path: Path,
+) -> None:
+    """Version 1のDBへ表紙画像関連列を追加する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        with connection:
+            connection.execute(
+                """
+                CREATE TABLE book_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    isbn TEXT,
+                    magazine_code TEXT,
+                    title TEXT NOT NULL,
+                    author TEXT,
+                    publisher TEXT,
+                    publication_format TEXT,
+                    description TEXT,
+                    completion_month TEXT,
+                    notes TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO book_items (
+                    title,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    "移行前の書籍",
+                    "2026-08-06 10:00:00",
+                    "2026-08-06 10:00:00",
+                ),
+            )
+            connection.execute(
+                "PRAGMA user_version = 1"
+            )
+    finally:
+        connection.close()
+
+    initialize_database(database_path)
+
+    assert get_user_version(database_path) == 2
+
+    column_names = get_table_column_names(
+        database_path,
+        "book_items",
+    )
+
+    assert "cover_image_url" in column_names
+    assert "cover_image_path" in column_names
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        row = connection.execute(
+            """
+            SELECT
+                title,
+                cover_image_url,
+                cover_image_path
+            FROM book_items
+            """
+        ).fetchone()
+
+        assert row == (
+            "移行前の書籍",
+            None,
+            None,
+        )
+    finally:
+        connection.close()
 
 def test_initialize_database_creates_parent_directory(
     tmp_path: Path,

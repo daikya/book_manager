@@ -15,6 +15,8 @@ class BookItem:
     publisher: str | None = None
     publication_format: str | None = None
     description: str | None = None
+    cover_image_url: str | None = None
+    cover_image_path: str | None = None
     completion_month: str | None = None
     notes: str | None = None
     created_at: str | None = None

@@ -3,8 +3,11 @@
 from pathlib import Path
 
 from book_manager.database.connection import create_connection
-from book_manager.database.schema import SCHEMA_STATEMENTS, SCHEMA_VERSION
-
+from book_manager.database.schema import (
+    MIGRATE_VERSION_1_TO_2,
+    SCHEMA_STATEMENTS,
+    SCHEMA_VERSION,
+)
 
 def initialize_database(database_path: Path | str) -> None:
     """SQLiteデータベースを初期化する。
@@ -50,9 +53,14 @@ def initialize_database(database_path: Path | str) -> None:
             for statement in SCHEMA_STATEMENTS:
                 connection.execute(statement)
 
+            if user_version == 1:
+                for statement in MIGRATE_VERSION_1_TO_2:
+                    connection.execute(statement)
+
             if user_version < SCHEMA_VERSION:
                 connection.execute(
                     f"PRAGMA user_version = {SCHEMA_VERSION}"
                 )
+
     finally:
         connection.close()

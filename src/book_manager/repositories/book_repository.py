@@ -17,12 +17,13 @@ BOOK_ITEM_COLUMNS = """
     publisher,
     publication_format,
     description,
+    cover_image_url,
+    cover_image_path,
     completion_month,
     notes,
     created_at,
     updated_at
 """
-
 
 class BookRepository:
     """book_itemsテーブルの永続化処理を担当する。"""
@@ -48,14 +49,15 @@ class BookRepository:
                 publisher,
                 publication_format,
                 description,
+                cover_image_url,
+                cover_image_path,
                 completion_month,
                 notes,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
-
         parameters = (
             book_item.isbn,
             book_item.magazine_code,
@@ -64,12 +66,13 @@ class BookRepository:
             book_item.publisher,
             book_item.publication_format,
             book_item.description,
+            book_item.cover_image_url,
+            book_item.cover_image_path,
             book_item.completion_month,
             book_item.notes,
             book_item.created_at,
             book_item.updated_at,
         )
-
         connection = create_connection(self._database_path)
 
         try:
@@ -245,6 +248,8 @@ class BookRepository:
                 publisher = ?,
                 publication_format = ?,
                 description = ?,
+                cover_image_url = ?,
+                cover_image_path = ?,
                 completion_month = ?,
                 notes = ?,
                 updated_at = ?
@@ -259,12 +264,13 @@ class BookRepository:
             book_item.publisher,
             book_item.publication_format,
             book_item.description,
+            book_item.cover_image_url,
+            book_item.cover_image_path,
             book_item.completion_month,
             book_item.notes,
             book_item.updated_at,
             book_item.id,
         )
-
         connection = create_connection(self._database_path)
 
         try:
@@ -315,6 +321,8 @@ class BookRepository:
             publisher=row["publisher"],
             publication_format=row["publication_format"],
             description=row["description"],
+            cover_image_url=row["cover_image_url"],
+            cover_image_path=row["cover_image_path"],
             completion_month=row["completion_month"],
             notes=row["notes"],
             created_at=row["created_at"],

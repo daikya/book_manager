@@ -23,6 +23,8 @@ def test_book_item_optional_fields_default_to_none() -> None:
     assert book_item.publisher is None
     assert book_item.publication_format is None
     assert book_item.description is None
+    assert book_item.cover_image_url is None
+    assert book_item.cover_image_path is None
     assert book_item.completion_month is None
     assert book_item.notes is None
     assert book_item.created_at is None
@@ -40,6 +42,8 @@ def test_book_item_accepts_all_fields() -> None:
         publisher="新潮社",
         publication_format="文庫",
         description="猫の視点から人間社会を描いた作品。",
+        cover_image_url="https://example.com/cover.jpg",
+        cover_image_path="cache/covers/cover.jpg",
         completion_month="2026-07",
         notes="再読。",
         created_at="2026-07-21 15:00:00",
@@ -54,6 +58,14 @@ def test_book_item_accepts_all_fields() -> None:
     assert book_item.publisher == "新潮社"
     assert book_item.publication_format == "文庫"
     assert book_item.description == "猫の視点から人間社会を描いた作品。"
+    assert (
+        book_item.cover_image_url
+        == "https://example.com/cover.jpg"
+    )
+    assert (
+        book_item.cover_image_path
+        == "cache/covers/cover.jpg"
+    )
     assert book_item.completion_month == "2026-07"
     assert book_item.notes == "再読。"
     assert book_item.created_at == "2026-07-21 15:00:00"
