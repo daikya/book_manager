@@ -21,30 +21,26 @@ from book_manager.metadata.exceptions import (
 from book_manager.models.fetched_book_data import (
     FetchedBookData,
 )
+from pathlib import Path
 
+from book_manager.services.cover_image_service import (
+    CoverImageService,
+)
 
 class BookService:
     """書籍管理に関するアプリケーションロジックを担当する。"""
-
     def __init__(
         self,
         repository: BookRepository,
         now_provider: Callable[[], datetime] = datetime.now,
         metadata_service: BookMetadataService | None = None,
+        cover_image_service: CoverImageService | None = None,
     ) -> None:
-        """BookServiceを初期化する。
-
-        Args:
-            repository:
-                書籍情報の永続化を担当するRepository。
-            now_provider:
-                現在日時を返す関数。
-            metadata_service:
-                外部書誌情報取得を担当するService。
-        """
+        """BookServiceを初期化する。"""
         self._repository = repository
         self._now_provider = now_provider
         self._book_metadata_service = metadata_service
+        self._cover_image_service = cover_image_service
 
     def add_book(
         self,
@@ -484,4 +480,31 @@ class BookService:
 
         return self._book_metadata_service.fetch_by_isbn(
             isbn,
+        )
+
+    def fetch_cover_image(
+        self,
+        image_url: str,
+    ) -> Path:
+        """表紙画像を取得してキャッシュパスを返す。
+
+        Args:
+            image_url:
+                表紙画像URL。
+
+        Returns:
+            キャッシュされた画像ファイルのパス。
+
+        Raises:
+            BookMetadataConfigurationError:
+                表紙画像取得Serviceが設定されていない場合。
+        """
+        if self._cover_image_service is None:
+            raise BookMetadataConfigurationError(
+                "表紙画像取得Serviceが"
+                "設定されていません。"
+            )
+
+        return self._cover_image_service.fetch(
+            image_url,
         )

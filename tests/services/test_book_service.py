@@ -57,6 +57,24 @@ class FakeBookMetadataService:
         self.calls.append(isbn)
 
         return self._result
+class FakeCoverImageService:
+    """BookServiceテスト用の表紙画像取得Service。"""
+
+    def __init__(
+        self,
+        result: Path,
+    ) -> None:
+        self._result = result
+        self.calls: list[str] = []
+
+    def fetch(
+        self,
+        image_url: str,
+    ) -> Path:
+        """呼び出しURLを記録して固定パスを返す。"""
+        self.calls.append(image_url)
+
+        return self._result
 
 @pytest.fixture
 def repository(
@@ -714,4 +732,47 @@ def test_fetch_book_metadata_requires_metadata_service(
     ):
         service.fetch_book_metadata(
             "9784163917733",
+        )
+
+def test_fetch_cover_image_delegates_to_cover_image_service(
+    repository: BookRepository,
+    tmp_path: Path,
+) -> None:
+    """表紙画像取得Serviceへ処理を委譲する。"""
+    expected = tmp_path / "cover.jpg"
+    cover_image_service = FakeCoverImageService(
+        expected,
+    )
+    service = BookService(
+        repository,
+        cover_image_service=cover_image_service,  # type: ignore[arg-type]
+    )
+
+    result = service.fetch_cover_image(
+        "https://example.com/cover.jpg",
+    )
+
+    assert result == expected
+    assert cover_image_service.calls == [
+        "https://example.com/cover.jpg",
+    ]
+
+
+def test_fetch_cover_image_requires_cover_image_service(
+    repository: BookRepository,
+) -> None:
+    """表紙画像取得Service未設定時は設定例外となる。"""
+    service = BookService(
+        repository,
+    )
+
+    with pytest.raises(
+        BookMetadataConfigurationError,
+        match=(
+            "表紙画像取得Serviceが"
+            "設定されていません。"
+        ),
+    ):
+        service.fetch_cover_image(
+            "https://example.com/cover.jpg",
         )
