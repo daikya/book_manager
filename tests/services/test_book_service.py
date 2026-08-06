@@ -14,7 +14,12 @@ from book_manager.repositories.book_repository import (
     BookRepository,
 )
 from book_manager.services.book_service import BookService
-
+from book_manager.metadata.exceptions import (
+    BookMetadataConfigurationError,
+)
+from book_manager.models.fetched_book_data import (
+    FetchedBookData,
+)
 
 FIXED_NOW = datetime(
     2026,
@@ -34,6 +39,24 @@ UPDATED_NOW = datetime(
     30,
 )
 
+class FakeBookMetadataService:
+    """BookServiceテスト用の外部書誌情報取得Service。"""
+
+    def __init__(
+        self,
+        result: FetchedBookData,
+    ) -> None:
+        self._result = result
+        self.calls: list[str] = []
+
+    def fetch_by_isbn(
+        self,
+        isbn: str,
+    ) -> FetchedBookData:
+        """呼び出しISBNを記録して固定結果を返す。"""
+        self.calls.append(isbn)
+
+        return self._result
 
 @pytest.fixture
 def repository(
@@ -641,3 +664,54 @@ def test_delete_book_returns_false_when_not_found(
     service: BookService,
 ) -> None:
     assert service.delete_book(999) is False
+
+def test_fetch_book_metadata_delegates_to_metadata_service(
+    repository: BookRepository,
+) -> None:
+    """外部書誌情報取得Serviceへ処理を委譲する。"""
+    expected = FetchedBookData(
+        isbn="9784163917733",
+        title="テスト書籍",
+        author="テスト著者",
+        publisher="テスト出版社",
+        sources=(
+            "Google Books",
+            "openBD",
+        ),
+    )
+    metadata_service = FakeBookMetadataService(
+        expected,
+    )
+    service = BookService(
+        repository,
+        metadata_service=metadata_service,  # type: ignore[arg-type]
+    )
+
+    result = service.fetch_book_metadata(
+        "978-4-16-391773-3",
+    )
+
+    assert result == expected
+    assert metadata_service.calls == [
+        "978-4-16-391773-3",
+    ]
+
+
+def test_fetch_book_metadata_requires_metadata_service(
+    repository: BookRepository,
+) -> None:
+    """外部書誌情報取得Service未設定時は設定例外となる。"""
+    service = BookService(
+        repository,
+    )
+
+    with pytest.raises(
+        BookMetadataConfigurationError,
+        match=(
+            "外部書誌情報取得Serviceが"
+            "設定されていません。"
+        ),
+    ):
+        service.fetch_book_metadata(
+            "9784163917733",
+        )

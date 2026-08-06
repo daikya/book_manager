@@ -76,11 +76,15 @@ class BookMetadataService:
                 有効な結果がなく、いずれかのClientで
                 外部取得エラーが発生した場合。
         """
-        normalized_isbn = normalize_isbn(isbn)
-        validate_isbn(normalized_isbn)
+        normalized_isbn = normalize_isbn(
+            isbn,
+        )
+        validate_isbn(
+            normalized_isbn,
+        )
 
         query_isbn13 = to_isbn13(
-            normalized_isbn
+            normalized_isbn,
         )
 
         results: list[FetchedBookData] = []
@@ -89,14 +93,18 @@ class BookMetadataService:
         for client in self._clients:
             try:
                 result = client.fetch_by_isbn(
-                    query_isbn13
+                    query_isbn13,
                 )
             except BookMetadataError as exc:
-                errors.append(exc)
+                errors.append(
+                    exc,
+                )
                 continue
 
             if result is not None:
-                results.append(result)
+                results.append(
+                    result,
+                )
 
         if results:
             return self._merge_results(
@@ -105,7 +113,9 @@ class BookMetadataService:
             )
 
         if errors:
-            raise self._select_final_error(errors)
+            raise self._select_final_error(
+                errors,
+            )
 
         raise BookMetadataNotFoundError(
             "該当する書誌情報が見つかりませんでした。"

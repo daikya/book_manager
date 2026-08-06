@@ -12,6 +12,15 @@ from book_manager.validators.isbn_validator import validate_isbn
 from book_manager.validators.magazine_code_validator import (
     validate_magazine_code,
 )
+from book_manager.metadata.book_metadata_service import (
+    BookMetadataService,
+)
+from book_manager.metadata.exceptions import (
+    BookMetadataConfigurationError,
+)
+from book_manager.models.fetched_book_data import (
+    FetchedBookData,
+)
 
 
 class BookService:
@@ -21,15 +30,21 @@ class BookService:
         self,
         repository: BookRepository,
         now_provider: Callable[[], datetime] = datetime.now,
+        metadata_service: BookMetadataService | None = None,
     ) -> None:
         """BookServiceを初期化する。
 
         Args:
-            repository: 書籍情報の永続化を担当するRepository。
-            now_provider: 現在日時を返す関数。
+            repository:
+                書籍情報の永続化を担当するRepository。
+            now_provider:
+                現在日時を返す関数。
+            metadata_service:
+                外部書誌情報取得を担当するService。
         """
         self._repository = repository
         self._now_provider = now_provider
+        self._book_metadata_service = metadata_service
 
     def add_book(
         self,
@@ -443,3 +458,30 @@ class BookService:
             validate_completion_month(
                 completion_month
             )
+
+    def fetch_book_metadata(
+        self,
+        isbn: str,
+    ) -> FetchedBookData:
+        """ISBNから書誌情報を取得する。
+
+        Args:
+            isbn:
+                正規化前のISBN-10またはISBN-13。
+
+        Returns:
+            外部サービスから取得・統合した書誌情報。
+
+        Raises:
+            BookMetadataConfigurationError:
+                外部書誌情報取得Serviceが設定されていない場合。
+        """
+        if self._book_metadata_service is None:
+            raise BookMetadataConfigurationError(
+                "外部書誌情報取得Serviceが"
+                "設定されていません。"
+            )
+
+        return self._book_metadata_service.fetch_by_isbn(
+            isbn,
+        )

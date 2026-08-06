@@ -8,6 +8,9 @@ from tkinter import messagebox, ttk
 from typing import TYPE_CHECKING
 
 from book_manager.models.book_item import BookItem
+from book_manager.models.fetched_book_data import (
+    FetchedBookData,
+)
 
 if TYPE_CHECKING:
     from book_manager.services.book_service import BookService
@@ -771,7 +774,7 @@ class BookManagerApplication:
         )
 
         button_frame.columnconfigure(
-            6,
+            7,
             weight=1,
         )
 
@@ -808,6 +811,17 @@ class BookManagerApplication:
             padx=(0, 6),
         )
 
+        self._fetch_metadata_button = ttk.Button(
+            button_frame,
+            text="書誌情報取得",
+            command=self._on_fetch_book_metadata,
+        )
+        self._fetch_metadata_button.grid(
+            row=0,
+            column=3,
+            padx=(0, 6),
+        )
+
         self._clear_button = ttk.Button(
             button_frame,
             text="入力クリア",
@@ -815,7 +829,7 @@ class BookManagerApplication:
         )
         self._clear_button.grid(
             row=0,
-            column=3,
+            column=4,
             padx=(0, 6),
         )
 
@@ -826,7 +840,7 @@ class BookManagerApplication:
         )
         self._reload_button.grid(
             row=0,
-            column=4,
+            column=5,
             padx=(0, 6),
         )
 
@@ -837,7 +851,7 @@ class BookManagerApplication:
         )
         self._exit_button.grid(
             row=0,
-            column=7,
+            column=8,
             sticky="e",
         )
 
@@ -1009,6 +1023,41 @@ class BookManagerApplication:
             "1.0",
             value or "",
         )
+
+    def _apply_fetched_book_data(
+        self,
+        fetched_data: FetchedBookData,
+    ) -> None:
+        """取得した書誌情報を入力フォームへ反映する。"""
+        self._isbn_var.set(
+            fetched_data.isbn,
+        )
+
+        if fetched_data.title is not None:
+            self._title_var.set(
+                fetched_data.title,
+            )
+
+        if fetched_data.author is not None:
+            self._author_var.set(
+                fetched_data.author,
+            )
+
+        if fetched_data.publisher is not None:
+            self._publisher_var.set(
+                fetched_data.publisher,
+            )
+
+        if fetched_data.publication_format is not None:
+            self._publication_format_var.set(
+                fetched_data.publication_format,
+            )
+
+        if fetched_data.description is not None:
+            self._replace_text(
+                self._description_text,
+                fetched_data.description,
+            )
 
     def _select_book_in_tree(
         self,
@@ -1612,3 +1661,72 @@ class BookManagerApplication:
     def _on_exit(self) -> None:
         """アプリケーションを終了する。"""
         self._root.destroy()
+
+    def _on_fetch_book_metadata(self) -> None:
+        """ISBNから外部書誌情報を取得してフォームへ反映する。"""
+        isbn = self._isbn_var.get().strip()
+
+        if isbn == "":
+            messagebox.showwarning(
+                "入力不足",
+                "ISBNを入力してください。",
+                parent=self._root,
+            )
+            self._isbn_entry.focus_set()
+            return
+
+        try:
+            self._fetch_metadata_button.configure(
+                state="disabled",
+            )
+            self._edit_status_var.set(
+                "書誌情報を取得しています...",
+            )
+            self._root.update_idletasks()
+
+            result = self._service.fetch_book_metadata(
+                isbn,
+            )
+
+            self._apply_fetched_book_data(
+                result,
+            )
+
+            self._edit_status_var.set(
+                "書誌情報を取得しました。",
+            )
+
+            messagebox.showinfo(
+                "書誌情報取得完了",
+                (
+                    "書誌情報を取得して"
+                    "入力フォームへ反映しました。"
+                ),
+                parent=self._root,
+            )
+
+        except ValueError as error:
+            messagebox.showwarning(
+                "ISBN入力エラー",
+                str(error),
+                parent=self._root,
+            )
+            self._edit_status_var.set(
+                "書誌情報の取得に失敗しました。",
+            )
+
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "書誌情報取得エラー",
+                "書誌情報を取得できませんでした。",
+                parent=self._root,
+            )
+            self._edit_status_var.set(
+                "書誌情報の取得に失敗しました。",
+            )
+
+        finally:
+            self._fetch_metadata_button.configure(
+                state="normal",
+            )
