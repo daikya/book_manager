@@ -265,6 +265,101 @@ def test_search_by_title_returns_empty_list(
 
     assert result == []
 
+def test_search_by_author_finds_partial_match(
+    repository: BookRepository,
+) -> None:
+    """著者名を部分一致で検索できることを確認する。"""
+    first = repository.add(
+        create_book_item(
+            title="吾輩は猫である",
+            author="夏目漱石",
+        )
+    )
+    second = repository.add(
+        create_book_item(
+            title="坊っちゃん",
+            author="夏目漱石",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="羅生門",
+            author="芥川龍之介",
+        )
+    )
+
+    result = repository.search_by_author(
+        "夏目",
+    )
+
+    assert result == [
+        second,
+        first,
+    ]
+
+def test_search_by_author_returns_empty_list(
+    repository: BookRepository,
+) -> None:
+    """該当する著者名がない場合に空のリストを返す。"""
+    repository.add(
+        create_book_item(
+            author="夏目漱石",
+        )
+    )
+
+    result = repository.search_by_author(
+        "存在しない著者",
+    )
+
+    assert result == []
+
+def test_search_by_publisher_finds_partial_match(
+    repository: BookRepository,
+) -> None:
+    """出版社名を部分一致で検索できることを確認する。"""
+    first = repository.add(
+        create_book_item(
+            title="1冊目",
+            publisher="新潮社",
+        )
+    )
+    second = repository.add(
+        create_book_item(
+            title="2冊目",
+            publisher="新潮社",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="3冊目",
+            publisher="文藝春秋",
+        )
+    )
+
+    result = repository.search_by_publisher(
+        "新潮",
+    )
+
+    assert result == [
+        second,
+        first,
+    ]
+
+def test_search_by_publisher_returns_empty_list(
+    repository: BookRepository,
+) -> None:
+    """該当する出版社がない場合に空のリストを返す。"""
+    repository.add(
+        create_book_item(
+            publisher="新潮社",
+        )
+    )
+
+    result = repository.search_by_publisher(
+        "存在しない出版社",
+    )
+
+    assert result == []
 
 def test_find_by_isbn_returns_matching_books(
     repository: BookRepository,

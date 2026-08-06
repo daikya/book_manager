@@ -103,6 +103,8 @@ def add_sample_book(
     service: BookService,
     *,
     title: str = "吾輩は猫である",
+    author: str | None = "夏目漱石",
+    publisher: str | None = "新潮社",
     isbn: str | None = "9784101010014",
     magazine_code: str | None = None,
     cover_image_url: str | None = (
@@ -117,8 +119,8 @@ def add_sample_book(
         title=title,
         isbn=isbn,
         magazine_code=magazine_code,
-        author="夏目漱石",
-        publisher="新潮社",
+        author=author,
+        publisher=publisher,
         publication_format="文庫",
         description="猫の視点から描かれた小説。",
         cover_image_url=cover_image_url,
@@ -405,6 +407,149 @@ def test_search_books_by_title_returns_all_for_empty_keyword(
         first.id,
     ]
 
+def test_search_books_by_author_returns_partial_matches(
+    service: BookService,
+) -> None:
+    """著者名の部分一致検索結果を返す。"""
+    first = add_sample_book(
+        service,
+        title="吾輩は猫である",
+        isbn=None,
+        author="夏目漱石",
+    )
+    second = add_sample_book(
+        service,
+        title="坊っちゃん",
+        isbn=None,
+        author="夏目漱石",
+    )
+    add_sample_book(
+        service,
+        title="羅生門",
+        isbn=None,
+        author="芥川龍之介",
+    )
+
+    results = service.search_books_by_author(
+        "夏目",
+    )
+
+    assert results == [
+        second,
+        first,
+    ]
+
+def test_search_books_by_author_strips_keyword(
+    service: BookService,
+) -> None:
+    """著者名検索文字列の前後空白を除去する。"""
+    registered = add_sample_book(
+        service,
+        isbn=None,
+        author="夏目漱石",
+    )
+
+    results = service.search_books_by_author(
+        "  夏目  ",
+    )
+
+    assert results == [registered]
+
+def test_search_books_by_author_returns_all_for_empty_keyword(
+    service: BookService,
+) -> None:
+    """著者名検索が空の場合は全件を返す。"""
+    first = add_sample_book(
+        service,
+        title="1冊目",
+        isbn=None,
+    )
+    second = add_sample_book(
+        service,
+        title="2冊目",
+        isbn=None,
+    )
+
+    results = service.search_books_by_author(
+        "   ",
+    )
+
+    assert [book.id for book in results] == [
+        second.id,
+        first.id,
+    ]
+
+def test_search_books_by_publisher_returns_partial_matches(
+    service: BookService,
+) -> None:
+    """出版社名の部分一致検索結果を返す。"""
+    first = add_sample_book(
+        service,
+        title="1冊目",
+        isbn=None,
+        publisher="新潮社",
+    )
+    second = add_sample_book(
+        service,
+        title="2冊目",
+        isbn=None,
+        publisher="新潮社",
+    )
+    add_sample_book(
+        service,
+        title="3冊目",
+        isbn=None,
+        publisher="文藝春秋",
+    )
+
+    results = service.search_books_by_publisher(
+        "新潮",
+    )
+
+    assert results == [
+        second,
+        first,
+    ]
+
+def test_search_books_by_publisher_strips_keyword(
+    service: BookService,
+) -> None:
+    """出版社検索文字列の前後空白を除去する。"""
+    registered = add_sample_book(
+        service,
+        isbn=None,
+        publisher="新潮社",
+    )
+
+    results = service.search_books_by_publisher(
+        "  新潮  ",
+    )
+
+    assert results == [registered]
+
+def test_search_books_by_publisher_returns_all_for_empty_keyword(
+    service: BookService,
+) -> None:
+    """出版社検索が空の場合は全件を返す。"""
+    first = add_sample_book(
+        service,
+        title="1冊目",
+        isbn=None,
+    )
+    second = add_sample_book(
+        service,
+        title="2冊目",
+        isbn=None,
+    )
+
+    results = service.search_books_by_publisher(
+        "   ",
+    )
+
+    assert [book.id for book in results] == [
+        second.id,
+        first.id,
+    ]
 
 def test_find_books_by_isbn_normalizes_isbn(
     service: BookService,

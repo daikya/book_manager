@@ -257,6 +257,34 @@ class BookService:
             normalized_keyword
         )
 
+    def search_books_by_author(
+        self,
+        keyword: str,
+    ) -> list[BookItem]:
+        """著者名による部分一致検索を行う。"""
+        normalized_keyword = keyword.strip()
+
+        if normalized_keyword == "":
+            return self._repository.get_all()
+
+        return self._repository.search_by_author(
+            normalized_keyword,
+        )
+
+    def search_books_by_publisher(
+        self,
+        keyword: str,
+    ) -> list[BookItem]:
+        """出版社名による部分一致検索を行う。"""
+        normalized_keyword = keyword.strip()
+
+        if normalized_keyword == "":
+            return self._repository.get_all()
+
+        return self._repository.search_by_publisher(
+            normalized_keyword,
+        )
+
     def find_books_by_isbn(
         self,
         isbn: str,
