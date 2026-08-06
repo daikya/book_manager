@@ -27,8 +27,8 @@ class BookManagerApplication:
     """書籍管理アプリケーションのメインウィンドウを管理する。"""
 
     WINDOW_TITLE = "書籍管理"
-    WINDOW_SIZE = "1200x760"
-    MINIMUM_WIDTH = 1000
+    WINDOW_SIZE = "1350x760"
+    MINIMUM_WIDTH = 1150
     MINIMUM_HEIGHT = 650
 
     SEARCH_TYPES = (
@@ -73,7 +73,7 @@ class BookManagerApplication:
         self._service = service
 
         self._selected_book_id: int | None = None
-
+        self._cover_photo: tk.PhotoImage | None = None
         self._search_type_var = tk.StringVar(
             master=self._root,
             value=self.SEARCH_TYPES[0],
@@ -464,6 +464,11 @@ class BookManagerApplication:
             3,
             weight=1,
         )
+        form_frame.columnconfigure(
+            4,
+            weight=0,
+            minsize=190,
+        )
         form_frame.rowconfigure(
             4,
             weight=1,
@@ -763,6 +768,40 @@ class BookManagerApplication:
             row=0,
             column=1,
             sticky="ns",
+        )
+        cover_frame = ttk.LabelFrame(
+            form_frame,
+            text="表紙画像",
+            padding=8,
+        )
+        cover_frame.grid(
+            row=0,
+            column=4,
+            rowspan=6,
+            sticky="ns",
+            padx=(12, 0),
+            pady=4,
+        )
+
+        self._cover_image_label = ttk.Label(
+            cover_frame,
+            text="画像なし",
+            anchor="center",
+            width=22,
+        )
+        self._cover_image_label.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+        )
+
+        cover_frame.rowconfigure(
+            0,
+            weight=1,
+        )
+        cover_frame.columnconfigure(
+            0,
+            weight=1,
         )
 
     def _create_button_frame(
