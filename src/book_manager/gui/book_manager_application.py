@@ -12,9 +12,16 @@ from book_manager.models.fetched_book_data import (
     FetchedBookData,
 )
 
+from book_manager.metadata.exceptions import (
+    BookMetadataConfigurationError,
+    BookMetadataConnectionError,
+    BookMetadataNotFoundError,
+    BookMetadataRateLimitError,
+    BookMetadataResponseError,
+)
+
 if TYPE_CHECKING:
     from book_manager.services.book_service import BookService
-
 
 class BookManagerApplication:
     """書籍管理アプリケーションのメインウィンドウを管理する。"""
@@ -1750,14 +1757,85 @@ class BookManagerApplication:
                 parent=self._root,
             )
             self._edit_status_var.set(
-                "書誌情報の取得に失敗しました。",
+                "ISBNの入力内容を確認してください。",
+            )
+
+        except BookMetadataNotFoundError:
+            messagebox.showwarning(
+                "書誌情報なし",
+                (
+                    "入力されたISBNに対応する"
+                    "書誌情報が見つかりませんでした。"
+                ),
+                parent=self._root,
+            )
+            self._edit_status_var.set(
+                "書誌情報が見つかりませんでした。",
+            )
+
+        except BookMetadataConnectionError:
+            messagebox.showerror(
+                "通信エラー",
+                (
+                    "外部書誌情報サービスへ"
+                    "接続できませんでした。\n"
+                    "インターネット接続を確認して、"
+                    "もう一度お試しください。"
+                ),
+                parent=self._root,
+            )
+            self._edit_status_var.set(
+                "外部サービスへ接続できませんでした。",
+            )
+
+        except BookMetadataRateLimitError:
+            messagebox.showwarning(
+                "利用制限",
+                (
+                    "外部書誌情報サービスの"
+                    "利用制限に達しました。\n"
+                    "しばらく時間をおいてから"
+                    "もう一度お試しください。"
+                ),
+                parent=self._root,
+            )
+            self._edit_status_var.set(
+                "外部サービスの利用制限に達しました。",
+            )
+
+        except BookMetadataResponseError:
+            messagebox.showerror(
+                "応答エラー",
+                (
+                    "外部書誌情報サービスから"
+                    "正常な応答を取得できませんでした。\n"
+                    "しばらく時間をおいてから"
+                    "もう一度お試しください。"
+                ),
+                parent=self._root,
+            )
+            self._edit_status_var.set(
+                "外部サービスの応答を処理できませんでした。",
+            )
+
+        except BookMetadataConfigurationError:
+            messagebox.showerror(
+                "設定エラー",
+                (
+                    "外部書誌情報取得機能の"
+                    "設定が完了していません。"
+                ),
+                parent=self._root,
+            )
+            self._edit_status_var.set(
+                "書誌情報取得機能の設定エラーです。",
             )
 
         except Exception:
             traceback.print_exc()
             messagebox.showerror(
                 "書誌情報取得エラー",
-                "書誌情報を取得できませんでした。",
+                "予期しないエラーが発生しました。",
                 parent=self._root,
             )
             self._edit_status_var.set(
