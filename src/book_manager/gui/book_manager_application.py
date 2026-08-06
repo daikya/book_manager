@@ -6,6 +6,7 @@ import tkinter as tk
 import traceback
 from tkinter import messagebox, ttk
 from typing import TYPE_CHECKING
+from PIL import Image, ImageTk
 
 from book_manager.models.book_item import BookItem
 from book_manager.models.fetched_book_data import (
@@ -1054,6 +1055,7 @@ class BookManagerApplication:
         self._set_edit_buttons_enabled(
             True,
         )
+        self._clear_cover_image()
 
     @staticmethod
     def _replace_text(
@@ -1137,6 +1139,37 @@ class BookManagerApplication:
                 fetched_data.description,
             )
 
+    def _display_cover_image(
+        self,
+        image_path: str,
+    ) -> None:
+        """表紙画像ファイルを読み込んでGUIへ表示する。"""
+        with Image.open(image_path) as image:
+            display_image = image.copy()
+
+        display_image.thumbnail(
+            (170, 240),
+            Image.Resampling.LANCZOS,
+        )
+
+        self._cover_photo = ImageTk.PhotoImage(
+            display_image,
+        )
+
+        self._cover_image_label.configure(
+            image=self._cover_photo,
+            text="",
+        )
+
+    def _clear_cover_image(self) -> None:
+        """表紙画像表示を初期状態へ戻す。"""
+        self._cover_photo = None
+
+        self._cover_image_label.configure(
+            image="",
+            text="画像なし",
+        )
+
     def _select_book_in_tree(
         self,
         book_id: int,
@@ -1208,6 +1241,7 @@ class BookManagerApplication:
         self._set_edit_buttons_enabled(
             False,
         )
+        self._clear_cover_image()
 
     def _get_form_values(self) -> dict[str, str | None]:
         """入力フォームの値を取得する。"""
@@ -1775,6 +1809,31 @@ class BookManagerApplication:
             self._apply_fetched_book_data(
                 result,
             )
+
+            if result.cover_image_url is not None:
+                try:
+                    cover_path = self._service.fetch_cover_image(
+                        result.cover_image_url,
+                    )
+
+                    self._display_cover_image(
+                        str(cover_path),
+                    )
+
+                except Exception:
+                    traceback.print_exc()
+                    self._clear_cover_image()
+
+                    messagebox.showwarning(
+                        "表紙画像取得エラー",
+                        (
+                            "書誌情報は取得できましたが、"
+                            "表紙画像を表示できませんでした。"
+                        ),
+                        parent=self._root,
+                    )
+            else:
+                self._clear_cover_image()
 
             self._edit_status_var.set(
                 "書誌情報を取得しました。",
