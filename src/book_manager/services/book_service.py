@@ -268,6 +268,63 @@ class BookService:
             descending=descending,
         )
 
+    def sort_books(
+        self,
+        books: list[BookItem],
+        *,
+        sort_by: str,
+        descending: bool = False,
+    ) -> list[BookItem]:
+        """取得済みの書籍一覧を指定された項目で並べ替える。"""
+        sort_key_map = {
+            "title": lambda book: book.title,
+            "author": lambda book: book.author,
+            "publisher": lambda book: book.publisher,
+            "completion_month": lambda book: book.completion_month,
+        }
+
+        if sort_by == "registered":
+            return sorted(
+                books,
+                key=lambda book: book.id or 0,
+                reverse=descending,
+            )
+
+        key_function = sort_key_map.get(
+            sort_by,
+        )
+
+        if key_function is None:
+            raise ValueError(
+                "指定された並べ替え項目が正しくありません。"
+            )
+
+        with_value = [
+            book
+            for book in books
+            if key_function(book) is not None
+        ]
+
+        without_value = [
+            book
+            for book in books
+            if key_function(book) is None
+        ]
+
+        # 同じ値の場合はID降順にする。
+        with_value.sort(
+            key=lambda book: -(book.id or 0),
+        )
+
+        with_value.sort(
+            key=lambda book: str(
+                key_function(book)
+            ),
+            reverse=descending,
+        )
+
+        return with_value + without_value
+
     def search_books_by_title(
         self,
         keyword: str,

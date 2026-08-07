@@ -1599,6 +1599,16 @@ class BookManagerApplication:
                 )
                 return
 
+            sort_by, descending = (
+                self._get_sort_settings()
+            )
+
+            books = self._service.sort_books(
+                books,
+                sort_by=sort_by,
+                descending=descending,
+            )
+
             self._display_books(
                 books,
                 status_prefix="検索結果",
@@ -1643,24 +1653,89 @@ class BookManagerApplication:
         self._search_keyword_var.set("")
         self._search_entry.focus_set()
 
+
     def _on_sort_changed(
         self,
         _event: tk.Event[tk.Misc] | None = None,
     ) -> None:
-        """並べ替え条件変更時に一覧を再表示する。"""
+        """現在の検索条件を保ったまま一覧を並べ替える。"""
         selected_book_id = self._selected_book_id
+        search_type = self._search_type_var.get()
+        keyword = self._search_keyword_var.get()
 
-        self._load_all_books()
+        try:
+            if search_type == "書籍名":
+                books = self._service.search_books_by_title(
+                    keyword,
+                )
+            elif search_type == "著者名":
+                books = self._service.search_books_by_author(
+                    keyword,
+                )
+            elif search_type == "出版社":
+                books = self._service.search_books_by_publisher(
+                    keyword,
+                )
+            elif search_type == "ISBN":
+                books = self._service.find_books_by_isbn(
+                    keyword,
+                )
+            elif search_type == "雑誌コード":
+                books = (
+                    self._service.find_books_by_magazine_code(
+                        keyword,
+                    )
+                )
+            else:
+                raise ValueError(
+                    "検索種類が正しくありません。"
+                )
 
-        if selected_book_id is None:
-            return
-
-        if self._book_tree.exists(
-            str(selected_book_id),
-        ):
-            self._select_book_in_tree(
-                selected_book_id,
+            sort_by, descending = (
+                self._get_sort_settings()
             )
+
+            books = self._service.sort_books(
+                books,
+                sort_by=sort_by,
+                descending=descending,
+            )
+
+            status_prefix = (
+                "検索結果"
+                if keyword.strip()
+                else "全"
+            )
+
+            self._display_books(
+                books,
+                status_prefix=status_prefix,
+            )
+
+            if selected_book_id is None:
+                return
+
+            if self._book_tree.exists(
+                str(selected_book_id),
+            ):
+                self._select_book_in_tree(
+                    selected_book_id,
+                )
+
+        except ValueError as error:
+            messagebox.showerror(
+                "並べ替えエラー",
+                str(error),
+                parent=self._root,
+            )
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "並べ替えエラー",
+                "書籍一覧を並べ替えできませんでした。",
+                parent=self._root,
+            )
+
 
     def _on_tree_select(
         self,

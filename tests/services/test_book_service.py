@@ -1058,3 +1058,132 @@ def test_get_sorted_books_rejects_invalid_sort_by(
         service.get_sorted_books(
             sort_by="invalid",
         )
+
+def test_sort_books_sorts_search_results_by_title(
+    service: BookService,
+) -> None:
+    """取得済み一覧を書籍名順に並べ替えられる。"""
+    second = add_sample_book(
+        service,
+        title="B書籍",
+        isbn=None,
+    )
+    first = add_sample_book(
+        service,
+        title="A書籍",
+        isbn=None,
+    )
+
+    results = service.sort_books(
+        [
+            second,
+            first,
+        ],
+        sort_by="title",
+    )
+
+    assert results == [
+        first,
+        second,
+    ]
+
+def test_sort_books_sorts_search_results_descending(
+    service: BookService,
+) -> None:
+    """取得済み一覧を降順に並べ替えられる。"""
+    second = add_sample_book(
+        service,
+        title="B書籍",
+        isbn=None,
+    )
+    first = add_sample_book(
+        service,
+        title="A書籍",
+        isbn=None,
+    )
+
+    results = service.sort_books(
+        [
+            first,
+            second,
+        ],
+        sort_by="title",
+        descending=True,
+    )
+
+    assert results == [
+        second,
+        first,
+    ]
+
+def test_sort_books_places_none_last(
+    service: BookService,
+) -> None:
+    """値のない書籍は検索結果ソートでも最後になる。"""
+    without_author = add_sample_book(
+        service,
+        title="著者なし",
+        isbn=None,
+        author=None,
+    )
+    with_author = add_sample_book(
+        service,
+        title="著者あり",
+        isbn=None,
+        author="夏目漱石",
+    )
+
+    results = service.sort_books(
+        [
+            without_author,
+            with_author,
+        ],
+        sort_by="author",
+    )
+
+    assert results == [
+        with_author,
+        without_author,
+    ]
+
+def test_sort_books_sorts_by_registered_descending(
+    service: BookService,
+) -> None:
+    """取得済み一覧を登録順の降順にできる。"""
+    first = add_sample_book(
+        service,
+        title="1冊目",
+        isbn=None,
+    )
+    second = add_sample_book(
+        service,
+        title="2冊目",
+        isbn=None,
+    )
+
+    results = service.sort_books(
+        [
+            first,
+            second,
+        ],
+        sort_by="registered",
+        descending=True,
+    )
+
+    assert results == [
+        second,
+        first,
+    ]
+
+def test_sort_books_rejects_invalid_sort_by(
+    service: BookService,
+) -> None:
+    """未対応の並べ替え項目を拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match="指定された並べ替え項目が正しくありません。",
+    ):
+        service.sort_books(
+            [],
+            sort_by="invalid",
+        )
