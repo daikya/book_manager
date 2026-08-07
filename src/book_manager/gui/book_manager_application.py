@@ -1554,7 +1554,41 @@ class BookManagerApplication:
                 book_item,
             )
 
+    def _get_filtered_books(
+        self,
+    ) -> list[BookItem]:
+        """現在の検索条件に一致する書籍一覧を取得する。"""
+        search_type = self._search_type_var.get()
+        keyword = self._search_keyword_var.get()
 
+        if search_type == "書籍名":
+            return self._service.search_books_by_title(
+                keyword,
+            )
+
+        if search_type == "著者名":
+            return self._service.search_books_by_author(
+                keyword,
+            )
+
+        if search_type == "出版社":
+            return self._service.search_books_by_publisher(
+                keyword,
+            )
+
+        if search_type == "ISBN":
+            return self._service.find_books_by_isbn(
+                keyword,
+            )
+
+        if search_type == "雑誌コード":
+            return self._service.find_books_by_magazine_code(
+                keyword,
+            )
+
+        raise ValueError(
+            "検索種類が正しくありません。"
+        )
 
 
 
@@ -1569,35 +1603,7 @@ class BookManagerApplication:
         keyword = self._search_keyword_var.get()
 
         try:
-            if search_type == "書籍名":
-                books = self._service.search_books_by_title(
-                    keyword,
-                )
-            elif search_type == "著者名":
-                books = self._service.search_books_by_author(
-                    keyword,
-                )
-            elif search_type == "出版社":
-                books = self._service.search_books_by_publisher(
-                    keyword,
-                )
-            elif search_type == "ISBN":
-                books = self._service.find_books_by_isbn(
-                    keyword,
-                )
-            elif search_type == "雑誌コード":
-                books = (
-                    self._service.find_books_by_magazine_code(
-                        keyword,
-                    )
-                )
-            else:
-                messagebox.showerror(
-                    "検索エラー",
-                    "検索種類が正しくありません。",
-                    parent=self._root,
-                )
-                return
+            books = self._get_filtered_books()
 
             sort_by, descending = (
                 self._get_sort_settings()
@@ -1613,6 +1619,7 @@ class BookManagerApplication:
                 books,
                 status_prefix="検索結果",
             )
+
             self._clear_form()
 
         except ValueError as error:
@@ -1653,43 +1660,16 @@ class BookManagerApplication:
         self._search_keyword_var.set("")
         self._search_entry.focus_set()
 
-
     def _on_sort_changed(
         self,
         _event: tk.Event[tk.Misc] | None = None,
     ) -> None:
         """現在の検索条件を保ったまま一覧を並べ替える。"""
         selected_book_id = self._selected_book_id
-        search_type = self._search_type_var.get()
         keyword = self._search_keyword_var.get()
 
         try:
-            if search_type == "書籍名":
-                books = self._service.search_books_by_title(
-                    keyword,
-                )
-            elif search_type == "著者名":
-                books = self._service.search_books_by_author(
-                    keyword,
-                )
-            elif search_type == "出版社":
-                books = self._service.search_books_by_publisher(
-                    keyword,
-                )
-            elif search_type == "ISBN":
-                books = self._service.find_books_by_isbn(
-                    keyword,
-                )
-            elif search_type == "雑誌コード":
-                books = (
-                    self._service.find_books_by_magazine_code(
-                        keyword,
-                    )
-                )
-            else:
-                raise ValueError(
-                    "検索種類が正しくありません。"
-                )
+            books = self._get_filtered_books()
 
             sort_by, descending = (
                 self._get_sort_settings()
@@ -1735,7 +1715,6 @@ class BookManagerApplication:
                 "書籍一覧を並べ替えできませんでした。",
                 parent=self._root,
             )
-
 
     def _on_tree_select(
         self,
