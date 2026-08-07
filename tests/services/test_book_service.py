@@ -972,3 +972,89 @@ def test_fetch_cover_image_requires_cover_image_service(
         service.fetch_cover_image(
             "https://example.com/cover.jpg",
         )
+
+def test_get_sorted_books_returns_title_ascending(
+    service: BookService,
+) -> None:
+    """書籍名の昇順で取得できることを確認する。"""
+    second = add_sample_book(
+        service,
+        title="B書籍",
+        isbn=None,
+    )
+    first = add_sample_book(
+        service,
+        title="A書籍",
+        isbn=None,
+    )
+
+    results = service.get_sorted_books(
+        sort_by="title",
+    )
+
+    assert results == [
+        first,
+        second,
+    ]
+
+def test_get_sorted_books_returns_title_descending(
+    service: BookService,
+) -> None:
+    """書籍名の降順で取得できることを確認する。"""
+    second = add_sample_book(
+        service,
+        title="B書籍",
+        isbn=None,
+    )
+    first = add_sample_book(
+        service,
+        title="A書籍",
+        isbn=None,
+    )
+
+    results = service.get_sorted_books(
+        sort_by="title",
+        descending=True,
+    )
+
+    assert results == [
+        second,
+        first,
+    ]
+
+def test_get_sorted_books_returns_registered_descending(
+    service: BookService,
+) -> None:
+    """登録順の降順で取得できることを確認する。"""
+    first = add_sample_book(
+        service,
+        title="1冊目",
+        isbn=None,
+    )
+    second = add_sample_book(
+        service,
+        title="2冊目",
+        isbn=None,
+    )
+
+    results = service.get_sorted_books(
+        sort_by="registered",
+        descending=True,
+    )
+
+    assert results == [
+        second,
+        first,
+    ]
+
+def test_get_sorted_books_rejects_invalid_sort_by(
+    service: BookService,
+) -> None:
+    """未対応の並べ替え項目を拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match="指定された並べ替え項目が正しくありません。",
+    ):
+        service.get_sorted_books(
+            sort_by="invalid",
+        )

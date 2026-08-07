@@ -41,6 +41,14 @@ class BookManagerApplication:
         "雑誌コード",
     )
 
+    SORT_TYPES = (
+        "登録順",
+        "書籍名",
+        "著者名",
+        "出版社",
+        "読了年月",
+    )
+
     PUBLICATION_FORMATS = (
         "",
         "文庫",
@@ -75,7 +83,6 @@ class BookManagerApplication:
         """
         self._root = root
         self._service = service
-
         self._selected_book_id: int | None = None
         self._cover_photo: tk.PhotoImage | None = None
         self._current_cover_image_url: str | None = None
@@ -88,6 +95,14 @@ class BookManagerApplication:
             master=self._root,
         )
 
+        self._sort_type_var = tk.StringVar(
+            master=self._root,
+            value=self.SORT_TYPES[0],
+        )
+        self._sort_direction_var = tk.StringVar(
+            master=self._root,
+            value="descending",
+        )
         self._title_var = tk.StringVar(
             master=self._root,
         )
@@ -109,7 +124,6 @@ class BookManagerApplication:
         self._completion_month_var = tk.StringVar(
             master=self._root,
         )
-
         self._count_status_var = tk.StringVar(
             master=self._root,
             value="全 0件",
@@ -297,6 +311,106 @@ class BookManagerApplication:
         self._clear_search_button.grid(
             row=0,
             column=5,
+        )
+
+        ttk.Label(
+            search_frame,
+            text="並べ替え",
+        ).grid(
+            row=1,
+            column=0,
+            sticky="w",
+            padx=(0, 6),
+            pady=(8, 0),
+        )
+
+        self._sort_type_combobox = ttk.Combobox(
+            search_frame,
+            textvariable=self._sort_type_var,
+            values=self.SORT_TYPES,
+            state="readonly",
+            width=12,
+        )
+        self._sort_type_combobox.grid(
+            row=1,
+            column=1,
+            sticky="w",
+            padx=(0, 10),
+            pady=(8, 0),
+        )
+
+        self._sort_type_combobox.bind(
+            "<<ComboboxSelected>>",
+            self._on_sort_changed,
+        )
+
+        sort_direction_frame = ttk.Frame(
+            search_frame,
+        )
+        sort_direction_frame.grid(
+            row=1,
+            column=2,
+            columnspan=2,
+            sticky="w",
+            pady=(8, 0),
+        )
+
+        self._sort_descending_radio = ttk.Radiobutton(
+            sort_direction_frame,
+            text="降順",
+            variable=self._sort_direction_var,
+            value="descending",
+            command=self._on_sort_changed,
+        )
+        self._sort_descending_radio.grid(
+            row=0,
+            column=0,
+            padx=(0, 10),
+        )
+
+        self._sort_ascending_radio = ttk.Radiobutton(
+            sort_direction_frame,
+            text="昇順",
+            variable=self._sort_direction_var,
+            value="ascending",
+            command=self._on_sort_changed,
+        )
+        self._sort_ascending_radio.grid(
+            row=0,
+            column=1,
+        )
+
+    def _get_sort_settings(
+        self,
+    ) -> tuple[str, bool]:
+        """GUIの並べ替え指定をService用の値へ変換する。"""
+        sort_type_map = {
+            "登録順": "registered",
+            "書籍名": "title",
+            "著者名": "author",
+            "出版社": "publisher",
+            "読了年月": "completion_month",
+        }
+
+        selected_sort_type = self._sort_type_var.get()
+
+        sort_by = sort_type_map.get(
+            selected_sort_type,
+        )
+
+        if sort_by is None:
+            raise ValueError(
+                "並べ替え項目が正しくありません。"
+            )
+
+        descending = (
+            self._sort_direction_var.get()
+            == "descending"
+        )
+
+        return (
+            sort_by,
+            descending,
         )
 
     def _create_list_frame(
@@ -951,11 +1065,20 @@ class BookManagerApplication:
     def _load_all_books(self) -> None:
         """全書籍を取得して一覧へ表示する。"""
         try:
-            books = self._service.get_all_books()
+            sort_by, descending = (
+                self._get_sort_settings()
+            )
+
+            books = self._service.get_sorted_books(
+                sort_by=sort_by,
+                descending=descending,
+            )
+
             self._display_books(
                 books,
                 status_prefix="全",
             )
+
         except Exception:
             traceback.print_exc()
             messagebox.showerror(
@@ -1503,6 +1626,13 @@ class BookManagerApplication:
         )
         self._search_keyword_var.set("")
 
+        self._sort_type_var.set(
+            self.SORT_TYPES[0],
+        )
+        self._sort_direction_var.set(
+            "descending",
+        )
+
         self._load_all_books()
 
     def _on_clear_search(self) -> None:
@@ -1512,6 +1642,25 @@ class BookManagerApplication:
         )
         self._search_keyword_var.set("")
         self._search_entry.focus_set()
+
+    def _on_sort_changed(
+        self,
+        _event: tk.Event[tk.Misc] | None = None,
+    ) -> None:
+        """並べ替え条件変更時に一覧を再表示する。"""
+        selected_book_id = self._selected_book_id
+
+        self._load_all_books()
+
+        if selected_book_id is None:
+            return
+
+        if self._book_tree.exists(
+            str(selected_book_id),
+        ):
+            self._select_book_in_tree(
+                selected_book_id,
+            )
 
     def _on_tree_select(
         self,

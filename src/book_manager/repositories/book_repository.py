@@ -25,6 +25,14 @@ BOOK_ITEM_COLUMNS = """
     updated_at
 """
 
+SORT_COLUMNS = {
+    "registered": "id",
+    "title": "title",
+    "author": "author",
+    "publisher": "publisher",
+    "completion_month": "completion_month",
+}
+
 class BookRepository:
     """book_itemsテーブルの永続化処理を担当する。"""
 
@@ -143,6 +151,63 @@ class BookRepository:
             ]
         finally:
             connection.close()
+
+    def get_all_sorted(
+        self,
+        *,
+        sort_by: str,
+        descending: bool = False,
+    ) -> list[BookItem]:
+        """指定された項目で全書籍を並べ替えて取得する。"""
+        column_name = SORT_COLUMNS.get(
+            sort_by,
+        )
+
+        if column_name is None:
+            raise ValueError(
+                "指定された並べ替え項目が正しくありません。"
+            )
+
+        direction = (
+            "DESC"
+            if descending
+            else "ASC"
+        )
+
+        if sort_by == "registered":
+            order_by = (
+                f"{column_name} {direction}"
+            )
+        else:
+            order_by = (
+                f"{column_name} IS NULL, "
+                f"{column_name} {direction}, "
+                "id DESC"
+            )
+
+        query = f"""
+            SELECT
+                {BOOK_ITEM_COLUMNS}
+            FROM book_items
+            ORDER BY {order_by}
+        """
+
+        connection = create_connection(
+            self._database_path,
+        )
+
+        try:
+            rows = connection.execute(
+                query,
+            ).fetchall()
+
+            return [
+                self._row_to_book_item(row)
+                for row in rows
+            ]
+        finally:
+            connection.close()
+
 
     def search_by_title(
         self,

@@ -215,6 +215,167 @@ def test_get_all_returns_books_in_descending_id_order(
         first,
     ]
 
+def test_get_all_sorted_by_registered_ascending(
+    repository: BookRepository,
+) -> None:
+    """登録順の昇順で取得できることを確認する。"""
+    first = repository.add(
+        create_book_item(title="1冊目")
+    )
+    second = repository.add(
+        create_book_item(title="2冊目")
+    )
+    third = repository.add(
+        create_book_item(title="3冊目")
+    )
+
+    result = repository.get_all_sorted(
+        sort_by="registered",
+        descending=False,
+    )
+
+    assert result == [
+        first,
+        second,
+        third,
+    ]
+
+def test_get_all_sorted_by_registered_descending(
+    repository: BookRepository,
+) -> None:
+    """登録順の降順で取得できることを確認する。"""
+    first = repository.add(
+        create_book_item(title="1冊目")
+    )
+    second = repository.add(
+        create_book_item(title="2冊目")
+    )
+
+    result = repository.get_all_sorted(
+        sort_by="registered",
+        descending=True,
+    )
+
+    assert result == [
+        second,
+        first,
+    ]
+
+def test_get_all_sorted_by_title(
+    repository: BookRepository,
+) -> None:
+    """書籍名の昇順で取得できることを確認する。"""
+    second = repository.add(
+        create_book_item(title="B書籍")
+    )
+    first = repository.add(
+        create_book_item(title="A書籍")
+    )
+
+    result = repository.get_all_sorted(
+        sort_by="title",
+    )
+
+    assert result == [
+        first,
+        second,
+    ]
+
+@pytest.mark.parametrize(
+    ("sort_by", "field_name", "first_value", "second_value"),
+    [
+        (
+            "author",
+            "author",
+            "A著者",
+            "B著者",
+        ),
+        (
+            "publisher",
+            "publisher",
+            "A出版社",
+            "B出版社",
+        ),
+        (
+            "completion_month",
+            "completion_month",
+            "2026-01",
+            "2026-12",
+        ),
+    ],
+)
+
+def test_get_all_sorted_by_optional_field(
+    repository: BookRepository,
+    sort_by: str,
+    field_name: str,
+    first_value: str,
+    second_value: str,
+) -> None:
+    """任意項目の昇順で取得できることを確認する。"""
+    second = repository.add(
+        create_book_item(
+            title="2冊目",
+            **{
+                field_name: second_value,
+            },
+        )
+    )
+    first = repository.add(
+        create_book_item(
+            title="1冊目",
+            **{
+                field_name: first_value,
+            },
+        )
+    )
+
+    result = repository.get_all_sorted(
+        sort_by=sort_by,
+    )
+
+    assert result == [
+        first,
+        second,
+    ]
+
+def test_get_all_sorted_places_none_last(
+    repository: BookRepository,
+) -> None:
+    """値がない書籍は並べ替え時に最後へ配置する。"""
+    without_author = repository.add(
+        create_book_item(
+            title="著者なし",
+            author=None,
+        )
+    )
+    with_author = repository.add(
+        create_book_item(
+            title="著者あり",
+            author="夏目漱石",
+        )
+    )
+
+    result = repository.get_all_sorted(
+        sort_by="author",
+    )
+
+    assert result == [
+        with_author,
+        without_author,
+    ]
+
+def test_get_all_sorted_rejects_invalid_sort_by(
+    repository: BookRepository,
+) -> None:
+    """未対応の並べ替え項目を拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match="指定された並べ替え項目が正しくありません。",
+    ):
+        repository.get_all_sorted(
+            sort_by="invalid",
+        )
 
 def test_search_by_title_finds_exact_match(
     repository: BookRepository,

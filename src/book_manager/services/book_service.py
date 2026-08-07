@@ -243,6 +243,31 @@ class BookService:
         """すべての書籍情報を取得する。"""
         return self._repository.get_all()
 
+    def get_sorted_books(
+        self,
+        *,
+        sort_by: str,
+        descending: bool = False,
+    ) -> list[BookItem]:
+        """指定された項目と方向で全書籍を取得する。"""
+        allowed_sort_fields = {
+            "registered",
+            "title",
+            "author",
+            "publisher",
+            "completion_month",
+        }
+
+        if sort_by not in allowed_sort_fields:
+            raise ValueError(
+                "指定された並べ替え項目が正しくありません。"
+            )
+
+        return self._repository.get_all_sorted(
+            sort_by=sort_by,
+            descending=descending,
+        )
+
     def search_books_by_title(
         self,
         keyword: str,
