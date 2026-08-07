@@ -1881,7 +1881,10 @@ class BookManagerApplication:
 
             confirmed = messagebox.askyesno(
                 "更新の確認",
-                "選択中の書籍情報を更新しますか？",
+                (
+                    "次の書籍情報を更新しますか？\n\n"
+                    f"{title}"
+                ),
                 parent=self._root,
             )
 
