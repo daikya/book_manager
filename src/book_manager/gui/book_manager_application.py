@@ -1642,14 +1642,6 @@ class BookManagerApplication:
             self.SEARCH_TYPES[0],
         )
         self._search_keyword_var.set("")
-
-        self._sort_type_var.set(
-            self.SORT_TYPES[0],
-        )
-        self._sort_direction_var.set(
-            "descending",
-        )
-
         self._load_all_books()
 
     def _on_clear_search(self) -> None:
@@ -2019,22 +2011,59 @@ class BookManagerApplication:
         self._title_entry.focus_set()
 
     def _on_reload(self) -> None:
-        """書籍一覧を最新状態へ更新する。"""
+        """現在の検索・ソート条件を維持して一覧を再読み込みする。"""
         selected_book_id = self._selected_book_id
+        keyword = self._search_keyword_var.get()
 
-        self._load_all_books()
+        try:
+            books = self._get_filtered_books()
 
-        if selected_book_id is None:
-            return
-
-        if self._book_tree.exists(
-            str(selected_book_id),
-        ):
-            self._select_book_in_tree(
-                selected_book_id,
+            sort_by, descending = (
+                self._get_sort_settings()
             )
-        else:
-            self._clear_form()
+
+            books = self._service.sort_books(
+                books,
+                sort_by=sort_by,
+                descending=descending,
+            )
+
+            status_prefix = (
+                "検索結果"
+                if keyword.strip()
+                else "全"
+            )
+
+            self._display_books(
+                books,
+                status_prefix=status_prefix,
+            )
+
+            if selected_book_id is None:
+                return
+
+            if self._book_tree.exists(
+                str(selected_book_id),
+            ):
+                self._select_book_in_tree(
+                    selected_book_id,
+                )
+            else:
+                self._clear_form()
+
+        except ValueError as error:
+            messagebox.showerror(
+                "再読み込みエラー",
+                str(error),
+                parent=self._root,
+            )
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "再読み込みエラー",
+                "書籍一覧を再読み込みできませんでした。",
+                parent=self._root,
+            )
 
     def _on_exit(self) -> None:
         """アプリケーションを終了する。"""
