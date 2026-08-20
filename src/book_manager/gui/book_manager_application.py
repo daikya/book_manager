@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import tkinter as tk
 import traceback
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 from typing import TYPE_CHECKING
 from PIL import Image, ImageTk
 from pathlib import Path
+from datetime import datetime
 
 from book_manager.models.book_item import BookItem
 from book_manager.models.fetched_book_data import (
@@ -24,6 +25,9 @@ from book_manager.metadata.exceptions import (
 
 if TYPE_CHECKING:
     from book_manager.services.book_service import BookService
+    from book_manager.services.csv_export_service import (
+        CsvExportService,
+    )
 
 class BookManagerApplication:
     """書籍管理アプリケーションのメインウィンドウを管理する。"""
@@ -74,6 +78,7 @@ class BookManagerApplication:
         self,
         root: tk.Tk,
         service: BookService,
+        csv_export_service: CsvExportService,
     ) -> None:
         """GUIを初期化する。
 
@@ -83,6 +88,7 @@ class BookManagerApplication:
         """
         self._root = root
         self._service = service
+        self._csv_export_service = csv_export_service
         self._selected_book_id: int | None = None
         self._cover_photo: tk.PhotoImage | None = None
         self._current_cover_image_url: str | None = None
@@ -1007,6 +1013,18 @@ class BookManagerApplication:
         self._reload_button.grid(
             row=0,
             column=5,
+            padx=(0, 6),
+        )
+
+        self._csv_export_button = ttk.Button(
+            button_frame,
+            text="CSVエクスポート",
+            command=self._on_export_csv,
+        )
+
+        self._csv_export_button.grid(
+            row=0,
+            column=6,
             padx=(0, 6),
         )
 
@@ -2065,6 +2083,66 @@ class BookManagerApplication:
             messagebox.showerror(
                 "再読み込みエラー",
                 "書籍一覧を再読み込みできませんでした。",
+                parent=self._root,
+            )
+
+    def _on_export_csv(self) -> None:
+        """登録済み書籍をCSVファイルへエクスポートする。"""
+        try:
+            books = self._service.get_sorted_books(
+                sort_by="registered",
+                descending=True,
+            )
+
+            if not books:
+                messagebox.showinfo(
+                    "CSVエクスポート",
+                    "エクスポートできる書籍がありません。",
+                    parent=self._root,
+                )
+                return
+
+            default_filename = (
+                "book_manager_"
+                f"{datetime.now():%Y%m%d_%H%M%S}"
+                ".csv"
+            )
+
+            output_filename = filedialog.asksaveasfilename(
+                parent=self._root,
+                title="CSVファイルを保存",
+                defaultextension=".csv",
+                initialfile=default_filename,
+                filetypes=[
+                    (
+                        "CSVファイル",
+                        "*.csv",
+                    ),
+                    (
+                        "すべてのファイル",
+                        "*.*",
+                    ),
+                ],
+            )
+
+            if not output_filename:
+                return
+            self._csv_export_service.export(
+                books,
+                Path(output_filename),
+            )
+
+            messagebox.showinfo(
+                "CSVエクスポート完了",
+                "CSVエクスポートが完了しました。",
+                parent=self._root,
+            )
+
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "CSVエクスポートエラー",
+                "CSVファイルを保存できませんでした。",
                 parent=self._root,
             )
 
