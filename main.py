@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
+import traceback
 from pathlib import Path
-
+from tkinter import messagebox
 import requests
 
 from book_manager.database.initializer import (
@@ -32,7 +33,10 @@ from book_manager.services.book_service import (
 from book_manager.services.cover_image_service import (
     CoverImageService,
 )
-
+from book_manager.services.backup_service import (
+    BackupService,
+)
+from book_manager.startup import try_create_backup
 
 def main() -> None:
     """book_manager を起動する。"""
@@ -42,6 +46,19 @@ def main() -> None:
 
     initialize_database(
         database_path,
+    )
+
+    backup_error: Exception | None = None
+
+    backup_service = BackupService(
+        database_path=database_path,
+        backup_directory=Path(
+            "backups",
+        ),
+    )
+
+    backup_error = try_create_backup(
+        backup_service,
     )
 
     repository = BookRepository(
@@ -82,6 +99,17 @@ def main() -> None:
     )
 
     root = tk.Tk()
+
+    if backup_error is not None:
+        messagebox.showwarning(
+            "自動バックアップエラー",
+            (
+                "データベースの自動バックアップに"
+                "失敗しました。\n\n"
+                "アプリケーションは引き続き利用できます。"
+            ),
+            parent=root,
+        )
 
     BookManagerApplication(
         root,
