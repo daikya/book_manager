@@ -53,6 +53,14 @@ class BookManagerApplication:
         "読了年月",
     )
 
+    TREE_SORT_TYPE_MAP = {
+        "id": "登録順",
+        "title": "書籍名",
+        "author": "著者名",
+        "publisher": "出版社",
+        "completion_month": "読了年月",
+    }
+
     PUBLICATION_FORMATS = (
         "",
         "文庫",
@@ -386,6 +394,42 @@ class BookManagerApplication:
             column=1,
         )
 
+    def _on_tree_heading_click(
+        self,
+        column_name: str,
+    ) -> None:
+        """書籍一覧のヘッダークリックで並べ替える。"""
+        sort_type = self.TREE_SORT_TYPE_MAP.get(
+            column_name,
+        )
+
+        if sort_type is None:
+            return
+
+        current_sort_type = self._sort_type_var.get()
+
+        if current_sort_type == sort_type:
+            current_direction = (
+                self._sort_direction_var.get()
+            )
+
+            new_direction = (
+                "ascending"
+                if current_direction == "descending"
+                else "descending"
+            )
+        else:
+            new_direction = "ascending"
+
+        self._sort_type_var.set(
+            sort_type,
+        )
+        self._sort_direction_var.set(
+            new_direction,
+        )
+
+        self._on_sort_changed()
+
     def _get_sort_settings(
         self,
     ) -> tuple[str, bool]:
@@ -553,10 +597,24 @@ class BookManagerApplication:
         }
 
         for column_name, definition in column_definitions.items():
+
+            heading_options: dict[str, object] = {
+                "text": definition["heading"],
+            }
+
+            if column_name in self.TREE_SORT_TYPE_MAP:
+                heading_options["command"] = (
+                    lambda column_name=column_name:
+                    self._on_tree_heading_click(
+                        column_name,
+                    )
+                )
+
             self._book_tree.heading(
                 column_name,
-                text=definition["heading"],
+                **heading_options,
             )
+
             self._book_tree.column(
                 column_name,
                 width=definition["width"],
