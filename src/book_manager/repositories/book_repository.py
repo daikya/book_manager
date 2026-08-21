@@ -352,6 +352,91 @@ class BookRepository:
         finally:
             connection.close()
 
+    def search_by_conditions(
+        self,
+        *,
+        title: str | None = None,
+        author: str | None = None,
+        publisher: str | None = None,
+        isbn: str | None = None,
+        magazine_code: str | None = None,
+    ) -> list[BookItem]:
+        """複数条件によるAND検索を行う。"""
+        conditions: list[str] = []
+        parameters: list[str] = []
+
+        if title is not None:
+            conditions.append(
+                "title LIKE ?",
+            )
+            parameters.append(
+                f"%{title}%",
+            )
+
+        if author is not None:
+            conditions.append(
+                "author LIKE ?",
+            )
+            parameters.append(
+                f"%{author}%",
+            )
+
+        if publisher is not None:
+            conditions.append(
+                "publisher LIKE ?",
+            )
+            parameters.append(
+                f"%{publisher}%",
+            )
+
+        if isbn is not None:
+            conditions.append(
+                "isbn = ?",
+            )
+            parameters.append(
+                isbn,
+            )
+
+        if magazine_code is not None:
+            conditions.append(
+                "magazine_code = ?",
+            )
+            parameters.append(
+                magazine_code,
+            )
+
+        if not conditions:
+            return self.get_all()
+
+        where_clause = " AND ".join(
+            conditions,
+        )
+
+        query = f"""
+            SELECT
+                {BOOK_ITEM_COLUMNS}
+            FROM book_items
+            WHERE {where_clause}
+            ORDER BY id DESC
+        """
+
+        connection = create_connection(
+            self._database_path,
+        )
+
+        try:
+            rows = connection.execute(
+                query,
+                parameters,
+            ).fetchall()
+
+            return [
+                self._row_to_book_item(row)
+                for row in rows
+            ]
+        finally:
+            connection.close()
+
     def update(
         self,
         book_item: BookItem,

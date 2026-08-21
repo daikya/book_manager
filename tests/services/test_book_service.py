@@ -607,6 +607,180 @@ def test_find_books_by_magazine_code_returns_empty_for_blank_value(
         == []
     )
 
+def test_search_books_returns_title_partial_matches(
+    service: BookService,
+) -> None:
+    """書籍名を部分一致で複合条件検索できる。"""
+    first = add_sample_book(
+        service,
+        title="Python入門",
+        isbn=None,
+    )
+    second = add_sample_book(
+        service,
+        title="Python実践",
+        isbn=None,
+    )
+    add_sample_book(
+        service,
+        title="SQLite入門",
+        isbn=None,
+    )
+
+    results = service.search_books(
+        title="Python",
+    )
+
+    assert results == [
+        second,
+        first,
+    ]
+
+
+def test_search_books_returns_multiple_condition_matches(
+    service: BookService,
+) -> None:
+    """複数条件をAND条件として検索できる。"""
+    matched = add_sample_book(
+        service,
+        title="海辺のカフカ",
+        author="村上春樹",
+        publisher="新潮社",
+        isbn=None,
+    )
+    add_sample_book(
+        service,
+        title="ノルウェイの森",
+        author="村上春樹",
+        publisher="講談社",
+        isbn=None,
+    )
+
+    results = service.search_books(
+        author="村上",
+        publisher="新潮",
+    )
+
+    assert results == [
+        matched,
+    ]
+
+
+def test_search_books_strips_text_conditions(
+    service: BookService,
+) -> None:
+    """文字列検索条件の前後空白を除去する。"""
+    registered = add_sample_book(
+        service,
+        title="海辺のカフカ",
+        author="村上春樹",
+        publisher="新潮社",
+        isbn=None,
+    )
+
+    results = service.search_books(
+        title="  海辺  ",
+        author="  村上  ",
+        publisher="  新潮  ",
+    )
+
+    assert results == [
+        registered,
+    ]
+
+
+def test_search_books_normalizes_isbn(
+    service: BookService,
+) -> None:
+    """ISBNを正規化して検索する。"""
+    registered = add_sample_book(
+        service,
+        isbn="9784101010014",
+    )
+
+    results = service.search_books(
+        isbn=" 978-4-10-101001-4 ",
+    )
+
+    assert results == [
+        registered,
+    ]
+
+
+def test_search_books_normalizes_magazine_code(
+    service: BookService,
+) -> None:
+    """雑誌コードの前後空白を除去して検索する。"""
+    registered = add_sample_book(
+        service,
+        isbn=None,
+        magazine_code="12345",
+    )
+
+    results = service.search_books(
+        magazine_code="  12345  ",
+    )
+
+    assert results == [
+        registered,
+    ]
+
+
+def test_search_books_returns_all_when_conditions_are_blank(
+    service: BookService,
+) -> None:
+    """全検索条件が空欄の場合は全件を返す。"""
+    first = add_sample_book(
+        service,
+        title="1冊目",
+        isbn=None,
+    )
+    second = add_sample_book(
+        service,
+        title="2冊目",
+        isbn=None,
+    )
+
+    results = service.search_books(
+        title=" ",
+        author=" ",
+        publisher=" ",
+        isbn=" ",
+        magazine_code=" ",
+    )
+
+    assert results == [
+        second,
+        first,
+    ]
+
+
+def test_search_books_rejects_invalid_isbn(
+    service: BookService,
+) -> None:
+    """不正なISBNを拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match=(
+            "ISBNのチェックデジットが正しくありません。"
+        ),
+    ):
+        service.search_books(
+            isbn="9784101010015",
+        )
+
+
+def test_search_books_rejects_invalid_magazine_code(
+    service: BookService,
+) -> None:
+    """不正な雑誌コードを拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match="雑誌コードは半角数字で入力してください。",
+    ):
+        service.search_books(
+            magazine_code="12A45",
+        )
 
 def test_find_duplicate_candidates_by_isbn(
     service: BookService,

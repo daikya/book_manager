@@ -37,14 +37,6 @@ class BookManagerApplication:
     MINIMUM_WIDTH = 1150
     MINIMUM_HEIGHT = 650
 
-    SEARCH_TYPES = (
-        "書籍名",
-        "著者名",
-        "出版社",
-        "ISBN",
-        "雑誌コード",
-    )
-
     SORT_TYPES = (
         "登録順",
         "書籍名",
@@ -101,11 +93,20 @@ class BookManagerApplication:
         self._cover_photo: tk.PhotoImage | None = None
         self._current_cover_image_url: str | None = None
         self._current_cover_image_path: str | None = None
-        self._search_type_var = tk.StringVar(
+
+        self._search_title_var = tk.StringVar(
             master=self._root,
-            value=self.SEARCH_TYPES[0],
         )
-        self._search_keyword_var = tk.StringVar(
+        self._search_author_var = tk.StringVar(
+            master=self._root,
+        )
+        self._search_publisher_var = tk.StringVar(
+            master=self._root,
+        )
+        self._search_isbn_var = tk.StringVar(
+            master=self._root,
+        )
+        self._search_magazine_code_var = tk.StringVar(
             master=self._root,
         )
 
@@ -252,13 +253,21 @@ class BookManagerApplication:
         )
 
         search_frame.columnconfigure(
-            2,
+            1,
+            weight=1,
+        )
+        search_frame.columnconfigure(
+            3,
+            weight=1,
+        )
+        search_frame.columnconfigure(
+            5,
             weight=1,
         )
 
         ttk.Label(
             search_frame,
-            text="検索種類",
+            text="書籍名",
         ).grid(
             row=0,
             column=0,
@@ -266,31 +275,120 @@ class BookManagerApplication:
             padx=(0, 6),
         )
 
-        self._search_type_combobox = ttk.Combobox(
+        self._search_title_entry = ttk.Entry(
             search_frame,
-            textvariable=self._search_type_var,
-            values=self.SEARCH_TYPES,
-            state="readonly",
-            width=12,
+            textvariable=self._search_title_var,
         )
-        self._search_type_combobox.grid(
+        self._search_title_entry.grid(
             row=0,
             column=1,
-            sticky="w",
+            sticky="ew",
             padx=(0, 10),
         )
-
-        self._search_entry = ttk.Entry(
-            search_frame,
-            textvariable=self._search_keyword_var,
+        self._search_title_entry.bind(
+            "<Return>",
+            self._on_search,
         )
-        self._search_entry.grid(
+
+        ttk.Label(
+            search_frame,
+            text="著者名",
+        ).grid(
             row=0,
             column=2,
-            sticky="ew",
-            padx=(0, 8),
+            sticky="w",
+            padx=(0, 6),
         )
-        self._search_entry.bind(
+
+        self._search_author_entry = ttk.Entry(
+            search_frame,
+            textvariable=self._search_author_var,
+        )
+        self._search_author_entry.grid(
+            row=0,
+            column=3,
+            sticky="ew",
+            padx=(0, 10),
+        )
+        self._search_author_entry.bind(
+            "<Return>",
+            self._on_search,
+        )
+
+        ttk.Label(
+            search_frame,
+            text="出版社",
+        ).grid(
+            row=0,
+            column=4,
+            sticky="w",
+            padx=(0, 6),
+        )
+
+        self._search_publisher_entry = ttk.Entry(
+            search_frame,
+            textvariable=self._search_publisher_var,
+        )
+        self._search_publisher_entry.grid(
+            row=0,
+            column=5,
+            sticky="ew",
+        )
+        self._search_publisher_entry.bind(
+            "<Return>",
+            self._on_search,
+        )
+
+        ttk.Label(
+            search_frame,
+            text="ISBN",
+        ).grid(
+            row=1,
+            column=0,
+            sticky="w",
+            padx=(0, 6),
+            pady=(8, 0),
+        )
+
+        self._search_isbn_entry = ttk.Entry(
+            search_frame,
+            textvariable=self._search_isbn_var,
+        )
+        self._search_isbn_entry.grid(
+            row=1,
+            column=1,
+            sticky="ew",
+            padx=(0, 10),
+            pady=(8, 0),
+        )
+        self._search_isbn_entry.bind(
+            "<Return>",
+            self._on_search,
+        )
+
+        ttk.Label(
+            search_frame,
+            text="雑誌コード",
+        ).grid(
+            row=1,
+            column=2,
+            sticky="w",
+            padx=(0, 6),
+            pady=(8, 0),
+        )
+
+        self._search_magazine_code_entry = ttk.Entry(
+            search_frame,
+            textvariable=self._search_magazine_code_var,
+        )
+        self._search_magazine_code_entry.grid(
+            row=1,
+            column=3,
+            sticky="ew",
+            padx=(0, 10),
+            pady=(8, 0),
+        )
+        self._search_magazine_code_entry.bind(
             "<Return>",
             self._on_search,
         )
@@ -301,20 +399,10 @@ class BookManagerApplication:
             command=self._on_search,
         )
         self._search_button.grid(
-            row=0,
-            column=3,
-            padx=(0, 6),
-        )
-
-        self._show_all_button = ttk.Button(
-            search_frame,
-            text="全件表示",
-            command=self._on_show_all,
-        )
-        self._show_all_button.grid(
-            row=0,
+            row=1,
             column=4,
             padx=(0, 6),
+            pady=(8, 0),
         )
 
         self._clear_search_button = ttk.Button(
@@ -323,15 +411,17 @@ class BookManagerApplication:
             command=self._on_clear_search,
         )
         self._clear_search_button.grid(
-            row=0,
+            row=1,
             column=5,
+            sticky="w",
+            pady=(8, 0),
         )
 
         ttk.Label(
             search_frame,
             text="並べ替え",
         ).grid(
-            row=1,
+            row=2,
             column=0,
             sticky="w",
             padx=(0, 6),
@@ -346,7 +436,7 @@ class BookManagerApplication:
             width=12,
         )
         self._sort_type_combobox.grid(
-            row=1,
+            row=2,
             column=1,
             sticky="w",
             padx=(0, 10),
@@ -362,7 +452,7 @@ class BookManagerApplication:
             search_frame,
         )
         sort_direction_frame.grid(
-            row=1,
+            row=2,
             column=2,
             columnspan=2,
             sticky="w",
@@ -1634,39 +1724,28 @@ class BookManagerApplication:
         self,
     ) -> list[BookItem]:
         """現在の検索条件に一致する書籍一覧を取得する。"""
-        search_type = self._search_type_var.get()
-        keyword = self._search_keyword_var.get()
-
-        if search_type == "書籍名":
-            return self._service.search_books_by_title(
-                keyword,
-            )
-
-        if search_type == "著者名":
-            return self._service.search_books_by_author(
-                keyword,
-            )
-
-        if search_type == "出版社":
-            return self._service.search_books_by_publisher(
-                keyword,
-            )
-
-        if search_type == "ISBN":
-            return self._service.find_books_by_isbn(
-                keyword,
-            )
-
-        if search_type == "雑誌コード":
-            return self._service.find_books_by_magazine_code(
-                keyword,
-            )
-
-        raise ValueError(
-            "検索種類が正しくありません。"
+        return self._service.search_books(
+            title=self._search_title_var.get(),
+            author=self._search_author_var.get(),
+            publisher=self._search_publisher_var.get(),
+            isbn=self._search_isbn_var.get(),
+            magazine_code=self._search_magazine_code_var.get(),
         )
 
-
+    def _has_search_conditions(
+        self,
+    ) -> bool:
+        """検索条件が1つ以上入力されているか判定する。"""
+        return any(
+            value.strip()
+            for value in (
+                self._search_title_var.get(),
+                self._search_author_var.get(),
+                self._search_publisher_var.get(),
+                self._search_isbn_var.get(),
+                self._search_magazine_code_var.get(),
+            )
+        )
 
 # ここからイベントハンドラ
 
@@ -1675,9 +1754,6 @@ class BookManagerApplication:
         _event: tk.Event[tk.Misc] | None = None,
     ) -> None:
         """指定された条件で書籍を検索する。"""
-        search_type = self._search_type_var.get()
-        keyword = self._search_keyword_var.get()
-
         try:
             books = self._get_filtered_books()
 
@@ -1712,21 +1788,17 @@ class BookManagerApplication:
                 parent=self._root,
             )
 
-    def _on_show_all(self) -> None:
-        """検索条件を初期化して全書籍を表示する。"""
-        self._search_type_var.set(
-            self.SEARCH_TYPES[0],
-        )
-        self._search_keyword_var.set("")
+    def _on_clear_search(self) -> None:
+        """検索条件を初期状態へ戻して全件表示する。"""
+        self._search_title_var.set("")
+        self._search_author_var.set("")
+        self._search_publisher_var.set("")
+        self._search_isbn_var.set("")
+        self._search_magazine_code_var.set("")
+
         self._load_all_books()
 
-    def _on_clear_search(self) -> None:
-        """検索条件を初期状態へ戻す。"""
-        self._search_type_var.set(
-            self.SEARCH_TYPES[0],
-        )
-        self._search_keyword_var.set("")
-        self._search_entry.focus_set()
+        self._search_title_entry.focus_set()
 
     def _on_sort_changed(
         self,
@@ -1734,7 +1806,6 @@ class BookManagerApplication:
     ) -> None:
         """現在の検索条件を保ったまま一覧を並べ替える。"""
         selected_book_id = self._selected_book_id
-        keyword = self._search_keyword_var.get()
 
         try:
             books = self._get_filtered_books()
@@ -1751,7 +1822,7 @@ class BookManagerApplication:
 
             status_prefix = (
                 "検索結果"
-                if keyword.strip()
+                if self._has_search_conditions()
                 else "全"
             )
 
@@ -2092,7 +2163,6 @@ class BookManagerApplication:
     def _on_reload(self) -> None:
         """現在の検索・ソート条件を維持して一覧を再読み込みする。"""
         selected_book_id = self._selected_book_id
-        keyword = self._search_keyword_var.get()
 
         try:
             books = self._get_filtered_books()
@@ -2109,7 +2179,7 @@ class BookManagerApplication:
 
             status_prefix = (
                 "検索結果"
-                if keyword.strip()
+                if self._has_search_conditions()
                 else "全"
             )
 
@@ -2127,8 +2197,6 @@ class BookManagerApplication:
                 self._select_book_in_tree(
                     selected_book_id,
                 )
-            else:
-                self._clear_form()
 
         except ValueError as error:
             messagebox.showerror(
@@ -2140,7 +2208,7 @@ class BookManagerApplication:
             traceback.print_exc()
             messagebox.showerror(
                 "再読み込みエラー",
-                "書籍一覧を再読み込みできませんでした。",
+                "書籍情報を再読み込みできませんでした。",
                 parent=self._root,
             )
 

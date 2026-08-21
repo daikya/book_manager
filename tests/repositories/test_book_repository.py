@@ -612,6 +612,276 @@ def test_find_by_magazine_code_returns_empty_list(
 
     assert result == []
 
+def test_search_by_conditions_finds_title_partial_match(
+    repository: BookRepository,
+) -> None:
+    """書籍名を部分一致で複合条件検索できる。"""
+    first = repository.add(
+        create_book_item(
+            title="吾輩は猫である",
+        )
+    )
+    second = repository.add(
+        create_book_item(
+            title="猫と庄造と二人のをんな",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="坊っちゃん",
+        )
+    )
+
+    result = repository.search_by_conditions(
+        title="猫",
+    )
+
+    assert result == [
+        second,
+        first,
+    ]
+
+
+def test_search_by_conditions_finds_author_partial_match(
+    repository: BookRepository,
+) -> None:
+    """著者名を部分一致で複合条件検索できる。"""
+    registered = repository.add(
+        create_book_item(
+            title="吾輩は猫である",
+            author="夏目漱石",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="羅生門",
+            author="芥川龍之介",
+        )
+    )
+
+    result = repository.search_by_conditions(
+        author="夏目",
+    )
+
+    assert result == [
+        registered,
+    ]
+
+
+def test_search_by_conditions_finds_publisher_partial_match(
+    repository: BookRepository,
+) -> None:
+    """出版社を部分一致で複合条件検索できる。"""
+    registered = repository.add(
+        create_book_item(
+            title="吾輩は猫である",
+            publisher="新潮社",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="別の書籍",
+            publisher="講談社",
+        )
+    )
+
+    result = repository.search_by_conditions(
+        publisher="新潮",
+    )
+
+    assert result == [
+        registered,
+    ]
+
+
+def test_search_by_conditions_finds_isbn_exact_match(
+    repository: BookRepository,
+) -> None:
+    """ISBNを完全一致で複合条件検索できる。"""
+    registered = repository.add(
+        create_book_item(
+            title="吾輩は猫である",
+            isbn="9784101010014",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="坊っちゃん",
+            isbn="9784101010021",
+        )
+    )
+
+    result = repository.search_by_conditions(
+        isbn="9784101010014",
+    )
+
+    assert result == [
+        registered,
+    ]
+
+
+def test_search_by_conditions_finds_magazine_code_exact_match(
+    repository: BookRepository,
+) -> None:
+    """雑誌コードを完全一致で複合条件検索できる。"""
+    registered = repository.add(
+        create_book_item(
+            title="月刊テスト",
+            isbn=None,
+            magazine_code="1234507",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="別冊テスト",
+            isbn=None,
+            magazine_code="9876507",
+        )
+    )
+
+    result = repository.search_by_conditions(
+        magazine_code="1234507",
+    )
+
+    assert result == [
+        registered,
+    ]
+
+
+def test_search_by_conditions_uses_and_for_multiple_conditions(
+    repository: BookRepository,
+) -> None:
+    """複数条件をAND条件として検索できる。"""
+    matched = repository.add(
+        create_book_item(
+            title="海辺のカフカ",
+            author="村上春樹",
+            publisher="新潮社",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="ノルウェイの森",
+            author="村上春樹",
+            publisher="講談社",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="別の書籍",
+            author="別の著者",
+            publisher="新潮社",
+        )
+    )
+
+    result = repository.search_by_conditions(
+        author="村上",
+        publisher="新潮",
+    )
+
+    assert result == [
+        matched,
+    ]
+
+
+def test_search_by_conditions_uses_all_specified_conditions(
+    repository: BookRepository,
+) -> None:
+    """指定されたすべての条件を満たす書籍だけを取得する。"""
+    matched = repository.add(
+        create_book_item(
+            title="海辺のカフカ",
+            author="村上春樹",
+            publisher="新潮社",
+            isbn="9784101001547",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="海辺のカフカ",
+            author="村上春樹",
+            publisher="新潮社",
+            isbn="9784101001554",
+        )
+    )
+
+    result = repository.search_by_conditions(
+        title="海辺",
+        author="村上",
+        publisher="新潮",
+        isbn="9784101001547",
+    )
+
+    assert result == [
+        matched,
+    ]
+
+
+def test_search_by_conditions_returns_empty_list_when_no_match(
+    repository: BookRepository,
+) -> None:
+    """複合条件に一致する書籍がない場合は空リストを返す。"""
+    repository.add(
+        create_book_item(
+            title="吾輩は猫である",
+        )
+    )
+
+    result = repository.search_by_conditions(
+        title="存在しない書籍",
+    )
+
+    assert result == []
+
+
+def test_search_by_conditions_without_conditions_returns_all(
+    repository: BookRepository,
+) -> None:
+    """検索条件がない場合は全件をID降順で返す。"""
+    first = repository.add(
+        create_book_item(
+            title="1冊目",
+        )
+    )
+    second = repository.add(
+        create_book_item(
+            title="2冊目",
+        )
+    )
+
+    result = repository.search_by_conditions()
+
+    assert result == [
+        second,
+        first,
+    ]
+
+
+def test_search_by_conditions_returns_results_in_descending_id_order(
+    repository: BookRepository,
+) -> None:
+    """複合条件検索結果をID降順で返す。"""
+    first = repository.add(
+        create_book_item(
+            title="1冊目",
+            author="共通著者",
+        )
+    )
+    second = repository.add(
+        create_book_item(
+            title="2冊目",
+            author="共通著者",
+        )
+    )
+
+    result = repository.search_by_conditions(
+        author="共通",
+    )
+
+    assert result == [
+        second,
+        first,
+    ]
 
 def test_update_updates_existing_book(
     repository: BookRepository,
@@ -731,3 +1001,21 @@ def test_delete_returns_false_for_missing_id(
     result = repository.delete(999)
 
     assert result is False
+
+def test_search_by_conditions_handles_sql_special_characters(
+    repository: BookRepository,
+) -> None:
+    """SQLで特別な意味を持つ文字を含む値も安全に検索できる。"""
+    registered = repository.add(
+        create_book_item(
+            title="O'Reilly Python",
+        )
+    )
+
+    result = repository.search_by_conditions(
+        title="O'Reilly",
+    )
+
+    assert result == [
+        registered,
+    ]

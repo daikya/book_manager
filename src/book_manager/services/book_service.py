@@ -405,6 +405,64 @@ class BookService:
             normalized_magazine_code
         )
 
+    def search_books(
+        self,
+        *,
+        title: str | None = None,
+        author: str | None = None,
+        publisher: str | None = None,
+        isbn: str | None = None,
+        magazine_code: str | None = None,
+    ) -> list[BookItem]:
+        """複数条件によるAND検索を行う。"""
+        normalized_title = self._normalize_optional_text(
+            title,
+        )
+        normalized_author = self._normalize_optional_text(
+            author,
+        )
+        normalized_publisher = self._normalize_optional_text(
+            publisher,
+        )
+        normalized_isbn = self._normalize_isbn(
+            isbn,
+        )
+        normalized_magazine_code = (
+            self._normalize_optional_text(
+                magazine_code,
+            )
+        )
+
+        if normalized_isbn is not None:
+            validate_isbn(
+                normalized_isbn,
+            )
+
+        if normalized_magazine_code is not None:
+            validate_magazine_code(
+                normalized_magazine_code,
+            )
+
+        if all(
+            value is None
+            for value in (
+                normalized_title,
+                normalized_author,
+                normalized_publisher,
+                normalized_isbn,
+                normalized_magazine_code,
+            )
+        ):
+            return self._repository.get_all()
+
+        return self._repository.search_by_conditions(
+            title=normalized_title,
+            author=normalized_author,
+            publisher=normalized_publisher,
+            isbn=normalized_isbn,
+            magazine_code=normalized_magazine_code,
+        )
+
     def update_book(
         self,
         book_item: BookItem,
