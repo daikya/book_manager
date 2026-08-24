@@ -33,7 +33,7 @@ class BookManagerApplication:
     """書籍管理アプリケーションのメインウィンドウを管理する。"""
 
     WINDOW_TITLE = "書籍管理"
-    WINDOW_SIZE = "1350x760"
+    WINDOW_SIZE = "1350x800"
     MINIMUM_WIDTH = 1150
     MINIMUM_HEIGHT = 650
 
@@ -93,7 +93,10 @@ class BookManagerApplication:
         self._cover_photo: tk.PhotoImage | None = None
         self._current_cover_image_url: str | None = None
         self._current_cover_image_path: str | None = None
-
+        self._thumbnail_photos: dict[
+            int,
+            ImageTk.PhotoImage,
+        ] = {}
         self._search_title_var = tk.StringVar(
             master=self._root,
         )
@@ -579,11 +582,22 @@ class BookManagerApplication:
             weight=1,
         )
 
+        style = ttk.Style(
+            self._root,
+        )
+
+        style.configure(
+            "Book.Treeview",
+            rowheight=60,
+        )
+
         self._book_tree = ttk.Treeview(
             list_frame,
             columns=self.TREE_COLUMNS,
-            show="headings",
+            show="tree headings",
             selectmode="browse",
+            style="Book.Treeview",
+            height=5,
         )
 
         self._configure_tree_columns()
@@ -627,6 +641,20 @@ class BookManagerApplication:
 
     def _configure_tree_columns(self) -> None:
         """書籍一覧の列を設定する。"""
+
+        self._book_tree.heading(
+            "#0",
+            text="表紙",
+        )
+
+        self._book_tree.column(
+            "#0",
+            width=60,
+            minwidth=60,
+            anchor="center",
+            stretch=False,
+        )
+
         column_definitions = {
             "id": {
                 "heading": "ID",
@@ -1253,6 +1281,38 @@ class BookManagerApplication:
                 parent=self._root,
             )
 
+    def _create_thumbnail_photo(
+        self,
+        cover_image_path: str | None,
+    ) -> ImageTk.PhotoImage | None:
+        """一覧表示用の表紙サムネイルを生成する。"""
+        if not cover_image_path:
+            return None
+
+        image_path = Path(
+            cover_image_path,
+        )
+
+        if not image_path.is_file():
+            return None
+
+        try:
+            with Image.open(image_path) as image:
+                thumbnail_image = image.copy()
+
+            thumbnail_image.thumbnail(
+                (40, 55),
+                Image.Resampling.LANCZOS,
+            )
+
+            return ImageTk.PhotoImage(
+                thumbnail_image,
+            )
+
+        except Exception:
+            traceback.print_exc()
+            return None
+
     def _display_books(
         self,
         books: list[BookItem],
@@ -1270,16 +1330,28 @@ class BookManagerApplication:
                 item_id,
             )
 
+        self._thumbnail_photos.clear()
+
         displayed_count = 0
 
         for book in books:
             if book.id is None:
                 continue
 
+            thumbnail_photo = self._create_thumbnail_photo(
+                book.cover_image_path,
+            )
+
+            if thumbnail_photo is not None:
+                self._thumbnail_photos[book.id] = (
+                    thumbnail_photo
+                )
+
             self._book_tree.insert(
                 "",
                 "end",
                 iid=str(book.id),
+                image=thumbnail_photo or "",
                 values=(
                     book.id,
                     book.title,
