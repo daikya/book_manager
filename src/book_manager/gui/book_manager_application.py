@@ -2038,17 +2038,16 @@ class BookManagerApplication:
                     "登録済み書籍のIDを取得できませんでした。",
                 )
 
-            registered_book_id = registered_book.id
-
-            self._reload_and_select_book(
-                registered_book_id,
-            )
+            self._load_all_books()
 
             messagebox.showinfo(
                 "登録完了",
                 "書籍を登録しました。",
                 parent=self._root,
             )
+
+            self._clear_form()
+            self._title_entry.focus_set()
 
         except ValueError as error:
             messagebox.showerror(
@@ -2131,15 +2130,16 @@ class BookManagerApplication:
                 self._clear_form()
                 return
 
-            self._reload_and_select_book(
-                book_id,
-            )
+            self._load_all_books()
 
             messagebox.showinfo(
                 "更新完了",
                 "書籍情報を更新しました。",
                 parent=self._root,
             )
+
+            self._clear_form()
+            self._title_entry.focus_set()
 
         except ValueError as error:
             messagebox.showerror(
