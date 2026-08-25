@@ -1,0 +1,505 @@
+# book_manager ドキュメントガイド
+
+## 1. 目的
+
+本ドキュメントは、`book_manager`プロジェクトで管理している設計書、レビュー記録、ADR、開発方針およびロードマップの構成と役割を整理するためのガイドである。
+
+`docs`ディレクトリ内の文書は補助資料ではなく、ソースコードと同様に管理する正式な成果物として扱う。
+
+機能追加や仕様変更を行う場合は、必要に応じて関連文書を更新し、設計書と実装の整合性を維持する。
+
+---
+
+## 2. ルートREADMEとの役割分担
+
+プロジェクトルートの、
+
+```text
+README.md
+```
+
+は、`book_manager`そのものの概要、利用方法、主要機能、セットアップ、テスト、プロジェクト構成などを説明する。
+
+本ファイル、
+
+```text
+docs/documentation_guide.md
+```
+
+は、`docs`ディレクトリ内の開発ドキュメントについて、その構成、役割、閲覧方法および運用方針を説明する。
+
+両者の役割を明確に分離し、取り違えを防ぐ。
+
+---
+
+## 3. 現在のドキュメント構成
+
+現在の`docs`ディレクトリは次の構成となっている。
+
+```text
+docs/
+├── documentation_guide.md
+├── book_manager_roadmap.md
+├── development_guidelines.md
+├── external_book_metadata_design.md
+│
+├── adr/
+│   └── ADR-0001-sqlite-selection.md
+│
+├── architecture/
+│   ├── project_structure.md
+│   └── project_structure_review.md
+│
+├── database/
+│   ├── database_design.md
+│   ├── database_design_review.md
+│   └── er_diagram.md
+│
+├── gui/
+│   ├── gui_design.md
+│   ├── gui_design_review.md
+│   ├── treeview_header_sort_design.md
+│   ├── multi_condition_search_design.md
+│   ├── thumbnail_list_design.md
+│   └── auto_clear_after_save_design.md
+│
+├── models/
+│   ├── book_item_design.md
+│   └── book_item_design_review.md
+│
+├── repositories/
+│   ├── book_repository_design.md
+│   └── book_repository_design_review.md
+│
+├── services/
+│   ├── book_service_design.md
+│   ├── book_service_design_review.md
+│   ├── book_service_implementation_review.md
+│   ├── backup_service_design.md
+│   └── csv_export_service_design.md
+│
+└── validators/
+    ├── validator_design.md
+    └── validator_design_review.md
+```
+
+将来、新しい機能や設計領域が必要になった場合は、必要性を確認したうえで文書またはディレクトリを追加する。
+
+将来必要になる可能性だけを理由として、未使用の文書やディレクトリを先に作成しない。
+
+---
+
+## 4. プロジェクト全体に関する文書
+
+### `book_manager_roadmap.md`
+
+各Versionのテーマ、完成条件、実装済み機能、今後の候補およびリリース記録を管理する。
+
+主な役割は次のとおりである。
+
+- Versionごとの開発テーマを定義する。
+- 主要スコープを整理する。
+- 実装状況をチェックリストで管理する。
+- 将来Versionの候補を記録する。
+- 正式リリースの記録を残す。
+
+---
+
+### `development_guidelines.md`
+
+book_manager全体の開発方針および運用ルールを定義する。
+
+主な内容は次のとおりである。
+
+- 開発姿勢
+- 設計してから実装する方針
+- Design Freeze
+- 設計変更手続き
+- ADR運用
+- Git運用
+- コミットメッセージ規則
+- 命名規則
+- コーディング方針
+- レビュー方針
+- テスト方針
+
+---
+
+### `external_book_metadata_design.md`
+
+外部書誌情報取得機能の設計を管理する。
+
+主な対象は次のとおりである。
+
+- Google Books API
+- openBD
+- ISBN変換
+- 複数取得元からの情報統合
+- 情報欠損時の補完
+- Rate Limit
+- Not Found
+- Raw Data
+- 取得元情報
+- 外部サービス障害時の処理
+
+---
+
+## 5. ADR
+
+### `adr/ADR-0001-sqlite-selection.md`
+
+SQLiteをbook_managerのローカルデータベースとして採用した設計判断を記録する。
+
+ADRでは、採用した案だけではなく、比較した選択肢、採用理由、利点、欠点および影響を残す。
+
+今後も、プロジェクト全体へ長期的な影響を与える重要な判断が発生した場合にADRを追加する。
+
+軽微なレイアウト変更、誤字修正、単純な不具合修正などでは、原則としてADRを作成しない。
+
+---
+
+## 6. Architecture
+
+`architecture`ディレクトリでは、アプリケーション全体の構造を管理する。
+
+### `project_structure.md`
+
+プロジェクト構成、レイヤー構成、依存方向、ディレクトリ構造および主要モジュールの責務を定義する。
+
+基本的な依存方向は次の考え方を採用する。
+
+```text
+GUI
+↓
+Service
+↓
+Repository
+↓
+SQLite
+```
+
+必要に応じて、Model、Validator、Metadata、外部サービスなどの責務を分離する。
+
+### `project_structure_review.md`
+
+`project_structure.md`に対する設計レビュー結果を記録する。
+
+---
+
+## 7. Database
+
+`database`ディレクトリでは、SQLiteデータベースの設計を管理する。
+
+### `database_design.md`
+
+主な内容は次のとおりである。
+
+- データベースファイル
+- テーブル構成
+- カラム定義
+- データ型
+- NULLの扱い
+- 制約
+- インデックス
+- 日付・日時保存方針
+- スキーマVersion
+- マイグレーション
+- CRUD方針
+
+### `database_design_review.md`
+
+データベース設計のレビュー結果を記録する。
+
+### `er_diagram.md`
+
+テーブル、カラム、主キー、インデックスおよびリレーションを図または構造として整理する。
+
+---
+
+## 8. GUI
+
+`gui`ディレクトリでは、画面構成、GUI操作およびVersionごとのGUI改善機能を管理する。
+
+### `gui_design.md`
+
+book_manager GUI全体の基本設計を定義する。
+
+### `gui_design_review.md`
+
+GUI基本設計のレビュー結果を記録する。
+
+### `treeview_header_sort_design.md`
+
+Version 1.1で追加した、書籍一覧ヘッダークリックによるソート機能を定義する。
+
+### `multi_condition_search_design.md`
+
+Version 1.2で追加した複合条件検索を定義する。
+
+### `thumbnail_list_design.md`
+
+Version 1.2で追加した表紙サムネイル付き一覧を定義する。
+
+### `auto_clear_after_save_design.md`
+
+Version 1.2で追加した登録・更新成功後の入力フォーム自動クリアを定義する。
+
+---
+
+## 9. Models
+
+`models`ディレクトリでは、ドメインモデルの設計を管理する。
+
+### `book_item_design.md`
+
+`BookItem`モデルの項目、責務およびデータ保持方針を定義する。
+
+### `book_item_design_review.md`
+
+`BookItem`設計のレビュー結果を記録する。
+
+---
+
+## 10. Repositories
+
+`repositories`ディレクトリでは、データアクセス層の設計を管理する。
+
+### `book_repository_design.md`
+
+`BookRepository`のCRUD、検索、ソートおよびSQLiteアクセス方針を定義する。
+
+### `book_repository_design_review.md`
+
+Repository設計のレビュー結果を記録する。
+
+---
+
+## 11. Services
+
+`services`ディレクトリでは、業務処理およびアプリケーションサービスの設計を管理する。
+
+### `book_service_design.md`
+
+`BookService`の責務、入力値正規化、Validatorとの連携、Repositoryとの境界などを定義する。
+
+### `book_service_design_review.md`
+
+BookService設計のレビュー結果を記録する。
+
+### `book_service_implementation_review.md`
+
+BookService実装後のレビュー結果を記録する。
+
+### `backup_service_design.md`
+
+Version 1.1で追加したSQLiteデータベース自動バックアップ機能を定義する。
+
+### `csv_export_service_design.md`
+
+Version 1.1で追加したCSVエクスポート機能を定義する。
+
+---
+
+## 12. Validators
+
+`validators`ディレクトリでは、入力値検証の設計を管理する。
+
+### `validator_design.md`
+
+ISBN、雑誌コード、読了年月などの入力値検証方針を定義する。
+
+### `validator_design_review.md`
+
+Validator設計のレビュー結果を記録する。
+
+---
+
+## 13. 推奨する閲覧順序
+
+プロジェクト全体を初めて確認する場合は、次の順番を推奨する。
+
+1. ルートの`README.md`
+2. `docs/documentation_guide.md`
+3. `docs/book_manager_roadmap.md`
+4. `docs/development_guidelines.md`
+5. `docs/architecture/project_structure.md`
+6. `docs/database/database_design.md`
+7. `docs/database/er_diagram.md`
+8. `docs/models/book_item_design.md`
+9. `docs/repositories/book_repository_design.md`
+10. `docs/services/book_service_design.md`
+11. `docs/gui/gui_design.md`
+12. 必要な機能別設計書
+13. 関連するADR
+14. 必要に応じて各レビュー文書
+
+特定機能だけを確認する場合は、その機能の設計書と関連するService、Repository、GUI設計を併せて確認する。
+
+---
+
+## 14. ドキュメント作成の基本手順
+
+新しい機能または設計変更を行う場合は、原則として次の順番で進める。
+
+```text
+要件整理
+↓
+設計
+↓
+設計レビュー
+↓
+実装
+↓
+自動テスト
+↓
+GUI・実機確認
+↓
+ドキュメント更新
+↓
+リリースレビュー
+```
+
+大きな機能については、一つの機能を完成させてから次の機能へ進む。
+
+複数の大きな変更を同時に進行させない。
+
+---
+
+## 15. ドキュメント更新ルール
+
+### 15.1 実装との整合性
+
+設計書と実装は可能な限り一致させる。
+
+実装中に設計変更が必要になった場合は、必要に応じて設計書も更新する。
+
+機能完成時には、設計書の完成条件と実装結果を照合する。
+
+---
+
+### 15.2 Version
+
+主要な設計文書では、必要に応じて文書Versionや対象アプリケーションVersionを明示する。
+
+アプリケーションVersionと文書Versionは異なる概念として扱う。
+
+SQLiteのスキーマVersionも、アプリケーションVersionとは別に管理する。
+
+---
+
+### 15.3 変更理由
+
+仕様または設計を変更する場合は、可能な限り変更内容だけでなく変更理由も確認できるようにする。
+
+長期的な影響を持つ重要な判断はADRへの記録を検討する。
+
+---
+
+### 15.4 関連文書
+
+一つの設計書を変更した場合は、必要に応じて関連文書への影響を確認する。
+
+例：
+
+```text
+GUI設計変更
+↓
+関連Serviceを確認
+↓
+関連Repositoryを確認
+↓
+テストを確認
+↓
+ロードマップを確認
+```
+
+---
+
+## 16. Design Freeze
+
+設計レビューを完了した文書は、実装基準としてDesign Freezeする。
+
+Design Freezeは、設計を永久に変更できないことを意味しない。
+
+変更が必要になった場合は、原則として次の流れで扱う。
+
+```text
+変更理由を確認
+↓
+影響範囲を確認
+↓
+設計書を更新
+↓
+必要に応じてADRを追加
+↓
+レビュー
+↓
+実装
+↓
+テスト
+↓
+設計書と実装を再確認
+```
+
+---
+
+## 17. Git運用
+
+ドキュメントもソースコードと同様にGitで管理する。
+
+コミットは原則として一つの目的ごとに分ける。
+
+コミットメッセージは次の形式を使用する。
+
+```text
+<英語のプレフィックス>: <日本語の説明>
+```
+
+例：
+
+```text
+docs: Version 1.2のロードマップを更新
+docs: 複合条件検索の設計を追加
+feat: 表紙サムネイル付き一覧を追加
+fix: 検索条件クリア時の不具合を修正
+```
+
+詳細なGit運用およびコミットメッセージ規則は、
+
+```text
+docs/development_guidelines.md
+```
+
+を参照する。
+
+---
+
+## 18. 現在の状態
+
+book_managerはVersion 1.2.0まで正式リリース済みである。
+
+Version 1.0では基本的な書籍管理機能を完成させた。
+
+Version 1.1では、データ保護と日常利用の改善として次の機能を追加した。
+
+- 自動バックアップ
+- CSVエクスポート
+- 一覧ヘッダークリックによるソート
+
+Version 1.2では、検索と一覧操作の改善として次の機能を追加した。
+
+- 複合条件検索
+- 表紙サムネイル付き一覧
+- 登録・更新成功後の入力フォーム自動クリア
+
+今後の開発内容は、
+
+```text
+docs/book_manager_roadmap.md
+```
+
+を基準として検討する。
+
+---
+
+**book_managerの開発ドキュメントは、設計・実装・テストの履歴を残し、将来の保守と機能追加を安全に進めるための正式な成果物として管理する。**
