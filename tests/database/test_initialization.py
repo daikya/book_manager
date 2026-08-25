@@ -129,7 +129,7 @@ def test_initialize_database_migrates_version_1_to_2(
 
     initialize_database(database_path)
 
-    assert get_user_version(database_path) == 2
+    assert get_user_version(database_path) == SCHEMA_VERSION
 
     column_names = get_table_column_names(
         database_path,
@@ -138,6 +138,7 @@ def test_initialize_database_migrates_version_1_to_2(
 
     assert "cover_image_url" in column_names
     assert "cover_image_path" in column_names
+    assert "reading_status" in column_names
 
     connection = sqlite3.connect(database_path)
 
@@ -157,6 +158,94 @@ def test_initialize_database_migrates_version_1_to_2(
             None,
             None,
         )
+    finally:
+        connection.close()
+
+def test_initialize_database_migrates_version_2_to_3(
+    tmp_path: Path,
+) -> None:
+    """Version 2のDBへ読書ステータス列を追加する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        with connection:
+            connection.execute(
+                """
+                CREATE TABLE book_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    isbn TEXT,
+                    magazine_code TEXT,
+                    title TEXT NOT NULL,
+                    author TEXT,
+                    publisher TEXT,
+                    publication_format TEXT,
+                    description TEXT,
+                    cover_image_url TEXT,
+                    cover_image_path TEXT,
+                    completion_month TEXT,
+                    notes TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+
+            connection.execute(
+                """
+                INSERT INTO book_items (
+                    title,
+                    completion_month,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    "吾輩は猫である",
+                    "2025-05",
+                    "2026-08-25 10:00:00",
+                    "2026-08-25 10:00:00",
+                ),
+            )
+
+            connection.execute(
+                "PRAGMA user_version = 2"
+            )
+
+    finally:
+        connection.close()
+
+    initialize_database(database_path)
+
+    assert get_user_version(database_path) == SCHEMA_VERSION
+
+    column_names = get_table_column_names(
+        database_path,
+        "book_items",
+    )
+
+    assert "reading_status" in column_names
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        row = connection.execute(
+            """
+            SELECT
+                title,
+                completion_month,
+                reading_status
+            FROM book_items
+            """
+        ).fetchone()
+
+        assert row is not None
+        assert row[0] == "吾輩は猫である"
+        assert row[1] == "2025-05"
+        assert row[2] is None
+
     finally:
         connection.close()
 

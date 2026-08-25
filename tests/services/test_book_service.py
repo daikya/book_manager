@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-
+from dataclasses import replace
 import pytest
 
 from book_manager.database.initializer import (
@@ -1361,3 +1361,109 @@ def test_sort_books_rejects_invalid_sort_by(
             [],
             sort_by="invalid",
         )
+def test_add_book_stores_reading_status(
+    service: BookService,
+) -> None:
+    """新規登録時に読書ステータスを保存できる。"""
+    registered = service.add_book(
+        title="テスト書籍",
+        reading_status="reading",
+    )
+
+    assert registered.reading_status == "reading"
+
+
+def test_add_book_converts_blank_reading_status_to_none(
+    service: BookService,
+) -> None:
+    """空白の読書ステータスをNoneへ正規化する。"""
+    registered = service.add_book(
+        title="テスト書籍",
+        reading_status="   ",
+    )
+
+    assert registered.reading_status is None
+
+
+def test_add_book_rejects_invalid_reading_status(
+    service: BookService,
+) -> None:
+    """不正な読書ステータスを拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match="読書ステータスが正しくありません。",
+    ):
+        service.add_book(
+            title="テスト書籍",
+            reading_status="finished",
+        )
+
+
+def test_update_book_changes_reading_status(
+    service: BookService,
+) -> None:
+    """更新時に読書ステータスを変更できる。"""
+    registered = service.add_book(
+        title="テスト書籍",
+        reading_status="unread",
+    )
+
+    updated_book = replace(
+        registered,
+        reading_status="completed",
+    )
+
+    result = service.update_book(
+        updated_book,
+    )
+
+    assert result is True
+
+    loaded = service.get_book(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.reading_status == "completed"
+
+
+def test_update_book_can_clear_reading_status(
+    service: BookService,
+) -> None:
+    """読書ステータスを未設定へ戻せる。"""
+    registered = service.add_book(
+        title="テスト書籍",
+        reading_status="reading",
+    )
+
+    updated_book = replace(
+        registered,
+        reading_status=" ",
+    )
+
+    result = service.update_book(
+        updated_book,
+    )
+
+    assert result is True
+
+    loaded = service.get_book(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.reading_status is None
+
+
+def test_reading_status_is_independent_from_completion_month(
+    service: BookService,
+) -> None:
+    """読書ステータスと読了年月を独立して保持できる。"""
+    registered = service.add_book(
+        title="再読する書籍",
+        completion_month="2025-05",
+        reading_status="reading",
+    )
+
+    assert registered.completion_month == "2025-05"
+    assert registered.reading_status == "reading"

@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 
 from book_manager.models.book_item import BookItem
 from book_manager.repositories.book_repository import BookRepository
@@ -21,10 +22,11 @@ from book_manager.metadata.exceptions import (
 from book_manager.models.fetched_book_data import (
     FetchedBookData,
 )
-from pathlib import Path
-
 from book_manager.services.cover_image_service import (
     CoverImageService,
+)
+from book_manager.validators.reading_status_validator import (
+    validate_reading_status,
 )
 
 class BookService:
@@ -55,6 +57,7 @@ class BookService:
         cover_image_url: str | None = None,
         cover_image_path: str | None = None,
         completion_month: str | None = None,
+        reading_status: str | None = None,
         notes: str | None = None,
     ) -> BookItem:
         """書籍情報を登録する。
@@ -70,6 +73,7 @@ class BookService:
             cover_image_url: 表紙画像の取得元URL。
             cover_image_path: キャッシュ済み表紙画像の相対パス。
             completion_month: 読了年月。
+            reading_status: 読書ステータス。
             notes: 備考。
 
         Returns:
@@ -118,6 +122,11 @@ class BookService:
                 completion_month
             )
         )
+        normalized_reading_status = (
+            self._normalize_optional_text(
+                reading_status
+            )
+        )
         normalized_notes = self._normalize_optional_text(
             notes
         )
@@ -127,7 +136,9 @@ class BookService:
             magazine_code=normalized_magazine_code,
             completion_month=normalized_completion_month,
         )
-
+        validate_reading_status(
+            normalized_reading_status,
+        )
         current_timestamp = self._current_timestamp()
 
         book_item = BookItem(
@@ -143,6 +154,7 @@ class BookService:
             cover_image_url=normalized_cover_image_url,
             cover_image_path=normalized_cover_image_path,
             completion_month=normalized_completion_month,
+            reading_status=normalized_reading_status,
             notes=normalized_notes,
             created_at=current_timestamp,
             updated_at=current_timestamp,
@@ -534,6 +546,11 @@ class BookService:
                 book_item.completion_month
             )
         )
+        normalized_reading_status = (
+            self._normalize_optional_text(
+                book_item.reading_status
+            )
+        )
         normalized_notes = self._normalize_optional_text(
             book_item.notes
         )
@@ -543,7 +560,9 @@ class BookService:
             magazine_code=normalized_magazine_code,
             completion_month=normalized_completion_month,
         )
-
+        validate_reading_status(
+            normalized_reading_status,
+        )
         normalized_book_item = BookItem(
             id=book_item.id,
             title=normalized_title,
@@ -558,6 +577,7 @@ class BookService:
             cover_image_url=normalized_cover_image_url,
             cover_image_path=normalized_cover_image_path,
             completion_month=normalized_completion_month,
+            reading_status=normalized_reading_status,
             notes=normalized_notes,
             created_at=existing.created_at,
             updated_at=self._current_timestamp(),

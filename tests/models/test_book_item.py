@@ -117,3 +117,18 @@ def test_book_items_with_different_values_are_not_equal() -> None:
     second = BookItem(title="坊っちゃん")
 
     assert first != second
+
+def test_book_item_reading_status_defaults_to_none() -> None:
+    book_item = BookItem(
+        title="テスト書籍",
+    )
+
+    assert book_item.reading_status is None
+
+def test_book_item_can_store_reading_status() -> None:
+    book_item = BookItem(
+        title="テスト書籍",
+        reading_status="reading",
+    )
+
+    assert book_item.reading_status == "reading"

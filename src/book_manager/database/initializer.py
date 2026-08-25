@@ -4,6 +4,7 @@ from pathlib import Path
 
 from book_manager.database.connection import create_connection
 from book_manager.database.schema import (
+    MIGRATE_VERSION_2_TO_3,
     MIGRATE_VERSION_1_TO_2,
     SCHEMA_STATEMENTS,
     SCHEMA_VERSION,
@@ -55,6 +56,13 @@ def initialize_database(database_path: Path | str) -> None:
 
             if user_version == 1:
                 for statement in MIGRATE_VERSION_1_TO_2:
+                    connection.execute(statement)
+
+                for statement in MIGRATE_VERSION_2_TO_3:
+                    connection.execute(statement)
+
+            elif user_version == 2:
+                for statement in MIGRATE_VERSION_2_TO_3:
                     connection.execute(statement)
 
             if user_version < SCHEMA_VERSION:

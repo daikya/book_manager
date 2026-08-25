@@ -20,10 +20,17 @@ class CsvExportService:
         "出版形態",
         "内容紹介",
         "読了年月",
+        "読書状態",
         "備考",
         "登録日時",
         "更新日時",
     )
+
+    READING_STATUS_LABELS = {
+        "unread": "未読",
+        "reading": "読書中",
+        "completed": "読了",
+    }
 
     def export(
         self,
@@ -58,11 +65,19 @@ class CsvExportService:
                     )
                 )
 
-    @staticmethod
+    @classmethod
     def _book_to_row(
+        cls,
         book: BookItem,
     ) -> tuple[str, ...]:
         """BookItemをCSV出力用の1行へ変換する。"""
+        reading_status = (
+            cls.READING_STATUS_LABELS.get(
+                book.reading_status,
+                "",
+            )
+        )
+
         return (
             book.title,
             book.isbn or "",
@@ -72,6 +87,7 @@ class CsvExportService:
             book.publication_format or "",
             book.description or "",
             book.completion_month or "",
+            reading_status,
             book.notes or "",
             book.created_at or "",
             book.updated_at or "",

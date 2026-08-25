@@ -50,6 +50,7 @@ def test_export_writes_headers(
             "出版形態",
             "内容紹介",
             "読了年月",
+            "読書状態",
             "備考",
             "登録日時",
             "更新日時",
@@ -72,6 +73,7 @@ def test_export_writes_book_values(
         publication_format="単行本",
         description="内容紹介",
         completion_month="2026-08",
+        reading_status="reading",
         notes="備考",
         created_at="2026-08-20 10:00:00",
         updated_at="2026-08-20 11:00:00",
@@ -97,6 +99,7 @@ def test_export_writes_book_values(
         "単行本",
         "内容紹介",
         "2026-08",
+        "読書中",
         "備考",
         "2026-08-20 10:00:00",
         "2026-08-20 11:00:00",
@@ -167,6 +170,7 @@ def test_export_writes_none_as_empty_string(
         "",
         "",
         "",
+        "",
     ]
 
 
@@ -203,7 +207,7 @@ def test_export_preserves_newlines(
     )
 
     assert rows[1][6] == description
-    assert rows[1][8] == notes
+    assert rows[1][9] == notes
 
 
 def test_export_preserves_comma(
@@ -229,7 +233,7 @@ def test_export_preserves_comma(
     )
 
     assert rows[1][0] == "テスト,書籍"
-    assert rows[1][8] == "メモ,追記"
+    assert rows[1][9] == "メモ,追記"
 
 
 def test_export_preserves_double_quote(
@@ -255,7 +259,7 @@ def test_export_preserves_double_quote(
     )
 
     assert rows[1][0] == '「"引用"」を含む書籍'
-    assert rows[1][8] == 'メモに"引用"あり'
+    assert rows[1][9] == 'メモに"引用"あり'
 
 
 def test_export_writes_utf8_bom(
@@ -309,6 +313,7 @@ def test_export_preserves_japanese_text(
     assert rows[1][3] == "日本語著者"
     assert rows[1][4] == "日本語出版社"
 
+
 def test_export_propagates_write_error(
     tmp_path: Path,
 ) -> None:
@@ -328,3 +333,92 @@ def test_export_propagates_write_error(
             [book],
             output_path,
         )
+
+@pytest.mark.parametrize(
+    (
+        "reading_status",
+        "expected",
+    ),
+    [
+        ("unread", "未読"),
+        ("reading", "読書中"),
+        ("completed", "読了"),
+    ],
+)
+def test_export_converts_reading_status_to_japanese(
+    tmp_path: Path,
+    reading_status: str,
+    expected: str,
+) -> None:
+    """読書ステータスを日本語表示で出力する。"""
+    output_path = tmp_path / "books.csv"
+
+    book = BookItem(
+        title="テスト書籍",
+        reading_status=reading_status,
+    )
+
+    service = CsvExportService()
+
+    service.export(
+        [book],
+        output_path,
+    )
+
+    rows = _read_csv(
+        output_path,
+    )
+
+    assert rows[1][8] == expected
+
+
+def test_export_writes_none_reading_status_as_empty_string(
+    tmp_path: Path,
+) -> None:
+    """未設定の読書ステータスを空欄として出力する。"""
+    output_path = tmp_path / "books.csv"
+
+    book = BookItem(
+        title="テスト書籍",
+        reading_status=None,
+    )
+
+    service = CsvExportService()
+
+    service.export(
+        [book],
+        output_path,
+    )
+
+    rows = _read_csv(
+        output_path,
+    )
+
+    assert rows[1][8] == ""
+
+
+def test_export_preserves_completion_month_with_reading_status(
+    tmp_path: Path,
+) -> None:
+    """読了年月と読書状態を独立して出力する。"""
+    output_path = tmp_path / "books.csv"
+
+    book = BookItem(
+        title="再読する書籍",
+        completion_month="2025-05",
+        reading_status="reading",
+    )
+
+    service = CsvExportService()
+
+    service.export(
+        [book],
+        output_path,
+    )
+
+    rows = _read_csv(
+        output_path,
+    )
+
+    assert rows[1][7] == "2025-05"
+    assert rows[1][8] == "読書中"

@@ -1019,3 +1019,138 @@ def test_search_by_conditions_handles_sql_special_characters(
     assert result == [
         registered,
     ]
+
+def test_add_stores_reading_status(
+    repository: BookRepository,
+) -> None:
+    """読書ステータスを登録できる。"""
+    book = BookItem(
+        title="テスト書籍",
+        reading_status="reading",
+        created_at="2026-08-25 10:00:00",
+        updated_at="2026-08-25 10:00:00",
+    )
+
+    registered = repository.add(book)
+
+    assert registered.id is not None
+
+    loaded = repository.get_by_id(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.reading_status == "reading"
+
+
+def test_add_stores_none_reading_status(
+    repository: BookRepository,
+) -> None:
+    """未設定の読書ステータスをNoneとして保存できる。"""
+    book = BookItem(
+        title="テスト書籍",
+        reading_status=None,
+        created_at="2026-08-25 10:00:00",
+        updated_at="2026-08-25 10:00:00",
+    )
+
+    registered = repository.add(book)
+
+    assert registered.id is not None
+
+    loaded = repository.get_by_id(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.reading_status is None
+
+
+def test_update_changes_reading_status(
+    repository: BookRepository,
+) -> None:
+    """読書ステータスを更新できる。"""
+    registered = repository.add(
+        BookItem(
+            title="更新対象書籍",
+            reading_status="unread",
+            created_at="2026-08-25 10:00:00",
+            updated_at="2026-08-25 10:00:00",
+        )
+    )
+
+    updated_book = BookItem(
+        id=registered.id,
+        title=registered.title,
+        isbn=registered.isbn,
+        magazine_code=registered.magazine_code,
+        author=registered.author,
+        publisher=registered.publisher,
+        publication_format=registered.publication_format,
+        description=registered.description,
+        cover_image_url=registered.cover_image_url,
+        cover_image_path=registered.cover_image_path,
+        completion_month=registered.completion_month,
+        reading_status="completed",
+        notes=registered.notes,
+        created_at=registered.created_at,
+        updated_at=registered.updated_at,
+    )
+
+    result = repository.update(
+        updated_book,
+    )
+
+    assert result is True
+
+    loaded = repository.get_by_id(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.reading_status == "completed"
+
+
+def test_update_can_clear_reading_status(
+    repository: BookRepository,
+) -> None:
+    """読書ステータスをNoneへ戻せる。"""
+    registered = repository.add(
+        BookItem(
+            title="更新対象書籍",
+            reading_status="unread",
+            created_at="2026-08-25 10:00:00",
+            updated_at="2026-08-25 10:00:00",
+        )
+    )
+
+    updated_book = BookItem(
+        id=registered.id,
+        title=registered.title,
+        isbn=registered.isbn,
+        magazine_code=registered.magazine_code,
+        author=registered.author,
+        publisher=registered.publisher,
+        publication_format=registered.publication_format,
+        description=registered.description,
+        cover_image_url=registered.cover_image_url,
+        cover_image_path=registered.cover_image_path,
+        completion_month=registered.completion_month,
+        reading_status=None,
+        notes=registered.notes,
+        created_at=registered.created_at,
+        updated_at=registered.updated_at,
+    )
+
+    result = repository.update(
+        updated_book,
+    )
+
+    assert result is True
+
+    loaded = repository.get_by_id(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.reading_status is None

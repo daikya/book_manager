@@ -38,6 +38,7 @@ def create_application() -> BookManagerApplication:
             "cover_image_url": None,
             "cover_image_path": None,
             "completion_month": None,
+            "reading_status": None,
             "notes": None,
         },
     )

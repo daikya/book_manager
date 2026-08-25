@@ -63,6 +63,27 @@ class BookManagerApplication:
         "その他",
     )
 
+    READING_STATUS_LABELS = {
+        None: "未設定",
+        "unread": "未読",
+        "reading": "読書中",
+        "completed": "読了",
+    }
+
+    READING_STATUS_VALUES = {
+        "未設定": None,
+        "未読": "unread",
+        "読書中": "reading",
+        "読了": "completed",
+    }
+
+    READING_STATUS_OPTIONS = (
+        "未設定",
+        "未読",
+        "読書中",
+        "読了",
+    )
+
     TREE_COLUMNS = (
         "id",
         "title",
@@ -72,6 +93,7 @@ class BookManagerApplication:
         "isbn",
         "magazine_code",
         "completion_month",
+        "reading_status",
     )
 
     def __init__(
@@ -141,6 +163,10 @@ class BookManagerApplication:
         )
         self._completion_month_var = tk.StringVar(
             master=self._root,
+        )
+        self._reading_status_var = tk.StringVar(
+            master=self._root,
+            value="未設定",
         )
         self._count_status_var = tk.StringVar(
             master=self._root,
@@ -712,6 +738,13 @@ class BookManagerApplication:
                 "anchor": "center",
                 "stretch": False,
             },
+            "reading_status": {
+                "heading": "読書状態",
+                "width": 80,
+                "minwidth": 70,
+                "anchor": "center",
+                "stretch": False,
+            },
         }
 
         for column_name, definition in column_definitions.items():
@@ -892,6 +925,7 @@ class BookManagerApplication:
             sticky="ew",
             pady=4,
         )
+
         completion_month_frame.columnconfigure(
             0,
             weight=1,
@@ -909,12 +943,25 @@ class BookManagerApplication:
 
         ttk.Label(
             completion_month_frame,
-            text="例：2026-07",
+            text="読書状態",
         ).grid(
             row=0,
             column=1,
             sticky="w",
-            padx=(6, 0),
+            padx=(12, 6),
+        )
+
+        self._reading_status_combobox = ttk.Combobox(
+            completion_month_frame,
+            textvariable=self._reading_status_var,
+            values=self.READING_STATUS_OPTIONS,
+            state="readonly",
+            width=8,
+        )
+        self._reading_status_combobox.grid(
+            row=0,
+            column=2,
+            sticky="w",
         )
 
         ttk.Label(
@@ -1361,6 +1408,10 @@ class BookManagerApplication:
                     book.isbn or "",
                     book.magazine_code or "",
                     book.completion_month or "",
+                    self.READING_STATUS_LABELS.get(
+                        book.reading_status,
+                        "未設定",
+                    ),
                 ),
             )
             displayed_count += 1
@@ -1404,7 +1455,12 @@ class BookManagerApplication:
         self._completion_month_var.set(
             book_item.completion_month or "",
         )
-
+        self._reading_status_var.set(
+            self.READING_STATUS_LABELS.get(
+                book_item.reading_status,
+                "未設定",
+            )
+        )
         self._replace_text(
             self._description_text,
             book_item.description,
@@ -1623,7 +1679,9 @@ class BookManagerApplication:
         self._publisher_var.set("")
         self._publication_format_var.set("")
         self._completion_month_var.set("")
-
+        self._reading_status_var.set(
+            "未設定",
+        )
         self._description_text.delete(
             "1.0",
             tk.END,
@@ -1673,6 +1731,11 @@ class BookManagerApplication:
             "completion_month": (
                 self._completion_month_var.get()
             ),
+            "reading_status": (
+                self.READING_STATUS_VALUES.get(
+                    self._reading_status_var.get()
+                )
+            ),
             "notes": self._notes_text.get(
                 "1.0",
                 tk.END,
@@ -1699,6 +1762,7 @@ class BookManagerApplication:
             cover_image_url=values["cover_image_url"],
             cover_image_path=values["cover_image_path"],
             completion_month=values["completion_month"],
+            reading_status=values["reading_status"],
             notes=values["notes"],
         )
 
@@ -2008,7 +2072,7 @@ class BookManagerApplication:
 
             if not continue_registration:
                 return
-        
+
         try:
             if not self._confirm_duplicate_candidates(
                 values=values,
@@ -2030,6 +2094,7 @@ class BookManagerApplication:
                 completion_month=(
                     values["completion_month"]
                 ),
+                reading_status=values["reading_status"],
                 notes=values["notes"],
             )
 
