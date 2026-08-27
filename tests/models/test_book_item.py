@@ -45,6 +45,8 @@ def test_book_item_accepts_all_fields() -> None:
         cover_image_url="https://example.com/cover.jpg",
         cover_image_path="cache/covers/cover.jpg",
         completion_month="2026-07",
+        reading_status="completed",
+        is_favorite=True,
         notes="再読。",
         created_at="2026-07-21 15:00:00",
         updated_at="2026-07-21 15:00:00",
@@ -67,6 +69,8 @@ def test_book_item_accepts_all_fields() -> None:
         == "cache/covers/cover.jpg"
     )
     assert book_item.completion_month == "2026-07"
+    assert book_item.reading_status == "completed"
+    assert book_item.is_favorite is True
     assert book_item.notes == "再読。"
     assert book_item.created_at == "2026-07-21 15:00:00"
     assert book_item.updated_at == "2026-07-21 15:00:00"
@@ -118,12 +122,14 @@ def test_book_items_with_different_values_are_not_equal() -> None:
 
     assert first != second
 
+
 def test_book_item_reading_status_defaults_to_none() -> None:
     book_item = BookItem(
         title="テスト書籍",
     )
 
     assert book_item.reading_status is None
+
 
 def test_book_item_can_store_reading_status() -> None:
     book_item = BookItem(
@@ -132,3 +138,22 @@ def test_book_item_can_store_reading_status() -> None:
     )
 
     assert book_item.reading_status == "reading"
+
+
+def test_book_item_is_favorite_defaults_to_false() -> None:
+    """お気に入り状態の初期値がFalseになる。"""
+    book_item = BookItem(
+        title="テスト書籍",
+    )
+
+    assert book_item.is_favorite is False
+
+
+def test_book_item_can_store_is_favorite() -> None:
+    """お気に入り状態としてTrueを保持できる。"""
+    book_item = BookItem(
+        title="テスト書籍",
+        is_favorite=True,
+    )
+
+    assert book_item.is_favorite is True

@@ -51,6 +51,7 @@ def test_export_writes_headers(
             "内容紹介",
             "読了年月",
             "読書状態",
+            "お気に入り",
             "備考",
             "登録日時",
             "更新日時",
@@ -74,6 +75,7 @@ def test_export_writes_book_values(
         description="内容紹介",
         completion_month="2026-08",
         reading_status="reading",
+        is_favorite=True,
         notes="備考",
         created_at="2026-08-20 10:00:00",
         updated_at="2026-08-20 11:00:00",
@@ -100,6 +102,7 @@ def test_export_writes_book_values(
         "内容紹介",
         "2026-08",
         "読書中",
+        "はい",
         "備考",
         "2026-08-20 10:00:00",
         "2026-08-20 11:00:00",
@@ -168,6 +171,7 @@ def test_export_writes_none_as_empty_string(
         "",
         "",
         "",
+        "いいえ",
         "",
         "",
         "",
@@ -207,7 +211,7 @@ def test_export_preserves_newlines(
     )
 
     assert rows[1][6] == description
-    assert rows[1][9] == notes
+    assert rows[1][10] == notes
 
 
 def test_export_preserves_comma(
@@ -233,7 +237,7 @@ def test_export_preserves_comma(
     )
 
     assert rows[1][0] == "テスト,書籍"
-    assert rows[1][9] == "メモ,追記"
+    assert rows[1][10] == "メモ,追記"
 
 
 def test_export_preserves_double_quote(
@@ -259,7 +263,7 @@ def test_export_preserves_double_quote(
     )
 
     assert rows[1][0] == '「"引用"」を含む書籍'
-    assert rows[1][9] == 'メモに"引用"あり'
+    assert rows[1][10] == 'メモに"引用"あり'
 
 
 def test_export_writes_utf8_bom(
@@ -345,6 +349,8 @@ def test_export_propagates_write_error(
         ("completed", "読了"),
     ],
 )
+
+
 def test_export_converts_reading_status_to_japanese(
     tmp_path: Path,
     reading_status: str,
@@ -422,3 +428,82 @@ def test_export_preserves_completion_month_with_reading_status(
 
     assert rows[1][7] == "2025-05"
     assert rows[1][8] == "読書中"
+
+
+def test_export_writes_true_is_favorite_as_yes(
+    tmp_path: Path,
+) -> None:
+    """お気に入りONを「はい」として出力する。"""
+    output_path = tmp_path / "books.csv"
+
+    book = BookItem(
+        title="お気に入り書籍",
+        is_favorite=True,
+    )
+
+    service = CsvExportService()
+
+    service.export(
+        [book],
+        output_path,
+    )
+
+    rows = _read_csv(
+        output_path,
+    )
+
+    assert rows[1][9] == "はい"
+
+
+def test_export_writes_false_is_favorite_as_no(
+    tmp_path: Path,
+) -> None:
+    """お気に入りOFFを「いいえ」として出力する。"""
+    output_path = tmp_path / "books.csv"
+
+    book = BookItem(
+        title="通常書籍",
+        is_favorite=False,
+    )
+
+    service = CsvExportService()
+
+    service.export(
+        [book],
+        output_path,
+    )
+
+    rows = _read_csv(
+        output_path,
+    )
+
+    assert rows[1][9] == "いいえ"
+
+
+def test_export_preserves_reading_status_with_is_favorite(
+    tmp_path: Path,
+) -> None:
+    """読書状態とお気に入りを独立して出力する。"""
+    output_path = tmp_path / "books.csv"
+
+    book = BookItem(
+        title="再読するお気に入り書籍",
+        completion_month="2025-05",
+        reading_status="reading",
+        is_favorite=True,
+    )
+
+    service = CsvExportService()
+
+    service.export(
+        [book],
+        output_path,
+    )
+
+    rows = _read_csv(
+        output_path,
+    )
+
+    assert rows[1][7] == "2025-05"
+    assert rows[1][8] == "読書中"
+    assert rows[1][9] == "はい"

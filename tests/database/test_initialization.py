@@ -78,10 +78,38 @@ def test_initialize_database_creates_cover_image_columns(
     assert "cover_image_url" in column_names
     assert "cover_image_path" in column_names
 
-def test_initialize_database_migrates_version_1_to_2(
+def test_initialize_database_creates_is_favorite_column(
     tmp_path: Path,
 ) -> None:
-    """Version 1のDBへ表紙画像関連列を追加する。"""
+    """新規DBにお気に入り列を正しい定義で作成する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        rows = connection.execute(
+            "PRAGMA table_info(book_items)"
+        ).fetchall()
+
+        is_favorite_row = next(
+            row
+            for row in rows
+            if row[1] == "is_favorite"
+        )
+
+        assert is_favorite_row[2] == "INTEGER"
+        assert is_favorite_row[3] == 1
+        assert is_favorite_row[4] == "0"
+
+    finally:
+        connection.close()
+
+def test_initialize_database_migrates_version_1_to_4(
+    tmp_path: Path,
+) -> None:
+    """Version 1のDBをVersion 4へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -139,6 +167,7 @@ def test_initialize_database_migrates_version_1_to_2(
     assert "cover_image_url" in column_names
     assert "cover_image_path" in column_names
     assert "reading_status" in column_names
+    assert "is_favorite" in column_names
 
     connection = sqlite3.connect(database_path)
 
@@ -148,7 +177,9 @@ def test_initialize_database_migrates_version_1_to_2(
             SELECT
                 title,
                 cover_image_url,
-                cover_image_path
+                cover_image_path,
+                reading_status,
+                is_favorite
             FROM book_items
             """
         ).fetchone()
@@ -157,14 +188,16 @@ def test_initialize_database_migrates_version_1_to_2(
             "移行前の書籍",
             None,
             None,
+            None,
+            0,
         )
     finally:
         connection.close()
 
-def test_initialize_database_migrates_version_2_to_3(
+def test_initialize_database_migrates_version_2_to_4(
     tmp_path: Path,
 ) -> None:
-    """Version 2のDBへ読書ステータス列を追加する。"""
+    """Version 2のDBをVersion 4へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -227,6 +260,7 @@ def test_initialize_database_migrates_version_2_to_3(
     )
 
     assert "reading_status" in column_names
+    assert "is_favorite" in column_names
 
     connection = sqlite3.connect(database_path)
 
@@ -236,7 +270,8 @@ def test_initialize_database_migrates_version_2_to_3(
             SELECT
                 title,
                 completion_month,
-                reading_status
+                reading_status,
+                is_favorite
             FROM book_items
             """
         ).fetchone()
@@ -245,6 +280,101 @@ def test_initialize_database_migrates_version_2_to_3(
         assert row[0] == "吾輩は猫である"
         assert row[1] == "2025-05"
         assert row[2] is None
+        assert row[3] == 0
+
+    finally:
+        connection.close()
+
+def test_initialize_database_migrates_version_3_to_4(
+    tmp_path: Path,
+) -> None:
+    """Version 3のDBへお気に入り列を追加する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        with connection:
+            connection.execute(
+                """
+                CREATE TABLE book_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    isbn TEXT,
+                    magazine_code TEXT,
+                    title TEXT NOT NULL,
+                    author TEXT,
+                    publisher TEXT,
+                    publication_format TEXT,
+                    description TEXT,
+                    cover_image_url TEXT,
+                    cover_image_path TEXT,
+                    completion_month TEXT,
+                    reading_status TEXT,
+                    notes TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+
+            connection.execute(
+                """
+                INSERT INTO book_items (
+                    title,
+                    completion_month,
+                    reading_status,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    "再読する書籍",
+                    "2025-05",
+                    "reading",
+                    "2026-08-27 10:00:00",
+                    "2026-08-27 10:00:00",
+                ),
+            )
+
+            connection.execute(
+                "PRAGMA user_version = 3"
+            )
+
+    finally:
+        connection.close()
+
+    initialize_database(database_path)
+
+    assert get_user_version(database_path) == SCHEMA_VERSION
+
+    column_names = get_table_column_names(
+        database_path,
+        "book_items",
+    )
+
+    assert "is_favorite" in column_names
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        row = connection.execute(
+            """
+            SELECT
+                title,
+                completion_month,
+                reading_status,
+                is_favorite
+            FROM book_items
+            """
+        ).fetchone()
+
+        assert row == (
+            "再読する書籍",
+            "2025-05",
+            "reading",
+            0,
+        )
 
     finally:
         connection.close()
@@ -444,3 +574,44 @@ def test_initialize_database_does_not_lower_newer_user_version(
         initialize_database(database_path)
 
     assert get_user_version(database_path) == newer_version
+
+def test_initialize_database_uses_zero_as_default_is_favorite(
+    tmp_path: Path,
+) -> None:
+    """お気に入り未指定時のデフォルト値を0とする。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        with connection:
+            connection.execute(
+                """
+                INSERT INTO book_items (
+                    title,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    "テスト書籍",
+                    "2026-08-27 10:00:00",
+                    "2026-08-27 10:00:00",
+                ),
+            )
+
+        row = connection.execute(
+            """
+            SELECT is_favorite
+            FROM book_items
+            """
+        ).fetchone()
+
+        assert row is not None
+        assert row[0] == 0
+
+    finally:
+        connection.close()

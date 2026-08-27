@@ -16,11 +16,9 @@ def create_application() -> BookManagerApplication:
 
     application._root = Mock()
     application._service = Mock()
-
     application._selected_book_id = None
-
     application._title_entry = Mock()
-
+    application._is_favorite_var = Mock()
     application._load_all_books = Mock()
     application._clear_form = Mock()
     application._confirm_duplicate_candidates = Mock(
@@ -39,6 +37,7 @@ def create_application() -> BookManagerApplication:
             "cover_image_path": None,
             "completion_month": None,
             "reading_status": None,
+            "is_favorite": False,
             "notes": None,
         },
     )

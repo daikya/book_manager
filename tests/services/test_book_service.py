@@ -113,6 +113,8 @@ def add_sample_book(
     cover_image_path: str | None = (
         "cache/covers/cover.jpg"
     ),
+    reading_status: str | None = None,
+    is_favorite: bool = False,
 ) -> BookItem:
     """テスト用の書籍を登録する。"""
     return service.add_book(
@@ -126,6 +128,8 @@ def add_sample_book(
         cover_image_url=cover_image_url,
         cover_image_path=cover_image_path,
         completion_month="2026-07",
+        reading_status=reading_status,
+        is_favorite=is_favorite,
         notes="テスト用データ",
     )
 
@@ -892,6 +896,8 @@ def test_update_book_updates_existing_book(
             "  cache/covers/updated-cover.png  "
         ),
         completion_month=" 2026-08 ",
+        reading_status=" completed ",
+        is_favorite=True,
         notes="  更新後の備考  ",
         created_at="不正な作成日時",
         updated_at="不正な更新日時",
@@ -924,6 +930,8 @@ def test_update_book_updates_existing_book(
         == "cache/covers/updated-cover.png"
     )
     assert updated.completion_month == "2026-08"
+    assert updated.reading_status == "completed"
+    assert updated.is_favorite is True
     assert updated.notes == "更新後の備考"
     assert updated.created_at == "2026-07-22 10:30:00"
     assert updated.updated_at == "2026-07-23 11:45:30"
@@ -1467,3 +1475,99 @@ def test_reading_status_is_independent_from_completion_month(
 
     assert registered.completion_month == "2025-05"
     assert registered.reading_status == "reading"
+
+
+def test_add_book_stores_false_is_favorite(
+    service: BookService,
+) -> None:
+    """新規登録時にお気に入りOFFを保存できる。"""
+    registered = service.add_book(
+        title="テスト書籍",
+        is_favorite=False,
+    )
+
+    assert registered.is_favorite is False
+
+
+def test_add_book_stores_true_is_favorite(
+    service: BookService,
+) -> None:
+    """新規登録時にお気に入りONを保存できる。"""
+    registered = service.add_book(
+        title="テスト書籍",
+        is_favorite=True,
+    )
+
+    assert registered.is_favorite is True
+
+
+def test_update_book_changes_is_favorite_from_false_to_true(
+    service: BookService,
+) -> None:
+    """お気に入りをOFFからONへ更新できる。"""
+    registered = service.add_book(
+        title="テスト書籍",
+        is_favorite=False,
+    )
+
+    updated_book = replace(
+        registered,
+        is_favorite=True,
+    )
+
+    result = service.update_book(
+        updated_book,
+    )
+
+    assert result is True
+
+    loaded = service.get_book(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.is_favorite is True
+
+
+def test_update_book_changes_is_favorite_from_true_to_false(
+    service: BookService,
+) -> None:
+    """お気に入りをONからOFFへ更新できる。"""
+    registered = service.add_book(
+        title="テスト書籍",
+        is_favorite=True,
+    )
+
+    updated_book = replace(
+        registered,
+        is_favorite=False,
+    )
+
+    result = service.update_book(
+        updated_book,
+    )
+
+    assert result is True
+
+    loaded = service.get_book(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.is_favorite is False
+
+
+def test_is_favorite_is_independent_from_reading_status_and_completion_month(
+    service: BookService,
+) -> None:
+    """お気に入りを読書状態・読了年月と独立して保持できる。"""
+    registered = service.add_book(
+        title="再読するお気に入り書籍",
+        completion_month="2025-05",
+        reading_status="reading",
+        is_favorite=True,
+    )
+
+    assert registered.completion_month == "2025-05"
+    assert registered.reading_status == "reading"
+    assert registered.is_favorite is True

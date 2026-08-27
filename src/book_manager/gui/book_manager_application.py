@@ -94,6 +94,7 @@ class BookManagerApplication:
         "magazine_code",
         "completion_month",
         "reading_status",
+        "is_favorite",
     )
 
     def __init__(
@@ -167,6 +168,10 @@ class BookManagerApplication:
         self._reading_status_var = tk.StringVar(
             master=self._root,
             value="未設定",
+        )
+        self._is_favorite_var = tk.BooleanVar(
+            master=self._root,
+            value=False,
         )
         self._count_status_var = tk.StringVar(
             master=self._root,
@@ -745,6 +750,13 @@ class BookManagerApplication:
                 "anchor": "center",
                 "stretch": False,
             },
+            "is_favorite": {
+                "heading": "お気に入り",
+                "width": 60,
+                "minwidth": 50,
+                "anchor": "center",
+                "stretch": False,
+            },
         }
 
         for column_name, definition in column_definitions.items():
@@ -963,7 +975,18 @@ class BookManagerApplication:
             column=2,
             sticky="w",
         )
+        self._is_favorite_checkbutton = ttk.Checkbutton(
+            completion_month_frame,
+            text="お気に入り",
+            variable=self._is_favorite_var,
+        )
 
+        self._is_favorite_checkbutton.grid(
+            row=0,
+            column=3,
+            sticky="w",
+            padx=(12, 0),
+        )
         ttk.Label(
             form_frame,
             text="ISBN",
@@ -1412,6 +1435,7 @@ class BookManagerApplication:
                         book.reading_status,
                         "未設定",
                     ),
+                    "★" if book.is_favorite else "",
                 ),
             )
             displayed_count += 1
@@ -1460,6 +1484,9 @@ class BookManagerApplication:
                 book_item.reading_status,
                 "未設定",
             )
+        )
+        self._is_favorite_var.set(
+            book_item.is_favorite,
         )
         self._replace_text(
             self._description_text,
@@ -1682,6 +1709,7 @@ class BookManagerApplication:
         self._reading_status_var.set(
             "未設定",
         )
+        self._is_favorite_var.set(False)
         self._description_text.delete(
             "1.0",
             tk.END,
@@ -1736,6 +1764,7 @@ class BookManagerApplication:
                     self._reading_status_var.get()
                 )
             ),
+            "is_favorite": self._is_favorite_var.get(),
             "notes": self._notes_text.get(
                 "1.0",
                 tk.END,
@@ -1763,6 +1792,7 @@ class BookManagerApplication:
             cover_image_path=values["cover_image_path"],
             completion_month=values["completion_month"],
             reading_status=values["reading_status"],
+            is_favorite=values["is_favorite"],
             notes=values["notes"],
         )
 
@@ -2095,6 +2125,7 @@ class BookManagerApplication:
                     values["completion_month"]
                 ),
                 reading_status=values["reading_status"],
+                is_favorite=values["is_favorite"],
                 notes=values["notes"],
             )
 

@@ -58,6 +58,7 @@ class BookService:
         cover_image_path: str | None = None,
         completion_month: str | None = None,
         reading_status: str | None = None,
+        is_favorite: bool = False,
         notes: str | None = None,
     ) -> BookItem:
         """書籍情報を登録する。
@@ -74,6 +75,7 @@ class BookService:
             cover_image_path: キャッシュ済み表紙画像の相対パス。
             completion_month: 読了年月。
             reading_status: 読書ステータス。
+            is_favorite: お気に入り状態。
             notes: 備考。
 
         Returns:
@@ -155,6 +157,7 @@ class BookService:
             cover_image_path=normalized_cover_image_path,
             completion_month=normalized_completion_month,
             reading_status=normalized_reading_status,
+            is_favorite=is_favorite,
             notes=normalized_notes,
             created_at=current_timestamp,
             updated_at=current_timestamp,
@@ -578,6 +581,7 @@ class BookService:
             cover_image_path=normalized_cover_image_path,
             completion_month=normalized_completion_month,
             reading_status=normalized_reading_status,
+            is_favorite=book_item.is_favorite,
             notes=normalized_notes,
             created_at=existing.created_at,
             updated_at=self._current_timestamp(),

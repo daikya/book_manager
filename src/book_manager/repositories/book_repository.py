@@ -21,6 +21,7 @@ BOOK_ITEM_COLUMNS = """
     cover_image_path,
     completion_month,
     reading_status,
+    is_favorite,
     notes,
     created_at,
     updated_at
@@ -62,11 +63,12 @@ class BookRepository:
                 cover_image_path,
                 completion_month,
                 reading_status,
+                is_favorite,
                 notes,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         parameters = (
             book_item.isbn,
@@ -80,6 +82,7 @@ class BookRepository:
             book_item.cover_image_path,
             book_item.completion_month,
             book_item.reading_status,
+            int(book_item.is_favorite),
             book_item.notes,
             book_item.created_at,
             book_item.updated_at,
@@ -464,6 +467,7 @@ class BookRepository:
                 cover_image_path = ?,
                 completion_month = ?,
                 reading_status = ?,
+                is_favorite = ?,
                 notes = ?,
                 updated_at = ?
             WHERE id = ?
@@ -481,6 +485,7 @@ class BookRepository:
             book_item.cover_image_path,
             book_item.completion_month,
             book_item.reading_status,
+            int(book_item.is_favorite),
             book_item.notes,
             book_item.updated_at,
             book_item.id,
@@ -539,6 +544,7 @@ class BookRepository:
             cover_image_path=row["cover_image_path"],
             completion_month=row["completion_month"],
             reading_status=row["reading_status"],
+            is_favorite=bool(row["is_favorite"]),
             notes=row["notes"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],

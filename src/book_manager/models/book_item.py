@@ -19,6 +19,7 @@ class BookItem:
     cover_image_path: str | None = None
     completion_month: str | None = None
     reading_status: str | None = None
+    is_favorite: bool = False
     notes: str | None = None
     created_at: str | None = None
     updated_at: str | None = None

@@ -36,6 +36,8 @@ def create_book_item(
         "cache/covers/cover.jpg"
     ),
     completion_month: str | None = "2026-07",
+    reading_status: str | None = None,
+    is_favorite: bool = False,
     notes: str | None = "再読。",
     created_at: str = "2026-07-22 10:00:00",
     updated_at: str = "2026-07-22 10:00:00",
@@ -52,6 +54,8 @@ def create_book_item(
         cover_image_url=cover_image_url,
         cover_image_path=cover_image_path,
         completion_month=completion_month,
+        reading_status=reading_status,
+        is_favorite=is_favorite,
         notes=notes,
         created_at=created_at,
         updated_at=updated_at,
@@ -905,7 +909,10 @@ def test_update_updates_existing_book(
         ),
         cover_image_path=(
             "cache/covers/updated-cover.png"
-        ),        completion_month="2026-08",
+        ),
+        completion_month="2026-08",
+        reading_status="completed",
+        is_favorite=True,
         notes="更新済み。",
         created_at=registered.created_at,
         updated_at="2026-07-22 12:00:00",
@@ -1092,6 +1099,7 @@ def test_update_changes_reading_status(
         cover_image_path=registered.cover_image_path,
         completion_month=registered.completion_month,
         reading_status="completed",
+        is_favorite=registered.is_favorite,
         notes=registered.notes,
         created_at=registered.created_at,
         updated_at=registered.updated_at,
@@ -1137,6 +1145,7 @@ def test_update_can_clear_reading_status(
         cover_image_path=registered.cover_image_path,
         completion_month=registered.completion_month,
         reading_status=None,
+        is_favorite=registered.is_favorite,
         notes=registered.notes,
         created_at=registered.created_at,
         updated_at=registered.updated_at,
@@ -1154,3 +1163,156 @@ def test_update_can_clear_reading_status(
 
     assert loaded is not None
     assert loaded.reading_status is None
+
+
+def test_add_stores_false_is_favorite(
+    repository: BookRepository,
+) -> None:
+    """お気に入りOFFを登録・取得できる。"""
+    book = create_book_item(
+        title="お気に入りOFF書籍",
+        is_favorite=False,
+    )
+
+    registered = repository.add(book)
+
+    assert registered.id is not None
+
+    loaded = repository.get_by_id(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.is_favorite is False
+
+
+def test_add_stores_true_is_favorite(
+    repository: BookRepository,
+) -> None:
+    """お気に入りONを登録・取得できる。"""
+    book = create_book_item(
+        title="お気に入りON書籍",
+        is_favorite=True,
+    )
+
+    registered = repository.add(book)
+
+    assert registered.id is not None
+
+    loaded = repository.get_by_id(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.is_favorite is True
+
+
+def test_update_changes_is_favorite_from_false_to_true(
+    repository: BookRepository,
+) -> None:
+    """お気に入りをOFFからONへ更新できる。"""
+    registered = repository.add(
+        create_book_item(
+            title="更新対象書籍",
+            is_favorite=False,
+        )
+    )
+
+    updated_book = BookItem(
+        id=registered.id,
+        title=registered.title,
+        isbn=registered.isbn,
+        magazine_code=registered.magazine_code,
+        author=registered.author,
+        publisher=registered.publisher,
+        publication_format=registered.publication_format,
+        description=registered.description,
+        cover_image_url=registered.cover_image_url,
+        cover_image_path=registered.cover_image_path,
+        completion_month=registered.completion_month,
+        reading_status=registered.reading_status,
+        is_favorite=True,
+        notes=registered.notes,
+        created_at=registered.created_at,
+        updated_at=registered.updated_at,
+    )
+
+    result = repository.update(
+        updated_book,
+    )
+
+    assert result is True
+
+    loaded = repository.get_by_id(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.is_favorite is True
+
+
+def test_update_changes_is_favorite_from_true_to_false(
+    repository: BookRepository,
+) -> None:
+    """お気に入りをONからOFFへ更新できる。"""
+    registered = repository.add(
+        create_book_item(
+            title="更新対象書籍",
+            is_favorite=True,
+        )
+    )
+
+    updated_book = BookItem(
+        id=registered.id,
+        title=registered.title,
+        isbn=registered.isbn,
+        magazine_code=registered.magazine_code,
+        author=registered.author,
+        publisher=registered.publisher,
+        publication_format=registered.publication_format,
+        description=registered.description,
+        cover_image_url=registered.cover_image_url,
+        cover_image_path=registered.cover_image_path,
+        completion_month=registered.completion_month,
+        reading_status=registered.reading_status,
+        is_favorite=False,
+        notes=registered.notes,
+        created_at=registered.created_at,
+        updated_at=registered.updated_at,
+    )
+
+    result = repository.update(
+        updated_book,
+    )
+
+    assert result is True
+
+    loaded = repository.get_by_id(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.is_favorite is False
+
+
+def test_is_favorite_is_independent_from_reading_status_and_completion_month(
+    repository: BookRepository,
+) -> None:
+    """お気に入りを読書状態・読了年月と独立して保持できる。"""
+    registered = repository.add(
+        create_book_item(
+            title="独立性確認書籍",
+            completion_month="2025-05",
+            reading_status="reading",
+            is_favorite=True,
+        )
+    )
+
+    loaded = repository.get_by_id(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.completion_month == "2025-05"
+    assert loaded.reading_status == "reading"
+    assert loaded.is_favorite is True
