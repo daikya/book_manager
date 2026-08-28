@@ -38,6 +38,7 @@ def create_application() -> BookManagerApplication:
             "completion_month": None,
             "reading_status": None,
             "is_favorite": False,
+            "rating": None,
             "notes": None,
         },
     )

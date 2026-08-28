@@ -84,6 +84,33 @@ class BookManagerApplication:
         "読了",
     )
 
+    RATING_LABELS = {
+        None: "未評価",
+        1: "★",
+        2: "★★",
+        3: "★★★",
+        4: "★★★★",
+        5: "★★★★★",
+    }
+
+    RATING_VALUES = {
+        "未評価": None,
+        "★": 1,
+        "★★": 2,
+        "★★★": 3,
+        "★★★★": 4,
+        "★★★★★": 5,
+    }
+
+    RATING_OPTIONS = (
+        "未評価",
+        "★",
+        "★★",
+        "★★★",
+        "★★★★",
+        "★★★★★",
+    )
+
     TREE_COLUMNS = (
         "id",
         "title",
@@ -95,6 +122,7 @@ class BookManagerApplication:
         "completion_month",
         "reading_status",
         "is_favorite",
+        "rating",
     )
 
     def __init__(
@@ -172,6 +200,10 @@ class BookManagerApplication:
         self._is_favorite_var = tk.BooleanVar(
             master=self._root,
             value=False,
+        )
+        self._rating_var = tk.StringVar(
+            master=self._root,
+            value="未評価",
         )
         self._count_status_var = tk.StringVar(
             master=self._root,
@@ -757,6 +789,13 @@ class BookManagerApplication:
                 "anchor": "center",
                 "stretch": False,
             },
+            "rating": {
+                "heading": "評価",
+                "width": 100,
+                "minwidth": 90,
+                "anchor": "center",
+                "stretch": False,
+            },
         }
 
         for column_name, definition in column_definitions.items():
@@ -975,15 +1014,35 @@ class BookManagerApplication:
             column=2,
             sticky="w",
         )
+        ttk.Label(
+            completion_month_frame,
+            text="評価",
+        ).grid(
+            row=0,
+            column=3,
+            sticky="w",
+            padx=(12, 6),
+        )
+        self._rating_combobox = ttk.Combobox(
+            completion_month_frame,
+            textvariable=self._rating_var,
+            values=self.RATING_OPTIONS,
+            state="readonly",
+            width=7,
+        )
+        self._rating_combobox.grid(
+            row=0,
+            column=4,
+            sticky="w",
+        )
         self._is_favorite_checkbutton = ttk.Checkbutton(
             completion_month_frame,
             text="お気に入り",
             variable=self._is_favorite_var,
         )
-
         self._is_favorite_checkbutton.grid(
             row=0,
-            column=3,
+            column=5,
             sticky="w",
             padx=(12, 0),
         )
@@ -1436,6 +1495,14 @@ class BookManagerApplication:
                         "未設定",
                     ),
                     "★" if book.is_favorite else "",
+                    (
+                        ""
+                        if book.rating is None
+                        else self.RATING_LABELS.get(
+                            book.rating,
+                            "",
+                        )
+                    ),
                 ),
             )
             displayed_count += 1
@@ -1487,6 +1554,12 @@ class BookManagerApplication:
         )
         self._is_favorite_var.set(
             book_item.is_favorite,
+        )
+        self._rating_var.set(
+            self.RATING_LABELS.get(
+                book_item.rating,
+                "未評価",
+            )
         )
         self._replace_text(
             self._description_text,
@@ -1710,6 +1783,7 @@ class BookManagerApplication:
             "未設定",
         )
         self._is_favorite_var.set(False)
+        self._rating_var.set("未評価")
         self._description_text.delete(
             "1.0",
             tk.END,
@@ -1734,8 +1808,9 @@ class BookManagerApplication:
             False,
         )
         self._clear_cover_state()
-
-    def _get_form_values(self) -> dict[str, str | None]:
+    def _get_form_values(
+        self,
+    ) -> dict[str, str | int | bool | None]:
         """入力フォームの値を取得する。"""
         return {
             "title": self._title_var.get(),
@@ -1765,6 +1840,9 @@ class BookManagerApplication:
                 )
             ),
             "is_favorite": self._is_favorite_var.get(),
+            "rating": self.RATING_VALUES.get(
+                self._rating_var.get()
+            ),
             "notes": self._notes_text.get(
                 "1.0",
                 tk.END,
@@ -1793,6 +1871,7 @@ class BookManagerApplication:
             completion_month=values["completion_month"],
             reading_status=values["reading_status"],
             is_favorite=values["is_favorite"],
+            rating=values["rating"],
             notes=values["notes"],
         )
 
@@ -2126,6 +2205,7 @@ class BookManagerApplication:
                 ),
                 reading_status=values["reading_status"],
                 is_favorite=values["is_favorite"],
+                rating=values["rating"],
                 notes=values["notes"],
             )
 

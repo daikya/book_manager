@@ -78,6 +78,7 @@ def create_form_application(
     application._completion_month_var = Mock()
     application._reading_status_var = Mock()
     application._is_favorite_var = Mock()
+    application._rating_var = Mock()
     application._title_var.get.return_value = "テスト書籍"
     application._isbn_var.get.return_value = ""
     application._magazine_code_var.get.return_value = ""
@@ -153,6 +154,7 @@ def test_display_book_in_form_sets_reading_status() -> None:
     application._completion_month_var = Mock()
     application._reading_status_var = Mock()
     application._is_favorite_var = Mock()
+    application._rating_var = Mock()
     application._description_text = Mock()
     application._notes_text = Mock()
 
@@ -191,6 +193,7 @@ def test_display_book_in_form_sets_unconfigured_status() -> None:
     application._completion_month_var = Mock()
     application._reading_status_var = Mock()
     application._is_favorite_var = Mock()
+    application._rating_var = Mock()
     application._description_text = Mock()
     application._notes_text = Mock()
 
@@ -229,6 +232,7 @@ def test_clear_form_resets_reading_status() -> None:
     application._completion_month_var = Mock()
     application._reading_status_var = Mock()
     application._is_favorite_var = Mock()
+    application._rating_var = Mock()
     application._description_text = Mock()
     application._notes_text = Mock()
     application._book_tree = Mock()
@@ -277,4 +281,4 @@ def test_display_books_shows_reading_status_in_japanese() -> None:
         ]
     )
 
-    assert values[-2] == "読了"
+    assert values[-3] == "読了"

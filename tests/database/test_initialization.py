@@ -106,10 +106,40 @@ def test_initialize_database_creates_is_favorite_column(
     finally:
         connection.close()
 
-def test_initialize_database_migrates_version_1_to_4(
+
+def test_initialize_database_creates_rating_column(
     tmp_path: Path,
 ) -> None:
-    """Version 1のDBをVersion 4へ移行する。"""
+    """新規DBに評価列を正しい定義で作成する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        rows = connection.execute(
+            "PRAGMA table_info(book_items)"
+        ).fetchall()
+
+        rating_row = next(
+            row
+            for row in rows
+            if row[1] == "rating"
+        )
+
+        assert rating_row[2] == "INTEGER"
+        assert rating_row[3] == 0
+        assert rating_row[4] is None
+
+    finally:
+        connection.close()
+
+
+def test_initialize_database_migrates_version_1_to_5(
+    tmp_path: Path,
+) -> None:
+    """Version 1のDBをVersion 5へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -168,6 +198,7 @@ def test_initialize_database_migrates_version_1_to_4(
     assert "cover_image_path" in column_names
     assert "reading_status" in column_names
     assert "is_favorite" in column_names
+    assert "rating" in column_names
 
     connection = sqlite3.connect(database_path)
 
@@ -179,7 +210,8 @@ def test_initialize_database_migrates_version_1_to_4(
                 cover_image_url,
                 cover_image_path,
                 reading_status,
-                is_favorite
+                is_favorite,
+                rating
             FROM book_items
             """
         ).fetchone()
@@ -190,14 +222,15 @@ def test_initialize_database_migrates_version_1_to_4(
             None,
             None,
             0,
+            None,
         )
     finally:
         connection.close()
 
-def test_initialize_database_migrates_version_2_to_4(
+def test_initialize_database_migrates_version_2_to_5(
     tmp_path: Path,
 ) -> None:
-    """Version 2のDBをVersion 4へ移行する。"""
+    """Version 2のDBをVersion 5へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -261,6 +294,7 @@ def test_initialize_database_migrates_version_2_to_4(
 
     assert "reading_status" in column_names
     assert "is_favorite" in column_names
+    assert "rating" in column_names
 
     connection = sqlite3.connect(database_path)
 
@@ -271,7 +305,8 @@ def test_initialize_database_migrates_version_2_to_4(
                 title,
                 completion_month,
                 reading_status,
-                is_favorite
+                is_favorite,
+                rating
             FROM book_items
             """
         ).fetchone()
@@ -281,14 +316,15 @@ def test_initialize_database_migrates_version_2_to_4(
         assert row[1] == "2025-05"
         assert row[2] is None
         assert row[3] == 0
+        assert row[4] == None
 
     finally:
         connection.close()
 
-def test_initialize_database_migrates_version_3_to_4(
+def test_initialize_database_migrates_version_3_to_5(
     tmp_path: Path,
 ) -> None:
-    """Version 3のDBへお気に入り列を追加する。"""
+    """Version 3のDBをVersion 5へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -354,6 +390,7 @@ def test_initialize_database_migrates_version_3_to_4(
     )
 
     assert "is_favorite" in column_names
+    assert "rating" in column_names
 
     connection = sqlite3.connect(database_path)
 
@@ -364,7 +401,8 @@ def test_initialize_database_migrates_version_3_to_4(
                 title,
                 completion_month,
                 reading_status,
-                is_favorite
+                is_favorite,
+                rating
             FROM book_items
             """
         ).fetchone()
@@ -374,10 +412,111 @@ def test_initialize_database_migrates_version_3_to_4(
             "2025-05",
             "reading",
             0,
+            None,
         )
 
     finally:
         connection.close()
+
+def test_initialize_database_migrates_version_4_to_5(
+    tmp_path: Path,
+) -> None:
+    """Version 4のDBへ評価列を追加する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        with connection:
+            connection.execute(
+                """
+                CREATE TABLE book_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    isbn TEXT,
+                    magazine_code TEXT,
+                    title TEXT NOT NULL,
+                    author TEXT,
+                    publisher TEXT,
+                    publication_format TEXT,
+                    description TEXT,
+                    cover_image_url TEXT,
+                    cover_image_path TEXT,
+                    completion_month TEXT,
+                    reading_status TEXT,
+                    is_favorite INTEGER NOT NULL DEFAULT 0,
+                    notes TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+
+            connection.execute(
+                """
+                INSERT INTO book_items (
+                    title,
+                    completion_month,
+                    reading_status,
+                    is_favorite,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "評価前の書籍",
+                    "2026-08",
+                    "completed",
+                    1,
+                    "2026-08-28 10:00:00",
+                    "2026-08-28 10:00:00",
+                ),
+            )
+
+            connection.execute(
+                "PRAGMA user_version = 4"
+            )
+
+    finally:
+        connection.close()
+
+    initialize_database(database_path)
+
+    assert get_user_version(database_path) == SCHEMA_VERSION
+
+    column_names = get_table_column_names(
+        database_path,
+        "book_items",
+    )
+
+    assert "rating" in column_names
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        row = connection.execute(
+            """
+            SELECT
+                title,
+                completion_month,
+                reading_status,
+                is_favorite,
+                rating
+            FROM book_items
+            """
+        ).fetchone()
+
+        assert row == (
+            "評価前の書籍",
+            "2026-08",
+            "completed",
+            1,
+            None,
+        )
+
+    finally:
+        connection.close()
+
 
 def test_initialize_database_creates_parent_directory(
     tmp_path: Path,
@@ -612,6 +751,48 @@ def test_initialize_database_uses_zero_as_default_is_favorite(
 
         assert row is not None
         assert row[0] == 0
+
+    finally:
+        connection.close()
+
+
+def test_initialize_database_uses_null_as_default_rating(
+    tmp_path: Path,
+) -> None:
+    """評価未指定時のデフォルト値をNULLとする。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        with connection:
+            connection.execute(
+                """
+                INSERT INTO book_items (
+                    title,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    "テスト書籍",
+                    "2026-08-28 10:00:00",
+                    "2026-08-28 10:00:00",
+                ),
+            )
+
+        row = connection.execute(
+            """
+            SELECT rating
+            FROM book_items
+            """
+        ).fetchone()
+
+        assert row is not None
+        assert row[0] is None
 
     finally:
         connection.close()

@@ -52,6 +52,7 @@ def test_export_writes_headers(
             "読了年月",
             "読書状態",
             "お気に入り",
+            "評価",
             "備考",
             "登録日時",
             "更新日時",
@@ -76,6 +77,7 @@ def test_export_writes_book_values(
         completion_month="2026-08",
         reading_status="reading",
         is_favorite=True,
+        rating=5,
         notes="備考",
         created_at="2026-08-20 10:00:00",
         updated_at="2026-08-20 11:00:00",
@@ -103,6 +105,7 @@ def test_export_writes_book_values(
         "2026-08",
         "読書中",
         "はい",
+        "5",
         "備考",
         "2026-08-20 10:00:00",
         "2026-08-20 11:00:00",
@@ -175,6 +178,7 @@ def test_export_writes_none_as_empty_string(
         "",
         "",
         "",
+        "",
     ]
 
 
@@ -211,7 +215,7 @@ def test_export_preserves_newlines(
     )
 
     assert rows[1][6] == description
-    assert rows[1][10] == notes
+    assert rows[1][11] == notes
 
 
 def test_export_preserves_comma(
@@ -237,7 +241,7 @@ def test_export_preserves_comma(
     )
 
     assert rows[1][0] == "テスト,書籍"
-    assert rows[1][10] == "メモ,追記"
+    assert rows[1][11] == "メモ,追記"
 
 
 def test_export_preserves_double_quote(
@@ -263,7 +267,7 @@ def test_export_preserves_double_quote(
     )
 
     assert rows[1][0] == '「"引用"」を含む書籍'
-    assert rows[1][10] == 'メモに"引用"あり'
+    assert rows[1][11] == 'メモに"引用"あり'
 
 
 def test_export_writes_utf8_bom(
@@ -483,7 +487,7 @@ def test_export_writes_false_is_favorite_as_no(
 def test_export_preserves_reading_status_with_is_favorite(
     tmp_path: Path,
 ) -> None:
-    """読書状態とお気に入りを独立して出力する。"""
+    """読書状態とお気に入りと評価を独立して出力する。"""
     output_path = tmp_path / "books.csv"
 
     book = BookItem(
@@ -491,6 +495,7 @@ def test_export_preserves_reading_status_with_is_favorite(
         completion_month="2025-05",
         reading_status="reading",
         is_favorite=True,
+        rating=5,
     )
 
     service = CsvExportService()
@@ -507,3 +512,69 @@ def test_export_preserves_reading_status_with_is_favorite(
     assert rows[1][7] == "2025-05"
     assert rows[1][8] == "読書中"
     assert rows[1][9] == "はい"
+    assert rows[1][10] == "5"
+
+
+@pytest.mark.parametrize(
+    (
+        "rating",
+        "expected",
+    ),
+    [
+        (1, "1"),
+        (2, "2"),
+        (3, "3"),
+        (4, "4"),
+        (5, "5"),
+    ],
+)
+def test_export_writes_rating_as_number(
+    tmp_path: Path,
+    rating: int,
+    expected: str,
+) -> None:
+    """評価を1から5の数値として出力する。"""
+    output_path = tmp_path / "books.csv"
+
+    book = BookItem(
+        title="評価済み書籍",
+        rating=rating,
+    )
+
+    service = CsvExportService()
+
+    service.export(
+        [book],
+        output_path,
+    )
+
+    rows = _read_csv(
+        output_path,
+    )
+
+    assert rows[1][10] == expected
+
+
+def test_export_writes_none_rating_as_empty_string(
+    tmp_path: Path,
+) -> None:
+    """未評価を空欄として出力する。"""
+    output_path = tmp_path / "books.csv"
+
+    book = BookItem(
+        title="未評価書籍",
+        rating=None,
+    )
+
+    service = CsvExportService()
+
+    service.export(
+        [book],
+        output_path,
+    )
+
+    rows = _read_csv(
+        output_path,
+    )
+
+    assert rows[1][10] == ""

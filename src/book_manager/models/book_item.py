@@ -20,6 +20,7 @@ class BookItem:
     completion_month: str | None = None
     reading_status: str | None = None
     is_favorite: bool = False
+    rating: int | None = None
     notes: str | None = None
     created_at: str | None = None
     updated_at: str | None = None

@@ -28,6 +28,10 @@ from book_manager.services.cover_image_service import (
 from book_manager.validators.reading_status_validator import (
     validate_reading_status,
 )
+from book_manager.validators.rating_validator import (
+    validate_rating,
+)
+
 
 class BookService:
     """書籍管理に関するアプリケーションロジックを担当する。"""
@@ -59,6 +63,7 @@ class BookService:
         completion_month: str | None = None,
         reading_status: str | None = None,
         is_favorite: bool = False,
+        rating: int | None = None,
         notes: str | None = None,
     ) -> BookItem:
         """書籍情報を登録する。
@@ -76,6 +81,7 @@ class BookService:
             completion_month: 読了年月。
             reading_status: 読書ステータス。
             is_favorite: お気に入り状態。
+            rating: 評価。
             notes: 備考。
 
         Returns:
@@ -141,6 +147,9 @@ class BookService:
         validate_reading_status(
             normalized_reading_status,
         )
+        validate_rating(
+            rating,
+        )
         current_timestamp = self._current_timestamp()
 
         book_item = BookItem(
@@ -158,6 +167,7 @@ class BookService:
             completion_month=normalized_completion_month,
             reading_status=normalized_reading_status,
             is_favorite=is_favorite,
+            rating=rating,
             notes=normalized_notes,
             created_at=current_timestamp,
             updated_at=current_timestamp,
@@ -566,6 +576,9 @@ class BookService:
         validate_reading_status(
             normalized_reading_status,
         )
+        validate_rating(
+            book_item.rating,
+        )
         normalized_book_item = BookItem(
             id=book_item.id,
             title=normalized_title,
@@ -582,6 +595,7 @@ class BookService:
             completion_month=normalized_completion_month,
             reading_status=normalized_reading_status,
             is_favorite=book_item.is_favorite,
+            rating=book_item.rating,
             notes=normalized_notes,
             created_at=existing.created_at,
             updated_at=self._current_timestamp(),

@@ -38,6 +38,7 @@ def create_book_item(
     completion_month: str | None = "2026-07",
     reading_status: str | None = None,
     is_favorite: bool = False,
+    rating: int | None = None,
     notes: str | None = "再読。",
     created_at: str = "2026-07-22 10:00:00",
     updated_at: str = "2026-07-22 10:00:00",
@@ -56,6 +57,7 @@ def create_book_item(
         completion_month=completion_month,
         reading_status=reading_status,
         is_favorite=is_favorite,
+        rating=rating,
         notes=notes,
         created_at=created_at,
         updated_at=updated_at,
@@ -913,6 +915,7 @@ def test_update_updates_existing_book(
         completion_month="2026-08",
         reading_status="completed",
         is_favorite=True,
+        rating=5,
         notes="更新済み。",
         created_at=registered.created_at,
         updated_at="2026-07-22 12:00:00",
@@ -1316,3 +1319,216 @@ def test_is_favorite_is_independent_from_reading_status_and_completion_month(
     assert loaded.completion_month == "2025-05"
     assert loaded.reading_status == "reading"
     assert loaded.is_favorite is True
+
+
+def test_add_stores_none_rating(
+    repository: BookRepository,
+) -> None:
+    """未評価を登録・取得できる。"""
+    book = create_book_item(
+        title="未評価書籍",
+        rating=None,
+    )
+
+    registered = repository.add(book)
+
+    assert registered.id is not None
+
+    loaded = repository.get_by_id(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.rating is None
+
+
+@pytest.mark.parametrize(
+    "rating",
+    [
+        1,
+        2,
+        3,
+        4,
+        5,
+    ],
+)
+def test_add_stores_rating(
+    repository: BookRepository,
+    rating: int,
+) -> None:
+    """1から5の評価を登録・取得できる。"""
+    book = create_book_item(
+        title="評価済み書籍",
+        rating=rating,
+    )
+
+    registered = repository.add(book)
+
+    assert registered.id is not None
+
+    loaded = repository.get_by_id(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.rating == rating
+
+
+def test_update_changes_rating_from_none_to_five(
+    repository: BookRepository,
+) -> None:
+    """評価を未評価から5へ更新できる。"""
+    registered = repository.add(
+        create_book_item(
+            title="更新対象書籍",
+            rating=None,
+        )
+    )
+
+    updated_book = BookItem(
+        id=registered.id,
+        title=registered.title,
+        isbn=registered.isbn,
+        magazine_code=registered.magazine_code,
+        author=registered.author,
+        publisher=registered.publisher,
+        publication_format=registered.publication_format,
+        description=registered.description,
+        cover_image_url=registered.cover_image_url,
+        cover_image_path=registered.cover_image_path,
+        completion_month=registered.completion_month,
+        reading_status=registered.reading_status,
+        is_favorite=registered.is_favorite,
+        rating=5,
+        notes=registered.notes,
+        created_at=registered.created_at,
+        updated_at=registered.updated_at,
+    )
+
+    result = repository.update(
+        updated_book,
+    )
+
+    assert result is True
+
+    loaded = repository.get_by_id(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.rating == 5
+
+
+def test_update_changes_rating(
+    repository: BookRepository,
+) -> None:
+    """評価値を別の評価値へ更新できる。"""
+    registered = repository.add(
+        create_book_item(
+            title="更新対象書籍",
+            rating=5,
+        )
+    )
+
+    updated_book = BookItem(
+        id=registered.id,
+        title=registered.title,
+        isbn=registered.isbn,
+        magazine_code=registered.magazine_code,
+        author=registered.author,
+        publisher=registered.publisher,
+        publication_format=registered.publication_format,
+        description=registered.description,
+        cover_image_url=registered.cover_image_url,
+        cover_image_path=registered.cover_image_path,
+        completion_month=registered.completion_month,
+        reading_status=registered.reading_status,
+        is_favorite=registered.is_favorite,
+        rating=2,
+        notes=registered.notes,
+        created_at=registered.created_at,
+        updated_at=registered.updated_at,
+    )
+
+    result = repository.update(
+        updated_book,
+    )
+
+    assert result is True
+
+    loaded = repository.get_by_id(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.rating == 2
+
+
+def test_update_can_clear_rating(
+    repository: BookRepository,
+) -> None:
+    """評価を未評価へ戻せる。"""
+    registered = repository.add(
+        create_book_item(
+            title="更新対象書籍",
+            rating=5,
+        )
+    )
+
+    updated_book = BookItem(
+        id=registered.id,
+        title=registered.title,
+        isbn=registered.isbn,
+        magazine_code=registered.magazine_code,
+        author=registered.author,
+        publisher=registered.publisher,
+        publication_format=registered.publication_format,
+        description=registered.description,
+        cover_image_url=registered.cover_image_url,
+        cover_image_path=registered.cover_image_path,
+        completion_month=registered.completion_month,
+        reading_status=registered.reading_status,
+        is_favorite=registered.is_favorite,
+        rating=None,
+        notes=registered.notes,
+        created_at=registered.created_at,
+        updated_at=registered.updated_at,
+    )
+
+    result = repository.update(
+        updated_book,
+    )
+
+    assert result is True
+
+    loaded = repository.get_by_id(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.rating is None
+
+
+def test_rating_is_independent_from_other_reading_fields(
+    repository: BookRepository,
+) -> None:
+    """評価を読書状態・読了年月・お気に入りと独立して保持できる。"""
+    registered = repository.add(
+        create_book_item(
+            title="評価独立性確認書籍",
+            completion_month="2025-05",
+            reading_status="unread",
+            is_favorite=False,
+            rating=5,
+        )
+    )
+
+    loaded = repository.get_by_id(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.completion_month == "2025-05"
+    assert loaded.reading_status == "unread"
+    assert loaded.is_favorite is False
+    assert loaded.rating == 5

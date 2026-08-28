@@ -26,6 +26,8 @@ def test_book_item_optional_fields_default_to_none() -> None:
     assert book_item.cover_image_url is None
     assert book_item.cover_image_path is None
     assert book_item.completion_month is None
+    assert book_item.reading_status is None
+    assert book_item.rating is None
     assert book_item.notes is None
     assert book_item.created_at is None
     assert book_item.updated_at is None
@@ -47,6 +49,7 @@ def test_book_item_accepts_all_fields() -> None:
         completion_month="2026-07",
         reading_status="completed",
         is_favorite=True,
+        rating=5,
         notes="再読。",
         created_at="2026-07-21 15:00:00",
         updated_at="2026-07-21 15:00:00",
@@ -71,6 +74,7 @@ def test_book_item_accepts_all_fields() -> None:
     assert book_item.completion_month == "2026-07"
     assert book_item.reading_status == "completed"
     assert book_item.is_favorite is True
+    assert book_item.rating == 5
     assert book_item.notes == "再読。"
     assert book_item.created_at == "2026-07-21 15:00:00"
     assert book_item.updated_at == "2026-07-21 15:00:00"
@@ -157,3 +161,22 @@ def test_book_item_can_store_is_favorite() -> None:
     )
 
     assert book_item.is_favorite is True
+
+
+def test_book_item_rating_defaults_to_none() -> None:
+    """評価の初期値がNoneになる。"""
+    book_item = BookItem(
+        title="テスト書籍",
+    )
+
+    assert book_item.rating is None
+
+
+def test_book_item_can_store_rating() -> None:
+    """評価値を保持できる。"""
+    book_item = BookItem(
+        title="テスト書籍",
+        rating=5,
+    )
+
+    assert book_item.rating == 5

@@ -1,6 +1,6 @@
 """SQLite schema definitions."""
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 CREATE_BOOK_ITEMS_TABLE = """
@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS book_items (
     completion_month TEXT,
     reading_status TEXT,
     is_favorite INTEGER NOT NULL DEFAULT 0,
+    rating INTEGER,
     notes TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -65,6 +66,13 @@ MIGRATE_VERSION_3_TO_4 = (
     """
     ALTER TABLE book_items
     ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0
+    """,
+)
+
+MIGRATE_VERSION_4_TO_5 = (
+    """
+    ALTER TABLE book_items
+    ADD COLUMN rating INTEGER
     """,
 )
 

@@ -115,6 +115,7 @@ def add_sample_book(
     ),
     reading_status: str | None = None,
     is_favorite: bool = False,
+    rating: int | None = None,
 ) -> BookItem:
     """テスト用の書籍を登録する。"""
     return service.add_book(
@@ -130,6 +131,7 @@ def add_sample_book(
         completion_month="2026-07",
         reading_status=reading_status,
         is_favorite=is_favorite,
+        rating=rating,
         notes="テスト用データ",
     )
 
@@ -898,6 +900,7 @@ def test_update_book_updates_existing_book(
         completion_month=" 2026-08 ",
         reading_status=" completed ",
         is_favorite=True,
+        rating=5,
         notes="  更新後の備考  ",
         created_at="不正な作成日時",
         updated_at="不正な更新日時",
@@ -932,6 +935,7 @@ def test_update_book_updates_existing_book(
     assert updated.completion_month == "2026-08"
     assert updated.reading_status == "completed"
     assert updated.is_favorite is True
+    assert updated.rating == 5
     assert updated.notes == "更新後の備考"
     assert updated.created_at == "2026-07-22 10:30:00"
     assert updated.updated_at == "2026-07-23 11:45:30"
@@ -1571,3 +1575,209 @@ def test_is_favorite_is_independent_from_reading_status_and_completion_month(
     assert registered.completion_month == "2025-05"
     assert registered.reading_status == "reading"
     assert registered.is_favorite is True
+
+
+def test_add_book_stores_none_rating(
+    service: BookService,
+) -> None:
+    """新規登録時に未評価を保存できる。"""
+    registered = service.add_book(
+        title="テスト書籍",
+        rating=None,
+    )
+
+    assert registered.rating is None
+
+
+@pytest.mark.parametrize(
+    "rating",
+    [
+        1,
+        2,
+        3,
+        4,
+        5,
+    ],
+)
+def test_add_book_stores_rating(
+    service: BookService,
+    rating: int,
+) -> None:
+    """新規登録時に1から5の評価を保存できる。"""
+    registered = service.add_book(
+        title="テスト書籍",
+        rating=rating,
+    )
+
+    assert registered.rating == rating
+
+
+@pytest.mark.parametrize(
+    "rating",
+    [
+        -1,
+        0,
+        6,
+        True,
+        False,
+        1.0,
+        "1",
+    ],
+)
+def test_add_book_rejects_invalid_rating(
+    service: BookService,
+    rating: object,
+) -> None:
+    """新規登録時に不正な評価を拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match="評価は1から5の整数で指定してください。",
+    ):
+        service.add_book(
+            title="テスト書籍",
+            rating=rating,  # type: ignore[arg-type]
+        )
+
+    assert service.get_all_books() == []
+
+
+def test_update_book_changes_rating_from_none_to_five(
+    service: BookService,
+) -> None:
+    """評価を未評価から5へ更新できる。"""
+    registered = service.add_book(
+        title="テスト書籍",
+        rating=None,
+    )
+
+    updated_book = replace(
+        registered,
+        rating=5,
+    )
+
+    result = service.update_book(
+        updated_book,
+    )
+
+    assert result is True
+
+    loaded = service.get_book(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.rating == 5
+
+
+def test_update_book_changes_rating(
+    service: BookService,
+) -> None:
+    """評価値を別の評価値へ変更できる。"""
+    registered = service.add_book(
+        title="テスト書籍",
+        rating=5,
+    )
+
+    updated_book = replace(
+        registered,
+        rating=2,
+    )
+
+    result = service.update_book(
+        updated_book,
+    )
+
+    assert result is True
+
+    loaded = service.get_book(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.rating == 2
+
+
+def test_update_book_can_clear_rating(
+    service: BookService,
+) -> None:
+    """評価を未評価へ戻せる。"""
+    registered = service.add_book(
+        title="テスト書籍",
+        rating=5,
+    )
+
+    updated_book = replace(
+        registered,
+        rating=None,
+    )
+
+    result = service.update_book(
+        updated_book,
+    )
+
+    assert result is True
+
+    loaded = service.get_book(
+        registered.id,
+    )
+
+    assert loaded is not None
+    assert loaded.rating is None
+
+
+@pytest.mark.parametrize(
+    "rating",
+    [
+        0,
+        6,
+        True,
+        1.0,
+        "5",
+    ],
+)
+def test_update_book_rejects_invalid_rating(
+    service: BookService,
+    rating: object,
+) -> None:
+    """更新時に不正な評価を拒否する。"""
+    registered = service.add_book(
+        title="テスト書籍",
+        rating=3,
+    )
+
+    updated_book = replace(
+        registered,
+        rating=rating,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="評価は1から5の整数で指定してください。",
+    ):
+        service.update_book(
+            updated_book,
+        )
+
+    stored = service.get_book(
+        registered.id,
+    )
+
+    assert stored == registered
+
+
+def test_rating_is_independent_from_other_reading_fields(
+    service: BookService,
+) -> None:
+    """評価を読書状態・読了年月・お気に入りと独立して保持できる。"""
+    registered = service.add_book(
+        title="評価独立性確認書籍",
+        completion_month="2025-05",
+        reading_status="unread",
+        is_favorite=False,
+        rating=5,
+    )
+
+    assert registered.completion_month == "2025-05"
+    assert registered.reading_status == "unread"
+    assert registered.is_favorite is False
+    assert registered.rating == 5
