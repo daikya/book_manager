@@ -32,6 +32,13 @@ from book_manager.services.book_service import (
 from book_manager.services.cover_image_service import (
     CoverImageService,
 )
+from book_manager.services.csv_export_service import (
+    CsvExportService,
+)
+from book_manager.services.csv_import_service import (
+    CsvImportService,
+)
+
 
 def main() -> None:
     """書誌情報取得機能を含むGUIを起動する。"""
@@ -78,9 +85,17 @@ def main() -> None:
     )
     root = tk.Tk()
 
+    csv_export_service = CsvExportService()
+
+    csv_import_service = CsvImportService(
+        book_service=service,
+    )
+
     BookManagerApplication(
         root,
         service,
+        csv_export_service,
+        csv_import_service,
     )
 
     try:

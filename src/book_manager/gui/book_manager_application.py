@@ -28,6 +28,9 @@ if TYPE_CHECKING:
     from book_manager.services.csv_export_service import (
         CsvExportService,
     )
+    from book_manager.services.csv_import_service import (
+        CsvImportService,
+    )
 
 class BookManagerApplication:
     """書籍管理アプリケーションのメインウィンドウを管理する。"""
@@ -130,6 +133,7 @@ class BookManagerApplication:
         root: tk.Tk,
         service: BookService,
         csv_export_service: CsvExportService,
+        csv_import_service: CsvImportService,
     ) -> None:
         """GUIを初期化する。
 
@@ -140,6 +144,7 @@ class BookManagerApplication:
         self._root = root
         self._service = service
         self._csv_export_service = csv_export_service
+        self._csv_import_service = csv_import_service
         self._selected_book_id: int | None = None
         self._cover_photo: tk.PhotoImage | None = None
         self._current_cover_image_url: str | None = None
@@ -1326,10 +1331,21 @@ class BookManagerApplication:
             text="CSVエクスポート",
             command=self._on_export_csv,
         )
-
         self._csv_export_button.grid(
             row=0,
             column=6,
+            padx=(0, 6),
+        )
+
+        self._csv_import_button = ttk.Button(
+            button_frame,
+            text="CSVインポート",
+            command=self._on_import_csv,
+        )
+
+        self._csv_import_button.grid(
+            row=0,
+            column=7,
             padx=(0, 6),
         )
 
@@ -2517,6 +2533,79 @@ class BookManagerApplication:
             messagebox.showerror(
                 "CSVエクスポートエラー",
                 "CSVファイルを保存できませんでした。",
+                parent=self._root,
+            )
+
+    def _on_import_csv(self) -> None:
+        """CSVファイルから書籍情報をインポートする。"""
+        input_filename = filedialog.askopenfilename(
+            title="CSVファイルを選択",
+            filetypes=[
+                (
+                    "CSVファイル",
+                    "*.csv",
+                ),
+                (
+                    "すべてのファイル",
+                    "*.*",
+                ),
+            ],
+            parent=self._root,
+        )
+
+        if not input_filename:
+            return
+
+        try:
+            result = self._csv_import_service.import_file(
+                Path(input_filename),
+            )
+
+            self._refresh_book_list()
+
+            message_lines = [
+                "CSVインポートが完了しました。",
+                "",
+                f"登録: {result.imported_count}件",
+                f"スキップ: {result.skipped_count}件",
+                f"エラー: {result.error_count}件",
+            ]
+
+            if result.skipped:
+                message_lines.extend(
+                    [
+                        "",
+                        "【スキップ】",
+                    ]
+                )
+                message_lines.extend(
+                    f"{issue.row_number}行目: {issue.message}"
+                    for issue in result.skipped
+                )
+
+            if result.errors:
+                message_lines.extend(
+                    [
+                        "",
+                        "【エラー】",
+                    ]
+                )
+                message_lines.extend(
+                    f"{issue.row_number}行目: {issue.message}"
+                    for issue in result.errors
+                )
+
+            messagebox.showinfo(
+                "CSVインポート完了",
+                "\n".join(message_lines),
+                parent=self._root,
+            )
+
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "CSVインポートエラー",
+                "CSVファイルをインポートできませんでした。",
                 parent=self._root,
             )
 

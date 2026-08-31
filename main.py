@@ -40,6 +40,10 @@ from book_manager.startup import try_create_backup
 from book_manager.services.csv_export_service import (
     CsvExportService,
 )
+from book_manager.services.csv_import_service import (
+    CsvImportService,
+)
+
 
 def main() -> None:
     """book_manager を起動する。"""
@@ -116,10 +120,15 @@ def main() -> None:
 
     csv_export_service = CsvExportService()
 
+    csv_import_service = CsvImportService(
+        book_service=service,
+    )
+
     BookManagerApplication(
         root,
         service,
         csv_export_service,
+        csv_import_service,
     )
 
     try:
