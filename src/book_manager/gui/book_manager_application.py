@@ -488,30 +488,39 @@ class BookManagerApplication:
             pady=(8, 0),
         )
 
-        ttk.Label(
+        sort_frame = ttk.Frame(
             search_frame,
-            text="並べ替え",
-        ).grid(
+        )
+        sort_frame.grid(
             row=2,
             column=0,
+            columnspan=4,
             sticky="w",
-            padx=(0, 6),
             pady=(8, 0),
         )
 
+        ttk.Label(
+            sort_frame,
+            text="並べ替え",
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w",
+            padx=(0, 6),
+        )
+
         self._sort_type_combobox = ttk.Combobox(
-            search_frame,
+            sort_frame,
             textvariable=self._sort_type_var,
             values=self.SORT_TYPES,
             state="readonly",
             width=12,
         )
         self._sort_type_combobox.grid(
-            row=2,
+            row=0,
             column=1,
             sticky="w",
             padx=(0, 10),
-            pady=(8, 0),
         )
 
         self._sort_type_combobox.bind(
@@ -519,19 +528,8 @@ class BookManagerApplication:
             self._on_sort_changed,
         )
 
-        sort_direction_frame = ttk.Frame(
-            search_frame,
-        )
-        sort_direction_frame.grid(
-            row=2,
-            column=2,
-            columnspan=2,
-            sticky="w",
-            pady=(8, 0),
-        )
-
         self._sort_descending_radio = ttk.Radiobutton(
-            sort_direction_frame,
+            sort_frame,
             text="降順",
             variable=self._sort_direction_var,
             value="descending",
@@ -539,12 +537,12 @@ class BookManagerApplication:
         )
         self._sort_descending_radio.grid(
             row=0,
-            column=0,
+            column=2,
             padx=(0, 10),
         )
 
         self._sort_ascending_radio = ttk.Radiobutton(
-            sort_direction_frame,
+            sort_frame,
             text="昇順",
             variable=self._sort_direction_var,
             value="ascending",
@@ -552,7 +550,7 @@ class BookManagerApplication:
         )
         self._sort_ascending_radio.grid(
             row=0,
-            column=1,
+            column=3,
         )
 
     def _on_tree_heading_click(
@@ -1256,7 +1254,7 @@ class BookManagerApplication:
         )
 
         button_frame.columnconfigure(
-            7,
+            8,
             weight=1,
         )
 
@@ -1356,7 +1354,7 @@ class BookManagerApplication:
         )
         self._exit_button.grid(
             row=0,
-            column=8,
+            column=9,
             sticky="e",
         )
 
