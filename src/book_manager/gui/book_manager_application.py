@@ -2559,7 +2559,7 @@ class BookManagerApplication:
                 Path(input_filename),
             )
 
-            self._refresh_book_list()
+            self._load_all_books()
 
             message_lines = [
                 "CSVインポートが完了しました。",

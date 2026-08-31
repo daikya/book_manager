@@ -26,7 +26,7 @@ def create_application() -> BookManagerApplication:
             errors=(),
         )
     )
-    application._refresh_book_list = Mock()
+    application._load_all_books = Mock()
 
     return application
 
@@ -85,7 +85,7 @@ def test_on_import_csv_refreshes_book_list_after_import() -> None:
     ):
         application._on_import_csv()
 
-    application._refresh_book_list.assert_called_once_with()
+    application._load_all_books.assert_called_once_with()
 
 
 def test_on_import_csv_shows_result_summary() -> None:
@@ -222,4 +222,4 @@ def test_on_import_csv_shows_error_when_import_fails() -> None:
         parent=application._root,
     )
 
-    application._refresh_book_list.assert_not_called()
+    application._load_all_books.assert_not_called()
