@@ -129,6 +129,7 @@ def main() -> None:
         service,
         csv_export_service,
         csv_import_service,
+        backup_service,
     )
 
     try:

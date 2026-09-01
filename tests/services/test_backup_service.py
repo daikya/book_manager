@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from book_manager.database.initializer import initialize_database
+from book_manager.database.schema import SCHEMA_VERSION
 from book_manager.services.backup_service import BackupService
 
 
@@ -32,6 +34,194 @@ def _create_test_database(database_path: Path) -> None:
         connection.commit()
     finally:
         connection.close()
+
+
+def _create_restore_source_database(
+    database_path: Path,
+    *,
+    schema_version: int = SCHEMA_VERSION,
+) -> None:
+    """復元テスト用Book Manager DBを作成する。"""
+    connection = sqlite3.connect(
+        database_path,
+    )
+
+    try:
+        connection.execute(
+            """
+            CREATE TABLE book_items (
+                id INTEGER PRIMARY KEY,
+                title TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO book_items (
+                title
+            )
+            VALUES (?)
+            """,
+            ("復元テスト書籍",),
+        )
+        connection.execute(
+            f"PRAGMA user_version = {schema_version}"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def _create_initialized_book_manager_database(
+    database_path: Path,
+    *,
+    marker: str,
+) -> None:
+    """実際のスキーマを使った復元テスト用DBを作成する。"""
+    initialize_database(
+        database_path,
+    )
+
+    connection = sqlite3.connect(
+        database_path,
+    )
+
+    try:
+        connection.execute(
+            """
+            CREATE TABLE restore_test_marker (
+                value TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO restore_test_marker (
+                value
+            )
+            VALUES (?)
+            """,
+            (marker,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def test_create_backup_creates_backup_without_interval_check(
+    tmp_path: Path,
+) -> None:
+    """時間間隔に関係なくバックアップを作成する。"""
+    database_path = tmp_path / "books.db"
+    backup_directory = tmp_path / "backups"
+
+    _create_test_database(
+        database_path,
+    )
+
+    backup_directory.mkdir()
+
+    existing_backup = (
+        backup_directory
+        / "books_20260901_100000.db"
+    )
+    existing_backup.touch()
+
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=backup_directory,
+        now_provider=lambda: datetime(
+            2026,
+            9,
+            1,
+            10,
+            30,
+            0,
+        ),
+    )
+
+    result = service.create_backup()
+
+    expected_path = (
+        backup_directory
+        / "books_20260901_103000.db"
+    )
+
+    assert result == expected_path
+    assert expected_path.is_file()
+
+
+def test_create_backup_returns_none_when_database_missing(
+    tmp_path: Path,
+) -> None:
+    """元DBが存在しない場合は強制バックアップしない。"""
+    backup_directory = tmp_path / "backups"
+
+    service = BackupService(
+        database_path=tmp_path / "books.db",
+        backup_directory=backup_directory,
+    )
+
+    result = service.create_backup()
+
+    assert result is None
+    assert not backup_directory.exists()
+
+
+def test_create_backup_removes_incomplete_file_on_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """強制バックアップ失敗時に不完全なファイルを削除する。"""
+    database_path = tmp_path / "books.db"
+    backup_directory = tmp_path / "backups"
+
+    _create_test_database(
+        database_path,
+    )
+
+    fixed_now = datetime(
+        2026,
+        9,
+        1,
+        10,
+        30,
+        0,
+    )
+
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=backup_directory,
+        now_provider=lambda: fixed_now,
+    )
+
+    expected_backup_path = (
+        backup_directory
+        / "books_20260901_103000.db"
+    )
+
+    def raise_backup_error(
+        backup_path: Path,
+    ) -> None:
+        backup_path.touch()
+
+        raise RuntimeError(
+            "backup failed"
+        )
+
+    monkeypatch.setattr(
+        service,
+        "_create_backup",
+        raise_backup_error,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="backup failed",
+    ):
+        service.create_backup()
+
+    assert not expected_backup_path.exists()
 
 
 def test_create_backup_if_needed_creates_first_backup(
@@ -385,3 +575,362 @@ def test_failed_backup_removes_incomplete_backup_file(
         service.create_backup_if_needed()
 
     assert not expected_backup_path.exists()
+
+
+def test_validate_restore_source_accepts_valid_database(
+    tmp_path: Path,
+) -> None:
+    """正常なBook Manager DBを復元元として受け入れる。"""
+    database_path = tmp_path / "books.db"
+    backup_path = tmp_path / "backup.db"
+
+    _create_restore_source_database(
+        backup_path,
+    )
+
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=tmp_path / "backups",
+    )
+
+    service._validate_restore_source(
+        backup_path,
+    )
+
+
+def test_validate_restore_source_rejects_missing_file(
+    tmp_path: Path,
+) -> None:
+    """存在しない復元元ファイルを拒否する。"""
+    service = BackupService(
+        database_path=tmp_path / "books.db",
+        backup_directory=tmp_path / "backups",
+    )
+
+    with pytest.raises(
+        FileNotFoundError,
+        match="存在しません",
+    ):
+        service._validate_restore_source(
+            tmp_path / "missing.db",
+        )
+
+
+def test_validate_restore_source_rejects_non_sqlite_file(
+    tmp_path: Path,
+) -> None:
+    """SQLiteではないファイルを拒否する。"""
+    backup_path = tmp_path / "backup.db"
+    backup_path.write_text(
+        "not a sqlite database",
+        encoding="utf-8",
+    )
+
+    service = BackupService(
+        database_path=tmp_path / "books.db",
+        backup_directory=tmp_path / "backups",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="正常なSQLite",
+    ):
+        service._validate_restore_source(
+            backup_path,
+        )
+
+
+def test_validate_restore_source_rejects_non_book_manager_database(
+    tmp_path: Path,
+) -> None:
+    """book_itemsテーブルがないDBを拒否する。"""
+    backup_path = tmp_path / "backup.db"
+
+    _create_test_database(
+        backup_path,
+    )
+
+    service = BackupService(
+        database_path=tmp_path / "books.db",
+        backup_directory=tmp_path / "backups",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Book Manager",
+    ):
+        service._validate_restore_source(
+            backup_path,
+        )
+
+
+def test_validate_restore_source_accepts_older_schema_version(
+    tmp_path: Path,
+) -> None:
+    """古いスキーマVersionのDBを復元元として受け入れる。"""
+    backup_path = tmp_path / "backup.db"
+
+    _create_restore_source_database(
+        backup_path,
+        schema_version=max(
+            0,
+            SCHEMA_VERSION - 1,
+        ),
+    )
+
+    service = BackupService(
+        database_path=tmp_path / "books.db",
+        backup_directory=tmp_path / "backups",
+    )
+
+    service._validate_restore_source(
+        backup_path,
+    )
+
+
+def test_validate_restore_source_rejects_newer_schema_version(
+    tmp_path: Path,
+) -> None:
+    """現在より新しいスキーマVersionのDBを拒否する。"""
+    backup_path = tmp_path / "backup.db"
+
+    _create_restore_source_database(
+        backup_path,
+        schema_version=SCHEMA_VERSION + 1,
+    )
+
+    service = BackupService(
+        database_path=tmp_path / "books.db",
+        backup_directory=tmp_path / "backups",
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="対応していません",
+    ):
+        service._validate_restore_source(
+            backup_path,
+        )
+
+
+def test_restore_backup_replaces_current_database(
+    tmp_path: Path,
+) -> None:
+    """バックアップの内容で現在DBを置き換える。"""
+    database_path = tmp_path / "books.db"
+    backup_path = tmp_path / "restore_source.db"
+    backup_directory = tmp_path / "backups"
+
+    _create_initialized_book_manager_database(
+        database_path,
+        marker="current-data",
+    )
+    _create_initialized_book_manager_database(
+        backup_path,
+        marker="backup-data",
+    )
+
+    fixed_now = datetime(
+        2026,
+        9,
+        1,
+        11,
+        0,
+        0,
+    )
+
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=backup_directory,
+        now_provider=lambda: fixed_now,
+    )
+
+    service.restore_backup(
+        backup_path,
+    )
+
+    connection = sqlite3.connect(
+        database_path,
+    )
+
+    try:
+        row = connection.execute(
+            """
+            SELECT value
+            FROM restore_test_marker
+            """
+        ).fetchone()
+    finally:
+        connection.close()
+
+    assert row is not None
+    assert row[0] == "backup-data"
+
+
+def test_restore_backup_creates_safety_backup(
+    tmp_path: Path,
+) -> None:
+    """復元前の現在DBを安全バックアップとして保存する。"""
+    database_path = tmp_path / "books.db"
+    backup_path = tmp_path / "restore_source.db"
+    backup_directory = tmp_path / "backups"
+
+    _create_initialized_book_manager_database(
+        database_path,
+        marker="current-data",
+    )
+    _create_initialized_book_manager_database(
+        backup_path,
+        marker="backup-data",
+    )
+
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=backup_directory,
+        now_provider=lambda: datetime(
+            2026,
+            9,
+            1,
+            11,
+            0,
+            0,
+        ),
+    )
+
+    service.restore_backup(
+        backup_path,
+    )
+
+    safety_backup_path = (
+        backup_directory
+        / "books_20260901_110000.db"
+    )
+
+    assert safety_backup_path.is_file()
+
+    connection = sqlite3.connect(
+        safety_backup_path,
+    )
+
+    try:
+        row = connection.execute(
+            """
+            SELECT value
+            FROM restore_test_marker
+            """
+        ).fetchone()
+    finally:
+        connection.close()
+
+    assert row is not None
+    assert row[0] == "current-data"
+
+
+def test_restore_backup_does_not_change_database_when_source_invalid(
+    tmp_path: Path,
+) -> None:
+    """復元元検証失敗時に現在DBを変更しない。"""
+    database_path = tmp_path / "books.db"
+    backup_path = tmp_path / "invalid.db"
+    backup_directory = tmp_path / "backups"
+
+    _create_initialized_book_manager_database(
+        database_path,
+        marker="current-data",
+    )
+
+    backup_path.write_text(
+        "not a sqlite database",
+        encoding="utf-8",
+    )
+
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=backup_directory,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="正常なSQLite",
+    ):
+        service.restore_backup(
+            backup_path,
+        )
+
+    connection = sqlite3.connect(
+        database_path,
+    )
+
+    try:
+        row = connection.execute(
+            """
+            SELECT value
+            FROM restore_test_marker
+            """
+        ).fetchone()
+    finally:
+        connection.close()
+
+    assert row is not None
+    assert row[0] == "current-data"
+    assert not backup_directory.exists()
+
+
+def test_restore_backup_does_not_change_database_when_safety_backup_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """復元前バックアップ失敗時に現在DBを変更しない。"""
+    database_path = tmp_path / "books.db"
+    backup_path = tmp_path / "restore_source.db"
+    backup_directory = tmp_path / "backups"
+
+    _create_initialized_book_manager_database(
+        database_path,
+        marker="current-data",
+    )
+    _create_initialized_book_manager_database(
+        backup_path,
+        marker="backup-data",
+    )
+
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=backup_directory,
+    )
+
+    def raise_backup_error() -> Path | None:
+        raise RuntimeError(
+            "safety backup failed"
+        )
+
+    monkeypatch.setattr(
+        service,
+        "create_backup",
+        raise_backup_error,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="safety backup failed",
+    ):
+        service.restore_backup(
+            backup_path,
+        )
+
+    connection = sqlite3.connect(
+        database_path,
+    )
+
+    try:
+        row = connection.execute(
+            """
+            SELECT value
+            FROM restore_test_marker
+            """
+        ).fetchone()
+    finally:
+        connection.close()
+
+    assert row is not None
+    assert row[0] == "current-data"

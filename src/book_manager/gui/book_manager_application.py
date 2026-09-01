@@ -24,6 +24,7 @@ from book_manager.metadata.exceptions import (
 )
 
 if TYPE_CHECKING:
+    from book_manager.services.backup_service import BackupService
     from book_manager.services.book_service import BookService
     from book_manager.services.csv_export_service import (
         CsvExportService,
@@ -31,6 +32,7 @@ if TYPE_CHECKING:
     from book_manager.services.csv_import_service import (
         CsvImportService,
     )
+
 
 class BookManagerApplication:
     """書籍管理アプリケーションのメインウィンドウを管理する。"""
@@ -134,17 +136,22 @@ class BookManagerApplication:
         service: BookService,
         csv_export_service: CsvExportService,
         csv_import_service: CsvImportService,
+        backup_service: BackupService,
     ) -> None:
         """GUIを初期化する。
 
         Args:
             root: Tkinterのルートウィンドウ。
             service: 書籍管理処理を提供するBookService。
+            backup_service:
+                データベースのバックアップ・復元処理を提供する
+                BackupService。
         """
         self._root = root
         self._service = service
         self._csv_export_service = csv_export_service
         self._csv_import_service = csv_import_service
+        self._backup_service = backup_service
         self._selected_book_id: int | None = None
         self._cover_photo: tk.PhotoImage | None = None
         self._current_cover_image_url: str | None = None
@@ -1254,7 +1261,7 @@ class BookManagerApplication:
         )
 
         button_frame.columnconfigure(
-            8,
+            9,
             weight=1,
         )
 
@@ -1347,6 +1354,17 @@ class BookManagerApplication:
             padx=(0, 6),
         )
 
+        self._backup_restore_button = ttk.Button(
+            button_frame,
+            text="バックアップ復元",
+            command=self._on_restore_backup,
+        )
+        self._backup_restore_button.grid(
+            row=0,
+            column=8,
+            padx=(0, 6),
+        )
+
         self._exit_button = ttk.Button(
             button_frame,
             text="終了",
@@ -1354,7 +1372,7 @@ class BookManagerApplication:
         )
         self._exit_button.grid(
             row=0,
-            column=9,
+            column=10,
             sticky="e",
         )
 
@@ -2604,6 +2622,63 @@ class BookManagerApplication:
             messagebox.showerror(
                 "CSVインポートエラー",
                 "CSVファイルをインポートできませんでした。",
+                parent=self._root,
+            )
+
+    def _on_restore_backup(self) -> None:
+        """バックアップからデータベースを復元する。"""
+        backup_filename = filedialog.askopenfilename(
+            title="復元するバックアップを選択",
+            filetypes=[
+                (
+                    "SQLiteデータベース",
+                    "*.db",
+                ),
+                (
+                    "すべてのファイル",
+                    "*.*",
+                ),
+            ],
+        )
+
+        if not backup_filename:
+            return
+
+        confirmed = messagebox.askyesno(
+            "バックアップ復元の確認",
+            (
+                "バックアップからデータを復元します。\n\n"
+                "現在のデータは復元前にバックアップされます。\n"
+                "復元すると、現在のデータは選択した"
+                "バックアップ時点の状態に置き換わります。\n\n"
+                "続行しますか？"
+            ),
+            parent=self._root,
+        )
+
+        if not confirmed:
+            return
+
+        try:
+            self._backup_service.restore_backup(
+                Path(backup_filename),
+            )
+
+            self._selected_book_id = None
+            self._load_all_books()
+
+            messagebox.showinfo(
+                "バックアップ復元完了",
+                "バックアップからデータを復元しました。",
+                parent=self._root,
+            )
+
+        except Exception:
+            traceback.print_exc()
+
+            messagebox.showerror(
+                "バックアップ復元エラー",
+                "バックアップからデータを復元できませんでした。",
                 parent=self._root,
             )
 

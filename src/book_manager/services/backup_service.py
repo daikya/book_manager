@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from book_manager.database.connection import create_connection
+from book_manager.database.initializer import initialize_database
+from book_manager.database.schema import SCHEMA_VERSION
 
 
 class BackupService:
@@ -60,17 +62,14 @@ class BackupService:
         self._backup_interval = backup_interval
         self._max_backups = max_backups
 
-    def create_backup_if_needed(self) -> Path | None:
-        """必要な場合のみデータベースをバックアップする。
+    def create_backup(self) -> Path | None:
+        """現在のデータベースを無条件でバックアップする。
 
         Returns:
             バックアップを作成した場合はそのPath。
-            バックアップ不要または元DBが存在しない場合はNone。
+            元DBが存在しない場合はNone。
         """
         if not self._database_path.is_file():
-            return None
-
-        if not self._is_backup_needed():
             return None
 
         self._backup_directory.mkdir(
@@ -93,6 +92,191 @@ class BackupService:
         self._remove_old_backups()
 
         return backup_path
+
+    def create_backup_if_needed(self) -> Path | None:
+        """必要な場合のみデータベースをバックアップする。
+
+        Returns:
+            バックアップを作成した場合はそのPath。
+            バックアップ不要または元DBが存在しない場合はNone。
+        """
+        if not self._database_path.is_file():
+            return None
+
+        if not self._is_backup_needed():
+            return None
+
+        return self.create_backup()
+
+    def restore_backup(
+        self,
+        backup_path: Path,
+    ) -> None:
+        """指定されたバックアップからデータベースを復元する。
+
+        復元元を検証したあと、現在のデータベースを
+        強制バックアップしてから復元する。
+
+        Args:
+            backup_path:
+                復元元SQLiteデータベース。
+
+        Raises:
+            FileNotFoundError:
+                復元元または現在のDBが存在しない場合。
+            ValueError:
+                復元元DBが不正な場合。
+            RuntimeError:
+                対応していないスキーマVersionの場合。
+        """
+        resolved_backup_path = Path(
+            backup_path,
+        )
+
+        self._validate_restore_source(
+            resolved_backup_path,
+        )
+
+        safety_backup_path = self.create_backup()
+
+        if safety_backup_path is None:
+            raise FileNotFoundError(
+                "復元前のデータベースが存在しません。"
+            )
+
+        source_uri = (
+            resolved_backup_path
+            .resolve()
+            .as_uri()
+            + "?mode=ro"
+        )
+
+        source_connection = sqlite3.connect(
+            source_uri,
+            uri=True,
+        )
+        destination_connection = create_connection(
+            self._database_path,
+        )
+
+        try:
+            source_connection.backup(
+                destination_connection,
+            )
+        finally:
+            destination_connection.close()
+            source_connection.close()
+
+        initialize_database(
+            self._database_path,
+        )
+
+        self._validate_restore_source(
+            self._database_path,
+        )
+
+    def _validate_restore_source(
+        self,
+        backup_path: Path,
+    ) -> None:
+        """復元元データベースが利用可能か検証する。
+
+        Args:
+            backup_path:
+                復元元SQLiteデータベース。
+
+        Raises:
+            FileNotFoundError:
+                復元元ファイルが存在しない場合。
+            ValueError:
+                SQLiteデータベースとして不正、
+                データベースが破損している、
+                またはBook Manager用DBではない場合。
+            RuntimeError:
+                復元元DBのスキーマVersionが、
+                現在のアプリケーションより新しい場合。
+        """
+        resolved_backup_path = Path(
+            backup_path,
+        )
+
+        if not resolved_backup_path.is_file():
+            raise FileNotFoundError(
+                "復元元データベースが存在しません。"
+            )
+
+        connection: sqlite3.Connection | None = None
+
+        try:
+            database_uri = (
+                resolved_backup_path
+                .resolve()
+                .as_uri()
+                + "?mode=ro"
+            )
+
+            connection = sqlite3.connect(
+                database_uri,
+                uri=True,
+            )
+
+            integrity_row = connection.execute(
+                "PRAGMA integrity_check"
+            ).fetchone()
+
+            if (
+                integrity_row is None
+                or str(integrity_row[0]).lower() != "ok"
+            ):
+                raise ValueError(
+                    "復元元データベースが破損しています。"
+                )
+
+            book_items_row = connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name = 'book_items'
+                """
+            ).fetchone()
+
+            if book_items_row is None:
+                raise ValueError(
+                    "復元元データベースは"
+                    "Book Manager用ではありません。"
+                )
+
+            version_row = connection.execute(
+                "PRAGMA user_version"
+            ).fetchone()
+
+            if version_row is None:
+                raise ValueError(
+                    "復元元データベースの"
+                    "スキーマVersionを取得できませんでした。"
+                )
+
+            backup_schema_version = int(
+                version_row[0],
+            )
+
+            if backup_schema_version > SCHEMA_VERSION:
+                raise RuntimeError(
+                    "このバックアップのスキーマVersionは、"
+                    "現在のアプリケーションでは対応していません。"
+                    f" backup={backup_schema_version}, "
+                    f"application={SCHEMA_VERSION}"
+                )
+
+        except sqlite3.DatabaseError as error:
+            raise ValueError(
+                "復元元ファイルは正常な"
+                "SQLiteデータベースではありません。"
+            ) from error
+        finally:
+            if connection is not None:
+                connection.close()
 
     def _is_backup_needed(self) -> bool:
         """新しいバックアップが必要か判定する。"""
