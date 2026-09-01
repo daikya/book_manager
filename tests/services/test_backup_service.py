@@ -899,7 +899,10 @@ def test_restore_backup_does_not_change_database_when_safety_backup_fails(
         backup_directory=backup_directory,
     )
 
-    def raise_backup_error() -> Path | None:
+    def raise_backup_error(
+        *,
+        protected_paths: set[Path] | None = None,
+    ) -> Path | None:
         raise RuntimeError(
             "safety backup failed"
         )
@@ -934,3 +937,101 @@ def test_restore_backup_does_not_change_database_when_safety_backup_fails(
 
     assert row is not None
     assert row[0] == "current-data"
+
+
+def test_restore_backup_preserves_selected_oldest_backup_during_cleanup(
+    tmp_path: Path,
+) -> None:
+    """復元元に選択した最古バックアップを世代整理で削除しない。"""
+    database_path = tmp_path / "books.db"
+    backup_directory = tmp_path / "backups"
+
+    _create_initialized_book_manager_database(
+        database_path,
+        marker="current-data",
+    )
+
+    backup_directory.mkdir()
+
+    restore_source_path = (
+        backup_directory
+        / "books_20260801_120000.db"
+    )
+
+    _create_initialized_book_manager_database(
+        restore_source_path,
+        marker="restore-data",
+    )
+
+    start = datetime(
+        2026,
+        8,
+        2,
+        12,
+        0,
+        0,
+    )
+
+    for index in range(9):
+        backup_datetime = (
+            start
+            + timedelta(days=index)
+        )
+
+        backup_path = (
+            backup_directory
+            / (
+                "books_"
+                f"{backup_datetime:%Y%m%d_%H%M%S}"
+                ".db"
+            )
+        )
+
+        _create_initialized_book_manager_database(
+            backup_path,
+            marker=f"backup-{index}",
+        )
+
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=backup_directory,
+        now_provider=lambda: datetime(
+            2026,
+            9,
+            1,
+            12,
+            0,
+            0,
+        ),
+        max_backups=10,
+    )
+
+    service.restore_backup(
+        restore_source_path,
+    )
+
+    connection = sqlite3.connect(
+        database_path,
+    )
+
+    try:
+        row = connection.execute(
+            """
+            SELECT value
+            FROM restore_test_marker
+            """
+        ).fetchone()
+    finally:
+        connection.close()
+
+    assert row is not None
+    assert row[0] == "restore-data"
+    assert restore_source_path.is_file()
+
+    backup_files = list(
+        backup_directory.glob(
+            "books_*.db"
+        )
+    )
+
+    assert len(backup_files) == 10

@@ -62,8 +62,16 @@ class BackupService:
         self._backup_interval = backup_interval
         self._max_backups = max_backups
 
-    def create_backup(self) -> Path | None:
+    def create_backup(
+        self,
+        *,
+        protected_paths: set[Path] | None = None,
+    ) -> Path | None:
         """現在のデータベースを無条件でバックアップする。
+
+        Args:
+            protected_paths:
+                世代整理で削除しないバックアップファイル。
 
         Returns:
             バックアップを作成した場合はそのPath。
@@ -89,7 +97,9 @@ class BackupService:
 
             raise
 
-        self._remove_old_backups()
+        self._remove_old_backups(
+            protected_paths=protected_paths,
+        )
 
         return backup_path
 
@@ -137,7 +147,11 @@ class BackupService:
             resolved_backup_path,
         )
 
-        safety_backup_path = self.create_backup()
+        safety_backup_path = self.create_backup(
+            protected_paths={
+                resolved_backup_path.resolve(),
+            },
+        )
 
         if safety_backup_path is None:
             raise FileNotFoundError(
@@ -362,8 +376,17 @@ class BackupService:
             backup_connection.close()
             source_connection.close()
 
-    def _remove_old_backups(self) -> None:
-        """保持数を超えた古いバックアップを削除する。"""
+    def _remove_old_backups(
+        self,
+        *,
+        protected_paths: set[Path] | None = None,
+    ) -> None:
+        """保持数を超えた古いバックアップを削除する。
+
+        Args:
+            protected_paths:
+                世代整理で削除しないバックアップファイル。
+        """
         backup_files = self._get_backup_files()
 
         excess_count = (
@@ -374,7 +397,22 @@ class BackupService:
         if excess_count <= 0:
             return
 
-        for backup_path in backup_files[:excess_count]:
+        protected_resolved_paths = {
+            path.resolve()
+            for path in (
+                protected_paths
+                or set()
+            )
+        }
+
+        removable_backup_files = [
+            backup_path
+            for backup_path in backup_files
+            if backup_path.resolve()
+            not in protected_resolved_paths
+        ]
+
+        for backup_path in removable_backup_files[:excess_count]:
             backup_path.unlink()
 
     @classmethod
