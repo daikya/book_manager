@@ -47,6 +47,7 @@ docs/
 ├── favorite_design.md
 ├── rating_design.md
 ├── reading_status_design.md
+├── reading_information_sort_design.md
 ├── search_filter_design.md
 │
 ├── adr/
@@ -153,6 +154,10 @@ book_manager全体の開発方針および運用ルールを定義する。
 ### `reading_status_design.md`
 
 Version 1.3で追加した読書ステータス管理機能を定義する。
+
+### `reading_information_sort_design.md`
+
+Version 1.6で追加した読書状態・お気に入り・評価による並べ替え機能を定義する。
 
 ### `favorite_design.md`
 
@@ -508,7 +513,7 @@ docs/development_guidelines.md
 
 ## 18. 現在の状態
 
-book_managerはVersion 1.5.0まで正式リリース済みである。
+book_managerはVersion 1.5.0まで正式リリース済みであり、Version 1.6.0のリリース準備を進めている。
 
 Version 1.0では基本的な書籍管理機能を完成させた。
 
@@ -543,6 +548,14 @@ Version 1.5では、蔵書の絞り込みと検索機能の強化として次の
 - 既存の書籍情報と読書情報を組み合わせたAND検索
 - 検索GUIの改善
 - 起動時ウィンドウ表示の改善
+
+Version 1.6では、読書情報の並べ替え機能の強化として次の機能を実装した。
+
+- 読書状態による並べ替え
+- お気に入り状態による並べ替え
+- 未評価を含む評価による並べ替え
+- 読書情報3項目の一覧ヘッダークリックソート
+- 検索・絞り込み条件を維持した並べ替え
 
 今後の開発内容は、
 
