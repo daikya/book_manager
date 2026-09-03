@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 from PIL import Image, ImageTk
 from pathlib import Path
 from datetime import datetime
+import ctypes
+import sys
 
 from book_manager.models.book_item import BookItem
 from book_manager.models.fetched_book_data import (
@@ -116,6 +118,54 @@ class BookManagerApplication:
         "★★★★★",
     )
 
+    SEARCH_READING_STATUS_VALUES = {
+        "すべて": None,
+        "未設定": "unset",
+        "未読": "unread",
+        "読書中": "reading",
+        "読了": "completed",
+    }
+
+    SEARCH_READING_STATUS_OPTIONS = (
+        "すべて",
+        "未設定",
+        "未読",
+        "読書中",
+        "読了",
+    )
+
+    SEARCH_FAVORITE_VALUES = {
+        "すべて": None,
+        "お気に入りのみ": "favorite",
+        "お気に入り以外": "not_favorite",
+    }
+
+    SEARCH_FAVORITE_OPTIONS = (
+        "すべて",
+        "お気に入りのみ",
+        "お気に入り以外",
+    )
+
+    SEARCH_RATING_VALUES = {
+        "すべて": None,
+        "未評価": "unrated",
+        "★1以上": 1,
+        "★2以上": 2,
+        "★3以上": 3,
+        "★4以上": 4,
+        "★5": 5,
+    }
+
+    SEARCH_RATING_OPTIONS = (
+        "すべて",
+        "未評価",
+        "★1以上",
+        "★2以上",
+        "★3以上",
+        "★4以上",
+        "★5",
+    )
+
     TREE_COLUMNS = (
         "id",
         "title",
@@ -175,6 +225,18 @@ class BookManagerApplication:
         self._search_magazine_code_var = tk.StringVar(
             master=self._root,
         )
+        self._search_reading_status_var = tk.StringVar(
+            master=self._root,
+            value="すべて",
+        )
+        self._search_favorite_var = tk.StringVar(
+            master=self._root,
+            value="すべて",
+        )
+        self._search_rating_var = tk.StringVar(
+            master=self._root,
+            value="すべて",
+        )
 
         self._sort_type_var = tk.StringVar(
             master=self._root,
@@ -232,10 +294,71 @@ class BookManagerApplication:
 
         self._title_entry.focus_set()
 
+    def _get_available_screen_size(
+        self,
+    ) -> tuple[int, int]:
+        """利用可能な画面領域のサイズを取得する。"""
+        if sys.platform != "win32":
+            return (
+                self._root.winfo_screenwidth(),
+                self._root.winfo_screenheight(),
+            )
+
+        class Rect(ctypes.Structure):
+            """Windowsの矩形情報を表す。"""
+
+            _fields_ = [
+                ("left", ctypes.c_long),
+                ("top", ctypes.c_long),
+                ("right", ctypes.c_long),
+                ("bottom", ctypes.c_long),
+            ]
+
+        work_area = Rect()
+
+        success = ctypes.windll.user32.SystemParametersInfoW(
+            0x0030,
+            0,
+            ctypes.byref(work_area),
+            0,
+        )
+
+        if not success:
+            return (
+                self._root.winfo_screenwidth(),
+                self._root.winfo_screenheight(),
+            )
+
+        return (
+            work_area.right - work_area.left,
+            work_area.bottom - work_area.top,
+        )
+
     def _configure_root(self) -> None:
         """メインウィンドウを設定する。"""
         self._root.title(self.WINDOW_TITLE)
-        self._root.geometry(self.WINDOW_SIZE)
+
+        window_width = 1350
+        window_height = 800
+
+        screen_width, screen_height = (
+            self._get_available_screen_size()
+        )
+
+        position_x = max(
+            0,
+            (screen_width - window_width) // 2,
+        )
+        position_y = max(
+            0,
+            (screen_height - window_height) // 2,
+        )
+
+        self._root.geometry(
+            f"{window_width}x{window_height}"
+            f"+{position_x}+{position_y}"
+        )
+
         self._root.minsize(
             self.MINIMUM_WIDTH,
             self.MINIMUM_HEIGHT,
@@ -330,18 +453,17 @@ class BookManagerApplication:
             pady=(0, 8),
         )
 
-        search_frame.columnconfigure(
+        for column in (
             1,
-            weight=1,
-        )
-        search_frame.columnconfigure(
             3,
-            weight=1,
-        )
-        search_frame.columnconfigure(
             5,
-            weight=1,
-        )
+            7,
+            9,
+        ):
+            search_frame.columnconfigure(
+                column,
+                weight=1,
+            )
 
         ttk.Label(
             search_frame,
@@ -356,6 +478,7 @@ class BookManagerApplication:
         self._search_title_entry = ttk.Entry(
             search_frame,
             textvariable=self._search_title_var,
+            width=18,
         )
         self._search_title_entry.grid(
             row=0,
@@ -381,6 +504,7 @@ class BookManagerApplication:
         self._search_author_entry = ttk.Entry(
             search_frame,
             textvariable=self._search_author_var,
+            width=16,
         )
         self._search_author_entry.grid(
             row=0,
@@ -406,11 +530,13 @@ class BookManagerApplication:
         self._search_publisher_entry = ttk.Entry(
             search_frame,
             textvariable=self._search_publisher_var,
+            width=14,
         )
         self._search_publisher_entry.grid(
             row=0,
             column=5,
             sticky="ew",
+            padx=(0, 10),
         )
         self._search_publisher_entry.bind(
             "<Return>",
@@ -421,23 +547,22 @@ class BookManagerApplication:
             search_frame,
             text="ISBN",
         ).grid(
-            row=1,
-            column=0,
+            row=0,
+            column=6,
             sticky="w",
             padx=(0, 6),
-            pady=(8, 0),
         )
 
         self._search_isbn_entry = ttk.Entry(
             search_frame,
             textvariable=self._search_isbn_var,
+            width=14,
         )
         self._search_isbn_entry.grid(
-            row=1,
-            column=1,
+            row=0,
+            column=7,
             sticky="ew",
             padx=(0, 10),
-            pady=(8, 0),
         )
         self._search_isbn_entry.bind(
             "<Return>",
@@ -448,6 +573,57 @@ class BookManagerApplication:
             search_frame,
             text="雑誌コード",
         ).grid(
+            row=0,
+            column=8,
+            sticky="w",
+            padx=(0, 6),
+        )
+
+        self._search_magazine_code_entry = ttk.Entry(
+            search_frame,
+            textvariable=self._search_magazine_code_var,
+            width=10,
+        )
+        self._search_magazine_code_entry.grid(
+            row=0,
+            column=9,
+            sticky="ew",
+        )
+        self._search_magazine_code_entry.bind(
+            "<Return>",
+            self._on_search,
+        )
+
+        ttk.Label(
+            search_frame,
+            text="読書状態",
+        ).grid(
+            row=1,
+            column=0,
+            sticky="w",
+            padx=(0, 6),
+            pady=(8, 0),
+        )
+
+        self._search_reading_status_combobox = ttk.Combobox(
+            search_frame,
+            textvariable=self._search_reading_status_var,
+            values=self.SEARCH_READING_STATUS_OPTIONS,
+            state="readonly",
+            width=10,
+        )
+        self._search_reading_status_combobox.grid(
+            row=1,
+            column=1,
+            sticky="w",
+            padx=(0, 10),
+            pady=(8, 0),
+        )
+
+        ttk.Label(
+            search_frame,
+            text="お気に入り",
+        ).grid(
             row=1,
             column=2,
             sticky="w",
@@ -455,20 +631,45 @@ class BookManagerApplication:
             pady=(8, 0),
         )
 
-        self._search_magazine_code_entry = ttk.Entry(
+        self._search_favorite_combobox = ttk.Combobox(
             search_frame,
-            textvariable=self._search_magazine_code_var,
+            textvariable=self._search_favorite_var,
+            values=self.SEARCH_FAVORITE_OPTIONS,
+            state="readonly",
+            width=14,
         )
-        self._search_magazine_code_entry.grid(
+        self._search_favorite_combobox.grid(
             row=1,
             column=3,
-            sticky="ew",
+            sticky="w",
             padx=(0, 10),
             pady=(8, 0),
         )
-        self._search_magazine_code_entry.bind(
-            "<Return>",
-            self._on_search,
+
+        ttk.Label(
+            search_frame,
+            text="評価",
+        ).grid(
+            row=1,
+            column=4,
+            sticky="w",
+            padx=(0, 6),
+            pady=(8, 0),
+        )
+
+        self._search_rating_combobox = ttk.Combobox(
+            search_frame,
+            textvariable=self._search_rating_var,
+            values=self.SEARCH_RATING_OPTIONS,
+            state="readonly",
+            width=10,
+        )
+        self._search_rating_combobox.grid(
+            row=1,
+            column=5,
+            sticky="w",
+            padx=(0, 10),
+            pady=(8, 0),
         )
 
         self._search_button = ttk.Button(
@@ -478,7 +679,7 @@ class BookManagerApplication:
         )
         self._search_button.grid(
             row=1,
-            column=4,
+            column=6,
             padx=(0, 6),
             pady=(8, 0),
         )
@@ -490,7 +691,8 @@ class BookManagerApplication:
         )
         self._clear_search_button.grid(
             row=1,
-            column=5,
+            column=7,
+            columnspan=3,
             sticky="w",
             pady=(8, 0),
         )
@@ -2001,19 +2203,38 @@ class BookManagerApplication:
         self,
     ) -> list[BookItem]:
         """現在の検索条件に一致する書籍一覧を取得する。"""
+        reading_status_filter = (
+            self.SEARCH_READING_STATUS_VALUES[
+                self._search_reading_status_var.get()
+            ]
+        )
+        favorite_filter = (
+            self.SEARCH_FAVORITE_VALUES[
+                self._search_favorite_var.get()
+            ]
+        )
+        rating_filter = (
+            self.SEARCH_RATING_VALUES[
+                self._search_rating_var.get()
+            ]
+        )
+
         return self._service.search_books(
             title=self._search_title_var.get(),
             author=self._search_author_var.get(),
             publisher=self._search_publisher_var.get(),
             isbn=self._search_isbn_var.get(),
             magazine_code=self._search_magazine_code_var.get(),
+            reading_status_filter=reading_status_filter,
+            favorite_filter=favorite_filter,
+            rating_filter=rating_filter,
         )
 
     def _has_search_conditions(
         self,
     ) -> bool:
         """検索条件が1つ以上入力されているか判定する。"""
-        return any(
+        has_text_condition = any(
             value.strip()
             for value in (
                 self._search_title_var.get(),
@@ -2022,6 +2243,20 @@ class BookManagerApplication:
                 self._search_isbn_var.get(),
                 self._search_magazine_code_var.get(),
             )
+        )
+
+        has_filter_condition = any(
+            value != "すべて"
+            for value in (
+                self._search_reading_status_var.get(),
+                self._search_favorite_var.get(),
+                self._search_rating_var.get(),
+            )
+        )
+
+        return (
+            has_text_condition
+            or has_filter_condition
         )
 
 # ここからイベントハンドラ
@@ -2072,6 +2307,15 @@ class BookManagerApplication:
         self._search_publisher_var.set("")
         self._search_isbn_var.set("")
         self._search_magazine_code_var.set("")
+        self._search_reading_status_var.set(
+            "すべて"
+        )
+        self._search_favorite_var.set(
+            "すべて"
+        )
+        self._search_rating_var.set(
+            "すべて"
+        )
 
         self._load_all_books()
 

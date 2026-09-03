@@ -20,12 +20,15 @@ def create_application() -> BookManagerApplication:
     application._search_publisher_var = Mock()
     application._search_isbn_var = Mock()
     application._search_magazine_code_var = Mock()
+    application._search_reading_status_var = Mock()
+    application._search_favorite_var = Mock()
+    application._search_rating_var = Mock()
 
     return application
 
 
 def test_get_filtered_books_passes_all_search_conditions() -> None:
-    """5つの検索条件をServiceへ渡す。"""
+    """8つの検索条件をServiceへ渡す。"""
     application = create_application()
 
     application._search_title_var.get.return_value = "書籍名"
@@ -34,6 +37,15 @@ def test_get_filtered_books_passes_all_search_conditions() -> None:
     application._search_isbn_var.get.return_value = "ISBN"
     application._search_magazine_code_var.get.return_value = (
         "雑誌コード"
+    )
+    application._search_reading_status_var.get.return_value = (
+        "読了"
+    )
+    application._search_favorite_var.get.return_value = (
+        "お気に入りのみ"
+    )
+    application._search_rating_var.get.return_value = (
+        "★3以上"
     )
 
     expected = [
@@ -51,11 +63,14 @@ def test_get_filtered_books_passes_all_search_conditions() -> None:
         publisher="出版社",
         isbn="ISBN",
         magazine_code="雑誌コード",
+        reading_status_filter="completed",
+        favorite_filter="favorite",
+        rating_filter=3,
     )
 
 
 def test_has_search_conditions_returns_false_when_all_blank() -> None:
-    """すべての検索条件が空欄ならFalseを返す。"""
+    """すべての検索条件が初期状態ならFalseを返す。"""
     application = create_application()
 
     application._search_title_var.get.return_value = ""
@@ -63,6 +78,15 @@ def test_has_search_conditions_returns_false_when_all_blank() -> None:
     application._search_publisher_var.get.return_value = ""
     application._search_isbn_var.get.return_value = "   "
     application._search_magazine_code_var.get.return_value = ""
+    application._search_reading_status_var.get.return_value = (
+        "すべて"
+    )
+    application._search_favorite_var.get.return_value = (
+        "すべて"
+    )
+    application._search_rating_var.get.return_value = (
+        "すべて"
+    )
 
     assert application._has_search_conditions() is False
 
@@ -76,12 +100,87 @@ def test_has_search_conditions_returns_true_when_condition_exists() -> None:
     application._search_publisher_var.get.return_value = ""
     application._search_isbn_var.get.return_value = ""
     application._search_magazine_code_var.get.return_value = ""
+    application._search_reading_status_var.get.return_value = (
+        "すべて"
+    )
+    application._search_favorite_var.get.return_value = (
+        "すべて"
+    )
+    application._search_rating_var.get.return_value = (
+        "すべて"
+    )
+
+    assert application._has_search_conditions() is True
+
+
+def test_has_search_conditions_returns_true_for_reading_status() -> None:
+    """読書状態だけ指定されていてもTrueを返す。"""
+    application = create_application()
+
+    application._search_title_var.get.return_value = ""
+    application._search_author_var.get.return_value = ""
+    application._search_publisher_var.get.return_value = ""
+    application._search_isbn_var.get.return_value = ""
+    application._search_magazine_code_var.get.return_value = ""
+    application._search_reading_status_var.get.return_value = (
+        "読了"
+    )
+    application._search_favorite_var.get.return_value = (
+        "すべて"
+    )
+    application._search_rating_var.get.return_value = (
+        "すべて"
+    )
+
+    assert application._has_search_conditions() is True
+
+
+def test_has_search_conditions_returns_true_for_favorite() -> None:
+    """お気に入りだけ指定されていてもTrueを返す。"""
+    application = create_application()
+
+    application._search_title_var.get.return_value = ""
+    application._search_author_var.get.return_value = ""
+    application._search_publisher_var.get.return_value = ""
+    application._search_isbn_var.get.return_value = ""
+    application._search_magazine_code_var.get.return_value = ""
+    application._search_reading_status_var.get.return_value = (
+        "すべて"
+    )
+    application._search_favorite_var.get.return_value = (
+        "お気に入りのみ"
+    )
+    application._search_rating_var.get.return_value = (
+        "すべて"
+    )
+
+    assert application._has_search_conditions() is True
+
+
+def test_has_search_conditions_returns_true_for_rating() -> None:
+    """評価だけ指定されていてもTrueを返す。"""
+    application = create_application()
+
+    application._search_title_var.get.return_value = ""
+    application._search_author_var.get.return_value = ""
+    application._search_publisher_var.get.return_value = ""
+    application._search_isbn_var.get.return_value = ""
+    application._search_magazine_code_var.get.return_value = ""
+    application._search_reading_status_var.get.return_value = (
+        "すべて"
+    )
+    application._search_favorite_var.get.return_value = (
+        "すべて"
+    )
+    application._search_rating_var.get.return_value = (
+        "★4以上"
+    )
 
     assert application._has_search_conditions() is True
 
 
 def test_clear_search_clears_all_conditions_and_loads_all_books() -> None:
-    """検索条件クリアで全条件を空欄にして全件表示する。"""
+    """検索条件クリアで全条件を初期状態にして全件表示する。"""
     application = create_application()
 
     application._load_all_books = Mock()
@@ -94,6 +193,155 @@ def test_clear_search_clears_all_conditions_and_loads_all_books() -> None:
     application._search_publisher_var.set.assert_called_once_with("")
     application._search_isbn_var.set.assert_called_once_with("")
     application._search_magazine_code_var.set.assert_called_once_with("")
+    application._search_reading_status_var.set.assert_called_once_with(
+        "すべて"
+    )
+    application._search_favorite_var.set.assert_called_once_with(
+        "すべて"
+    )
+    application._search_rating_var.set.assert_called_once_with(
+        "すべて"
+    )
 
     application._load_all_books.assert_called_once_with()
     application._search_title_entry.focus_set.assert_called_once_with()
+
+
+def test_get_filtered_books_converts_all_filters_to_none() -> None:
+    """すべてを選択した絞り込み条件はNoneとしてServiceへ渡す。"""
+    application = create_application()
+
+    application._search_title_var.get.return_value = ""
+    application._search_author_var.get.return_value = ""
+    application._search_publisher_var.get.return_value = ""
+    application._search_isbn_var.get.return_value = ""
+    application._search_magazine_code_var.get.return_value = ""
+    application._search_reading_status_var.get.return_value = (
+        "すべて"
+    )
+    application._search_favorite_var.get.return_value = (
+        "すべて"
+    )
+    application._search_rating_var.get.return_value = (
+        "すべて"
+    )
+
+    application._service.search_books.return_value = []
+
+    application._get_filtered_books()
+
+    application._service.search_books.assert_called_once_with(
+        title="",
+        author="",
+        publisher="",
+        isbn="",
+        magazine_code="",
+        reading_status_filter=None,
+        favorite_filter=None,
+        rating_filter=None,
+    )
+
+
+def test_get_filtered_books_converts_unset_reading_status() -> None:
+    """未設定の読書状態をService用の値へ変換する。"""
+    application = create_application()
+
+    application._search_title_var.get.return_value = ""
+    application._search_author_var.get.return_value = ""
+    application._search_publisher_var.get.return_value = ""
+    application._search_isbn_var.get.return_value = ""
+    application._search_magazine_code_var.get.return_value = ""
+    application._search_reading_status_var.get.return_value = (
+        "未設定"
+    )
+    application._search_favorite_var.get.return_value = (
+        "すべて"
+    )
+    application._search_rating_var.get.return_value = (
+        "すべて"
+    )
+
+    application._service.search_books.return_value = []
+
+    application._get_filtered_books()
+
+    application._service.search_books.assert_called_once_with(
+        title="",
+        author="",
+        publisher="",
+        isbn="",
+        magazine_code="",
+        reading_status_filter="unset",
+        favorite_filter=None,
+        rating_filter=None,
+    )
+
+
+def test_get_filtered_books_converts_non_favorite_filter() -> None:
+    """お気に入り以外をService用の値へ変換する。"""
+    application = create_application()
+
+    application._search_title_var.get.return_value = ""
+    application._search_author_var.get.return_value = ""
+    application._search_publisher_var.get.return_value = ""
+    application._search_isbn_var.get.return_value = ""
+    application._search_magazine_code_var.get.return_value = ""
+    application._search_reading_status_var.get.return_value = (
+        "すべて"
+    )
+    application._search_favorite_var.get.return_value = (
+        "お気に入り以外"
+    )
+    application._search_rating_var.get.return_value = (
+        "すべて"
+    )
+
+    application._service.search_books.return_value = []
+
+    application._get_filtered_books()
+
+    application._service.search_books.assert_called_once_with(
+        title="",
+        author="",
+        publisher="",
+        isbn="",
+        magazine_code="",
+        reading_status_filter=None,
+        favorite_filter="not_favorite",
+        rating_filter=None,
+    )
+
+
+def test_get_filtered_books_converts_unrated_filter() -> None:
+    """未評価をService用の値へ変換する。"""
+    application = create_application()
+
+    application._search_title_var.get.return_value = ""
+    application._search_author_var.get.return_value = ""
+    application._search_publisher_var.get.return_value = ""
+    application._search_isbn_var.get.return_value = ""
+    application._search_magazine_code_var.get.return_value = ""
+    application._search_reading_status_var.get.return_value = (
+        "すべて"
+    )
+    application._search_favorite_var.get.return_value = (
+        "すべて"
+    )
+    application._search_rating_var.get.return_value = (
+        "未評価"
+    )
+
+    application._service.search_books.return_value = []
+
+    application._get_filtered_books()
+
+    application._service.search_books.assert_called_once_with(
+        title="",
+        author="",
+        publisher="",
+        isbn="",
+        magazine_code="",
+        reading_status_filter=None,
+        favorite_filter=None,
+        rating_filter="unrated",
+    )
