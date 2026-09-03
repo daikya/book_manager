@@ -50,6 +50,9 @@ class BookManagerApplication:
         "著者名",
         "出版社",
         "読了年月",
+        "読書状態",
+        "お気に入り",
+        "評価",
     )
 
     TREE_SORT_TYPE_MAP = {
@@ -58,6 +61,9 @@ class BookManagerApplication:
         "author": "著者名",
         "publisher": "出版社",
         "completion_month": "読了年月",
+        "reading_status": "読書状態",
+        "is_favorite": "お気に入り",
+        "rating": "評価",
     }
 
     PUBLICATION_FORMATS = (
@@ -808,6 +814,9 @@ class BookManagerApplication:
             "著者名": "author",
             "出版社": "publisher",
             "読了年月": "completion_month",
+            "読書状態": "reading_status",
+            "お気に入り": "is_favorite",
+            "評価": "rating",
         }
 
         selected_sort_type = self._sort_type_var.get()
