@@ -371,6 +371,234 @@ def test_get_all_sorted_places_none_last(
         without_author,
     ]
 
+
+@pytest.mark.parametrize(
+    ("descending", "expected_titles"),
+    [
+        (
+            False,
+            [
+                "未設定",
+                "未読",
+                "読書中",
+                "読了",
+            ],
+        ),
+        (
+            True,
+            [
+                "読了",
+                "読書中",
+                "未読",
+                "未設定",
+            ],
+        ),
+    ],
+)
+def test_get_all_sorted_by_reading_status(
+    repository: BookRepository,
+    descending: bool,
+    expected_titles: list[str],
+) -> None:
+    """読書状態を定義した順序で取得する。"""
+    repository.add(
+        create_book_item(
+            title="読書中",
+            reading_status="reading",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="未設定",
+            reading_status=None,
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="読了",
+            reading_status="completed",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="未読",
+            reading_status="unread",
+        )
+    )
+
+    result = repository.get_all_sorted(
+        sort_by="reading_status",
+        descending=descending,
+    )
+
+    assert [book.title for book in result] == (
+        expected_titles
+    )
+
+
+@pytest.mark.parametrize(
+    ("descending", "expected_titles"),
+    [
+        (
+            False,
+            [
+                "お気に入り以外",
+                "お気に入り",
+            ],
+        ),
+        (
+            True,
+            [
+                "お気に入り",
+                "お気に入り以外",
+            ],
+        ),
+    ],
+)
+def test_get_all_sorted_by_favorite(
+    repository: BookRepository,
+    descending: bool,
+    expected_titles: list[str],
+) -> None:
+    """お気に入り状態で昇順・降順に取得する。"""
+    repository.add(
+        create_book_item(
+            title="お気に入り",
+            is_favorite=True,
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="お気に入り以外",
+            is_favorite=False,
+        )
+    )
+
+    result = repository.get_all_sorted(
+        sort_by="is_favorite",
+        descending=descending,
+    )
+
+    assert [book.title for book in result] == (
+        expected_titles
+    )
+
+
+@pytest.mark.parametrize(
+    ("descending", "expected_titles"),
+    [
+        (
+            False,
+            [
+                "未評価",
+                "評価1",
+                "評価3",
+                "評価5",
+            ],
+        ),
+        (
+            True,
+            [
+                "評価5",
+                "評価3",
+                "評価1",
+                "未評価",
+            ],
+        ),
+    ],
+)
+def test_get_all_sorted_by_rating(
+    repository: BookRepository,
+    descending: bool,
+    expected_titles: list[str],
+) -> None:
+    """評価を未評価を含む定義した順序で取得する。"""
+    repository.add(
+        create_book_item(
+            title="評価3",
+            rating=3,
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="未評価",
+            rating=None,
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="評価5",
+            rating=5,
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="評価1",
+            rating=1,
+        )
+    )
+
+    result = repository.get_all_sorted(
+        sort_by="rating",
+        descending=descending,
+    )
+
+    assert [book.title for book in result] == (
+        expected_titles
+    )
+
+
+@pytest.mark.parametrize(
+    ("sort_by", "field_values"),
+    [
+        (
+            "reading_status",
+            {
+                "reading_status": "reading",
+            },
+        ),
+        (
+            "is_favorite",
+            {
+                "is_favorite": True,
+            },
+        ),
+        (
+            "rating",
+            {
+                "rating": 3,
+            },
+        ),
+    ],
+)
+def test_get_all_sorted_uses_descending_id_for_same_value(
+    repository: BookRepository,
+    sort_by: str,
+    field_values: dict[str, str | bool | int],
+) -> None:
+    """同順位の書籍はID降順で取得する。"""
+    first = repository.add(
+        create_book_item(
+            title="先に登録",
+            **field_values,
+        )
+    )
+    second = repository.add(
+        create_book_item(
+            title="後に登録",
+            **field_values,
+        )
+    )
+
+    result = repository.get_all_sorted(
+        sort_by=sort_by,
+    )
+
+    assert result == [
+        second,
+        first,
+    ]
+
 def test_get_all_sorted_rejects_invalid_sort_by(
     repository: BookRepository,
 ) -> None:

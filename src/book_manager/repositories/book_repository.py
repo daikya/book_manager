@@ -34,6 +34,22 @@ SORT_COLUMNS = {
     "author": "author",
     "publisher": "publisher",
     "completion_month": "completion_month",
+    "reading_status": "reading_status",
+    "is_favorite": "is_favorite",
+    "rating": "rating",
+}
+
+CUSTOM_SORT_EXPRESSIONS = {
+    "reading_status": """
+        CASE reading_status
+            WHEN 'unread' THEN 1
+            WHEN 'reading' THEN 2
+            WHEN 'completed' THEN 3
+            ELSE 0
+        END
+    """,
+    "is_favorite": "COALESCE(is_favorite, 0)",
+    "rating": "COALESCE(rating, 0)",
 }
 
 class BookRepository:
@@ -186,6 +202,14 @@ class BookRepository:
         if sort_by == "registered":
             order_by = (
                 f"{column_name} {direction}"
+            )
+        elif sort_by in CUSTOM_SORT_EXPRESSIONS:
+            sort_expression = (
+                CUSTOM_SORT_EXPRESSIONS[sort_by]
+            )
+            order_by = (
+                f"{sort_expression} {direction}, "
+                "id DESC"
             )
         else:
             order_by = (
