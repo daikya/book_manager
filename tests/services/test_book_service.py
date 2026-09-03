@@ -1532,6 +1532,56 @@ def test_get_sorted_books_returns_registered_descending(
         first,
     ]
 
+
+@pytest.mark.parametrize(
+    ("sort_by", "first_fields", "second_fields"),
+    [
+        (
+            "reading_status",
+            {"reading_status": None},
+            {"reading_status": "completed"},
+        ),
+        (
+            "is_favorite",
+            {"is_favorite": False},
+            {"is_favorite": True},
+        ),
+        (
+            "rating",
+            {"rating": None},
+            {"rating": 5},
+        ),
+    ],
+)
+def test_get_sorted_books_supports_reading_information(
+    service: BookService,
+    sort_by: str,
+    first_fields: dict[str, str | bool | int | None],
+    second_fields: dict[str, str | bool | int | None],
+) -> None:
+    """読書情報の項目を指定して全書籍を取得する。"""
+    second = add_sample_book(
+        service,
+        title="後順位",
+        isbn=None,
+        **second_fields,
+    )
+    first = add_sample_book(
+        service,
+        title="先順位",
+        isbn=None,
+        **first_fields,
+    )
+
+    results = service.get_sorted_books(
+        sort_by=sort_by,
+    )
+
+    assert results == [
+        first,
+        second,
+    ]
+
 def test_get_sorted_books_rejects_invalid_sort_by(
     service: BookService,
 ) -> None:
@@ -1659,6 +1709,173 @@ def test_sort_books_sorts_by_registered_descending(
         second,
         first,
     ]
+
+
+@pytest.mark.parametrize(
+    ("sort_by", "descending", "expected_titles"),
+    [
+        (
+            "reading_status",
+            False,
+            ["未設定", "未読", "読書中", "読了"],
+        ),
+        (
+            "reading_status",
+            True,
+            ["読了", "読書中", "未読", "未設定"],
+        ),
+        (
+            "is_favorite",
+            False,
+            ["未設定", "読書中", "未読", "読了"],
+        ),
+        (
+            "is_favorite",
+            True,
+            ["未読", "読了", "未設定", "読書中"],
+        ),
+        (
+            "rating",
+            False,
+            ["未設定", "未読", "読書中", "読了"],
+        ),
+        (
+            "rating",
+            True,
+            ["読了", "読書中", "未読", "未設定"],
+        ),
+    ],
+)
+def test_sort_books_sorts_by_reading_information(
+    service: BookService,
+    sort_by: str,
+    descending: bool,
+    expected_titles: list[str],
+) -> None:
+    """取得済み一覧を読書情報の定義順で並べ替える。"""
+    books = [
+        add_sample_book(
+            service,
+            title="読書中",
+            isbn=None,
+            reading_status="reading",
+            is_favorite=False,
+            rating=3,
+        ),
+        add_sample_book(
+            service,
+            title="未設定",
+            isbn=None,
+            reading_status=None,
+            is_favorite=False,
+            rating=None,
+        ),
+        add_sample_book(
+            service,
+            title="読了",
+            isbn=None,
+            reading_status="completed",
+            is_favorite=True,
+            rating=5,
+        ),
+        add_sample_book(
+            service,
+            title="未読",
+            isbn=None,
+            reading_status="unread",
+            is_favorite=True,
+            rating=1,
+        ),
+    ]
+
+    results = service.sort_books(
+        books,
+        sort_by=sort_by,
+        descending=descending,
+    )
+
+    assert [book.title for book in results] == (
+        expected_titles
+    )
+
+
+@pytest.mark.parametrize(
+    ("sort_by", "field_values"),
+    [
+        (
+            "reading_status",
+            {"reading_status": "reading"},
+        ),
+        (
+            "is_favorite",
+            {"is_favorite": True},
+        ),
+        (
+            "rating",
+            {"rating": 3},
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "descending",
+    [False, True],
+)
+def test_sort_books_uses_descending_id_for_same_value(
+    service: BookService,
+    sort_by: str,
+    field_values: dict[str, str | bool | int],
+    descending: bool,
+) -> None:
+    """読書情報が同順位の場合はID降順にする。"""
+    first = add_sample_book(
+        service,
+        title="先に登録",
+        isbn=None,
+        **field_values,
+    )
+    second = add_sample_book(
+        service,
+        title="後に登録",
+        isbn=None,
+        **field_values,
+    )
+
+    results = service.sort_books(
+        [first, second],
+        sort_by=sort_by,
+        descending=descending,
+    )
+
+    assert results == [
+        second,
+        first,
+    ]
+
+
+def test_sort_books_does_not_modify_input_list(
+    service: BookService,
+) -> None:
+    """読書情報による並べ替えで入力リストを変更しない。"""
+    first = add_sample_book(
+        service,
+        title="未設定",
+        isbn=None,
+        reading_status=None,
+    )
+    second = add_sample_book(
+        service,
+        title="読了",
+        isbn=None,
+        reading_status="completed",
+    )
+    books = [second, first]
+
+    service.sort_books(
+        books,
+        sort_by="reading_status",
+    )
+
+    assert books == [second, first]
 
 def test_sort_books_rejects_invalid_sort_by(
     service: BookService,

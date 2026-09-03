@@ -33,6 +33,14 @@ from book_manager.validators.rating_validator import (
 )
 
 
+READING_STATUS_SORT_ORDER = {
+    None: 0,
+    "unread": 1,
+    "reading": 2,
+    "completed": 3,
+}
+
+
 class BookService:
     """書籍管理に関するアプリケーションロジックを担当する。"""
     def __init__(
@@ -281,6 +289,9 @@ class BookService:
             "author",
             "publisher",
             "completion_month",
+            "reading_status",
+            "is_favorite",
+            "rating",
         }
 
         if sort_by not in allowed_sort_fields:
@@ -314,6 +325,38 @@ class BookService:
                 key=lambda book: book.id or 0,
                 reverse=descending,
             )
+
+        reading_information_sort_key_map = {
+            "reading_status": lambda book: (
+                READING_STATUS_SORT_ORDER.get(
+                    book.reading_status,
+                    0,
+                )
+            ),
+            "is_favorite": lambda book: int(
+                book.is_favorite
+            ),
+            "rating": lambda book: book.rating or 0,
+        }
+
+        reading_information_key = (
+            reading_information_sort_key_map.get(
+                sort_by,
+            )
+        )
+
+        if reading_information_key is not None:
+            sorted_books = sorted(
+                books,
+                key=lambda book: book.id or 0,
+                reverse=True,
+            )
+            sorted_books.sort(
+                key=reading_information_key,
+                reverse=descending,
+            )
+
+            return sorted_books
 
         key_function = sort_key_map.get(
             sort_by,
