@@ -369,10 +369,13 @@ class BookRepository:
         publisher: str | None = None,
         isbn: str | None = None,
         magazine_code: str | None = None,
+        reading_status_filter: str | None = None,
+        favorite_filter: str | None = None,
+        rating_filter: str | int | None = None,
     ) -> list[BookItem]:
         """複数条件によるAND検索を行う。"""
         conditions: list[str] = []
-        parameters: list[str] = []
+        parameters: list[str | int] = []
 
         if title is not None:
             conditions.append(
@@ -412,6 +415,45 @@ class BookRepository:
             )
             parameters.append(
                 magazine_code,
+            )
+
+        if reading_status_filter == "unset":
+            conditions.append(
+                "reading_status IS NULL",
+            )
+        elif reading_status_filter is not None:
+            conditions.append(
+                "reading_status = ?",
+            )
+            parameters.append(
+                reading_status_filter,
+            )
+
+        if favorite_filter == "favorite":
+            conditions.append(
+                "is_favorite = ?",
+            )
+            parameters.append(
+                1,
+            )
+        elif favorite_filter == "not_favorite":
+            conditions.append(
+                "is_favorite = ?",
+            )
+            parameters.append(
+                0,
+            )
+
+        if rating_filter == "unrated":
+            conditions.append(
+                "rating IS NULL",
+            )
+        elif isinstance(rating_filter, int):
+            conditions.append(
+                "rating >= ?",
+            )
+            parameters.append(
+                rating_filter,
             )
 
         if not conditions:

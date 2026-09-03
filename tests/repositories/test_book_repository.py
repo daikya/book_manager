@@ -1532,3 +1532,395 @@ def test_rating_is_independent_from_other_reading_fields(
     assert loaded.reading_status == "unread"
     assert loaded.is_favorite is False
     assert loaded.rating == 5
+
+
+def test_search_by_conditions_finds_unset_reading_status(
+    repository: BookRepository,
+) -> None:
+    """未設定の読書状態を検索できる。"""
+    matched = repository.add(
+        create_book_item(
+            title="未設定の書籍",
+            reading_status=None,
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="読書中の書籍",
+            reading_status="reading",
+        )
+    )
+
+    result = repository.search_by_conditions(
+        reading_status_filter="unset",
+    )
+
+    assert result == [
+        matched,
+    ]
+
+
+def test_search_by_conditions_finds_unread_reading_status(
+    repository: BookRepository,
+) -> None:
+    """未読の書籍を検索できる。"""
+    matched = repository.add(
+        create_book_item(
+            title="未読の書籍",
+            reading_status="unread",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="読書中の書籍",
+            reading_status="reading",
+        )
+    )
+
+    result = repository.search_by_conditions(
+        reading_status_filter="unread",
+    )
+
+    assert result == [
+        matched,
+    ]
+
+
+def test_search_by_conditions_finds_reading_reading_status(
+    repository: BookRepository,
+) -> None:
+    """読書中の書籍を検索できる。"""
+    matched = repository.add(
+        create_book_item(
+            title="読書中の書籍",
+            reading_status="reading",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="読了した書籍",
+            reading_status="completed",
+        )
+    )
+
+    result = repository.search_by_conditions(
+        reading_status_filter="reading",
+    )
+
+    assert result == [
+        matched,
+    ]
+
+
+def test_search_by_conditions_finds_completed_reading_status(
+    repository: BookRepository,
+) -> None:
+    """読了した書籍を検索できる。"""
+    matched = repository.add(
+        create_book_item(
+            title="読了した書籍",
+            reading_status="completed",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="未読の書籍",
+            reading_status="unread",
+        )
+    )
+
+    result = repository.search_by_conditions(
+        reading_status_filter="completed",
+    )
+
+    assert result == [
+        matched,
+    ]
+
+
+def test_search_by_conditions_finds_favorites(
+    repository: BookRepository,
+) -> None:
+    """お気に入りの書籍だけを検索できる。"""
+    matched = repository.add(
+        create_book_item(
+            title="お気に入りの書籍",
+            is_favorite=True,
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="通常の書籍",
+            is_favorite=False,
+        )
+    )
+
+    result = repository.search_by_conditions(
+        favorite_filter="favorite",
+    )
+
+    assert result == [
+        matched,
+    ]
+
+
+def test_search_by_conditions_finds_non_favorites(
+    repository: BookRepository,
+) -> None:
+    """お気に入り以外の書籍だけを検索できる。"""
+    matched = repository.add(
+        create_book_item(
+            title="通常の書籍",
+            is_favorite=False,
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="お気に入りの書籍",
+            is_favorite=True,
+        )
+    )
+
+    result = repository.search_by_conditions(
+        favorite_filter="not_favorite",
+    )
+
+    assert result == [
+        matched,
+    ]
+
+
+def test_search_by_conditions_finds_unrated_books(
+    repository: BookRepository,
+) -> None:
+    """未評価の書籍を検索できる。"""
+    matched = repository.add(
+        create_book_item(
+            title="未評価の書籍",
+            rating=None,
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="評価済みの書籍",
+            rating=3,
+        )
+    )
+
+    result = repository.search_by_conditions(
+        rating_filter="unrated",
+    )
+
+    assert result == [
+        matched,
+    ]
+
+
+def test_search_by_conditions_finds_rating_one_or_higher(
+    repository: BookRepository,
+) -> None:
+    """評価1以上の書籍を検索できる。"""
+    first = repository.add(
+        create_book_item(
+            title="評価1",
+            rating=1,
+        )
+    )
+    second = repository.add(
+        create_book_item(
+            title="評価5",
+            rating=5,
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="未評価",
+            rating=None,
+        )
+    )
+
+    result = repository.search_by_conditions(
+        rating_filter=1,
+    )
+
+    assert result == [
+        second,
+        first,
+    ]
+
+
+def test_search_by_conditions_finds_rating_three_or_higher(
+    repository: BookRepository,
+) -> None:
+    """評価3以上の書籍を検索できる。"""
+    repository.add(
+        create_book_item(
+            title="評価2",
+            rating=2,
+        )
+    )
+    first = repository.add(
+        create_book_item(
+            title="評価3",
+            rating=3,
+        )
+    )
+    second = repository.add(
+        create_book_item(
+            title="評価5",
+            rating=5,
+        )
+    )
+
+    result = repository.search_by_conditions(
+        rating_filter=3,
+    )
+
+    assert result == [
+        second,
+        first,
+    ]
+
+
+def test_search_by_conditions_finds_rating_five(
+    repository: BookRepository,
+) -> None:
+    """評価5の書籍を検索できる。"""
+    matched = repository.add(
+        create_book_item(
+            title="評価5",
+            rating=5,
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="評価4",
+            rating=4,
+        )
+    )
+
+    result = repository.search_by_conditions(
+        rating_filter=5,
+    )
+
+    assert result == [
+        matched,
+    ]
+
+
+def test_search_by_conditions_combines_bibliographic_and_reading_status(
+    repository: BookRepository,
+) -> None:
+    """書誌情報と読書状態をAND条件で検索できる。"""
+    matched = repository.add(
+        create_book_item(
+            title="海辺のカフカ",
+            author="村上春樹",
+            reading_status="completed",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="ノルウェイの森",
+            author="村上春樹",
+            reading_status="reading",
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="別の書籍",
+            author="別の著者",
+            reading_status="completed",
+        )
+    )
+
+    result = repository.search_by_conditions(
+        author="村上",
+        reading_status_filter="completed",
+    )
+
+    assert result == [
+        matched,
+    ]
+
+
+def test_search_by_conditions_combines_reading_filters(
+    repository: BookRepository,
+) -> None:
+    """読書状態・お気に入り・評価をAND条件で検索できる。"""
+    matched = repository.add(
+        create_book_item(
+            title="条件一致",
+            reading_status="completed",
+            is_favorite=True,
+            rating=4,
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="評価不足",
+            reading_status="completed",
+            is_favorite=True,
+            rating=3,
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="お気に入り以外",
+            reading_status="completed",
+            is_favorite=False,
+            rating=5,
+        )
+    )
+
+    result = repository.search_by_conditions(
+        reading_status_filter="completed",
+        favorite_filter="favorite",
+        rating_filter=4,
+    )
+
+    assert result == [
+        matched,
+    ]
+
+
+def test_search_by_conditions_combines_existing_and_new_conditions(
+    repository: BookRepository,
+) -> None:
+    """既存条件と新しい検索条件をすべてANDで組み合わせられる。"""
+    matched = repository.add(
+        create_book_item(
+            title="海辺のカフカ",
+            author="村上春樹",
+            publisher="新潮社",
+            isbn="9784101001547",
+            reading_status="completed",
+            is_favorite=True,
+            rating=5,
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="海辺のカフカ",
+            author="村上春樹",
+            publisher="新潮社",
+            isbn="9784101001547",
+            reading_status="completed",
+            is_favorite=True,
+            rating=4,
+        )
+    )
+
+    result = repository.search_by_conditions(
+        title="海辺",
+        author="村上",
+        publisher="新潮",
+        isbn="9784101001547",
+        reading_status_filter="completed",
+        favorite_filter="favorite",
+        rating_filter=5,
+    )
+
+    assert result == [
+        matched,
+    ]

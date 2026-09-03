@@ -438,6 +438,9 @@ class BookService:
         publisher: str | None = None,
         isbn: str | None = None,
         magazine_code: str | None = None,
+        reading_status_filter: str | None = None,
+        favorite_filter: str | None = None,
+        rating_filter: str | int | None = None,
     ) -> list[BookItem]:
         """複数条件によるAND検索を行う。"""
         normalized_title = self._normalize_optional_text(
@@ -468,6 +471,45 @@ class BookService:
                 normalized_magazine_code,
             )
 
+        if (
+            reading_status_filter is not None
+            and reading_status_filter
+            not in {
+                "unset",
+                "unread",
+                "reading",
+                "completed",
+            }
+        ):
+            raise ValueError(
+                "読書状態の検索条件が正しくありません。"
+            )
+
+        if (
+            favorite_filter is not None
+            and favorite_filter
+            not in {
+                "favorite",
+                "not_favorite",
+            }
+        ):
+            raise ValueError(
+                "お気に入りの検索条件が正しくありません。"
+            )
+
+        if rating_filter is not None:
+            if rating_filter == "unrated":
+                pass
+            elif (
+                type(rating_filter) is int
+                and 1 <= rating_filter <= 5
+            ):
+                pass
+            else:
+                raise ValueError(
+                    "評価の検索条件が正しくありません。"
+                )
+
         if all(
             value is None
             for value in (
@@ -476,6 +518,9 @@ class BookService:
                 normalized_publisher,
                 normalized_isbn,
                 normalized_magazine_code,
+                reading_status_filter,
+                favorite_filter,
+                rating_filter,
             )
         ):
             return self._repository.get_all()
@@ -486,6 +531,9 @@ class BookService:
             publisher=normalized_publisher,
             isbn=normalized_isbn,
             magazine_code=normalized_magazine_code,
+            reading_status_filter=reading_status_filter,
+            favorite_filter=favorite_filter,
+            rating_filter=rating_filter,
         )
 
     def update_book(

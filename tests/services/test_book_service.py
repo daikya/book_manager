@@ -788,6 +788,305 @@ def test_search_books_rejects_invalid_magazine_code(
             magazine_code="12A45",
         )
 
+
+def test_search_books_filters_by_unset_reading_status(
+    service: BookService,
+) -> None:
+    """未設定の読書状態で絞り込める。"""
+    matched = add_sample_book(
+        service,
+        title="未設定",
+        isbn=None,
+        reading_status=None,
+    )
+    add_sample_book(
+        service,
+        title="読書中",
+        isbn=None,
+        reading_status="reading",
+    )
+
+    results = service.search_books(
+        reading_status_filter="unset",
+    )
+
+    assert results == [
+        matched,
+    ]
+
+
+def test_search_books_filters_by_reading_status(
+    service: BookService,
+) -> None:
+    """指定した読書状態で絞り込める。"""
+    matched = add_sample_book(
+        service,
+        title="読書中",
+        isbn=None,
+        reading_status="reading",
+    )
+    add_sample_book(
+        service,
+        title="読了",
+        isbn=None,
+        reading_status="completed",
+    )
+
+    results = service.search_books(
+        reading_status_filter="reading",
+    )
+
+    assert results == [
+        matched,
+    ]
+
+
+def test_search_books_filters_by_favorite(
+    service: BookService,
+) -> None:
+    """お気に入りの書籍だけを絞り込める。"""
+    matched = add_sample_book(
+        service,
+        title="お気に入り",
+        isbn=None,
+        is_favorite=True,
+    )
+    add_sample_book(
+        service,
+        title="通常",
+        isbn=None,
+        is_favorite=False,
+    )
+
+    results = service.search_books(
+        favorite_filter="favorite",
+    )
+
+    assert results == [
+        matched,
+    ]
+
+
+def test_search_books_filters_by_non_favorite(
+    service: BookService,
+) -> None:
+    """お気に入り以外の書籍だけを絞り込める。"""
+    matched = add_sample_book(
+        service,
+        title="通常",
+        isbn=None,
+        is_favorite=False,
+    )
+    add_sample_book(
+        service,
+        title="お気に入り",
+        isbn=None,
+        is_favorite=True,
+    )
+
+    results = service.search_books(
+        favorite_filter="not_favorite",
+    )
+
+    assert results == [
+        matched,
+    ]
+
+
+def test_search_books_filters_by_unrated(
+    service: BookService,
+) -> None:
+    """未評価の書籍を絞り込める。"""
+    matched = add_sample_book(
+        service,
+        title="未評価",
+        isbn=None,
+        rating=None,
+    )
+    add_sample_book(
+        service,
+        title="評価済み",
+        isbn=None,
+        rating=3,
+    )
+
+    results = service.search_books(
+        rating_filter="unrated",
+    )
+
+    assert results == [
+        matched,
+    ]
+
+
+def test_search_books_filters_by_minimum_rating(
+    service: BookService,
+) -> None:
+    """指定評価以上の書籍を絞り込める。"""
+    add_sample_book(
+        service,
+        title="評価2",
+        isbn=None,
+        rating=2,
+    )
+    first = add_sample_book(
+        service,
+        title="評価3",
+        isbn=None,
+        rating=3,
+    )
+    second = add_sample_book(
+        service,
+        title="評価5",
+        isbn=None,
+        rating=5,
+    )
+
+    results = service.search_books(
+        rating_filter=3,
+    )
+
+    assert results == [
+        second,
+        first,
+    ]
+
+
+def test_search_books_combines_existing_and_reading_filters(
+    service: BookService,
+) -> None:
+    """既存条件と読書情報条件をANDで組み合わせられる。"""
+    matched = add_sample_book(
+        service,
+        title="海辺のカフカ",
+        author="村上春樹",
+        publisher="新潮社",
+        isbn=None,
+        reading_status="completed",
+        is_favorite=True,
+        rating=5,
+    )
+    add_sample_book(
+        service,
+        title="ノルウェイの森",
+        author="村上春樹",
+        publisher="講談社",
+        isbn=None,
+        reading_status="completed",
+        is_favorite=True,
+        rating=5,
+    )
+
+    results = service.search_books(
+        author="村上",
+        publisher="新潮",
+        reading_status_filter="completed",
+        favorite_filter="favorite",
+        rating_filter=4,
+    )
+
+    assert results == [
+        matched,
+    ]
+
+
+def test_search_books_returns_all_when_new_filters_are_none(
+    service: BookService,
+) -> None:
+    """新しい絞り込み条件が未指定なら全件を返す。"""
+    first = add_sample_book(
+        service,
+        title="1冊目",
+        isbn=None,
+    )
+    second = add_sample_book(
+        service,
+        title="2冊目",
+        isbn=None,
+    )
+
+    results = service.search_books(
+        reading_status_filter=None,
+        favorite_filter=None,
+        rating_filter=None,
+    )
+
+    assert results == [
+        second,
+        first,
+    ]
+
+
+@pytest.mark.parametrize(
+    "reading_status_filter",
+    [
+        "",
+        "invalid",
+        "finished",
+    ],
+)
+def test_search_books_rejects_invalid_reading_status_filter(
+    service: BookService,
+    reading_status_filter: str,
+) -> None:
+    """不正な読書状態の絞り込み条件を拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match="読書状態の検索条件が正しくありません。",
+    ):
+        service.search_books(
+            reading_status_filter=reading_status_filter,
+        )
+
+
+@pytest.mark.parametrize(
+    "favorite_filter",
+    [
+        "",
+        "all",
+        "invalid",
+    ],
+)
+def test_search_books_rejects_invalid_favorite_filter(
+    service: BookService,
+    favorite_filter: str,
+) -> None:
+    """不正なお気に入りの絞り込み条件を拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match="お気に入りの検索条件が正しくありません。",
+    ):
+        service.search_books(
+            favorite_filter=favorite_filter,
+        )
+
+
+@pytest.mark.parametrize(
+    "rating_filter",
+    [
+        0,
+        6,
+        -1,
+        "1",
+        "invalid",
+        True,
+        False,
+    ],
+)
+def test_search_books_rejects_invalid_rating_filter(
+    service: BookService,
+    rating_filter: object,
+) -> None:
+    """不正な評価の絞り込み条件を拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match="評価の検索条件が正しくありません。",
+    ):
+        service.search_books(
+            rating_filter=rating_filter,  # type: ignore[arg-type]
+        )
+
+
 def test_find_duplicate_candidates_by_isbn(
     service: BookService,
 ) -> None:
