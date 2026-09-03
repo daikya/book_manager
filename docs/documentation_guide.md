@@ -38,10 +38,16 @@ docs/documentation_guide.md
 
 ```text
 docs/
+├── backup_restore_design.md
+├── csv_import_design.md
 ├── documentation_guide.md
 ├── book_manager_roadmap.md
 ├── development_guidelines.md
 ├── external_book_metadata_design.md
+├── favorite_design.md
+├── rating_design.md
+├── reading_status_design.md
+├── search_filter_design.md
 │
 ├── adr/
 │   └── ADR-0001-sqlite-selection.md
@@ -141,6 +147,32 @@ book_manager全体の開発方針および運用ルールを定義する。
 - Raw Data
 - 取得元情報
 - 外部サービス障害時の処理
+
+---
+
+### `reading_status_design.md`
+
+Version 1.3で追加した読書ステータス管理機能を定義する。
+
+### `favorite_design.md`
+
+Version 1.3で追加したお気に入り機能を定義する。
+
+### `rating_design.md`
+
+Version 1.3で追加した評価機能を定義する。
+
+### `csv_import_design.md`
+
+Version 1.4で追加したCSVインポート機能を定義する。
+
+### `backup_restore_design.md`
+
+Version 1.4で追加したバックアップからの復元機能を定義する。
+
+### `search_filter_design.md`
+
+Version 1.5で追加した読書情報による検索・絞り込み、検索GUIおよび起動時ウィンドウ表示の改善を定義する。
 
 ---
 
@@ -476,7 +508,7 @@ docs/development_guidelines.md
 
 ## 18. 現在の状態
 
-book_managerはVersion 1.2.0まで正式リリース済みである。
+book_managerはVersion 1.4.0まで正式リリース済みである。
 
 Version 1.0では基本的な書籍管理機能を完成させた。
 
@@ -491,6 +523,26 @@ Version 1.2では、検索と一覧操作の改善として次の機能を追加
 - 複合条件検索
 - 表紙サムネイル付き一覧
 - 登録・更新成功後の入力フォーム自動クリア
+
+Version 1.3では、蔵書の状態管理と日常利用の改善として次の機能を追加した。
+
+- 読書ステータス管理
+- お気に入り機能
+- 1〜5段階の評価機能
+
+Version 1.4では、データの移行と復旧機能の強化として次の機能を追加した。
+
+- CSVインポート
+- バックアップからの復元
+
+Version 1.5では、蔵書の絞り込みと検索機能の強化として次の機能のリリース準備を進めている。
+
+- 読書状態による絞り込み
+- お気に入り状態による絞り込み
+- 未評価および指定評価以上による絞り込み
+- 既存の書籍情報と読書情報を組み合わせたAND検索
+- 検索GUIの改善
+- 起動時ウィンドウ表示の改善
 
 今後の開発内容は、
 
