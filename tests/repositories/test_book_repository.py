@@ -1,11 +1,14 @@
 """Tests for the BookRepository."""
 
+import sqlite3
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from book_manager.database.initializer import initialize_database
 from book_manager.models.book_item import BookItem
+from book_manager.models.tag import Tag
 from book_manager.repositories.book_repository import BookRepository
 
 
@@ -42,6 +45,7 @@ def create_book_item(
     notes: str | None = "再読。",
     created_at: str = "2026-07-22 10:00:00",
     updated_at: str = "2026-07-22 10:00:00",
+    tags: tuple[str, ...] = (),
 ) -> BookItem:
     """Repositoryテスト用のBookItemを生成する。"""
     return BookItem(
@@ -61,6 +65,7 @@ def create_book_item(
         notes=notes,
         created_at=created_at,
         updated_at=updated_at,
+        tags=tags,
     )
 
 def test_repository_accepts_path(
@@ -2152,3 +2157,598 @@ def test_search_by_conditions_combines_existing_and_new_conditions(
     assert result == [
         matched,
     ]
+
+
+def test_add_stores_multiple_tags(
+    repository: BookRepository,
+) -> None:
+    """複数タグを書籍へ登録して名称順で取得できる。"""
+    registered = repository.add(
+        create_book_item(
+            title="タグ付き書籍",
+            tags=("技術書", "Python", "仕事"),
+        )
+    )
+
+    stored = repository.get_by_id(
+        registered.id,  # type: ignore[arg-type]
+    )
+
+    assert stored is not None
+    assert stored.tags == (
+        "Python",
+        "仕事",
+        "技術書",
+    )
+
+
+def test_add_reuses_same_tag_for_multiple_books(
+    repository: BookRepository,
+) -> None:
+    """同じタグを複数の書籍で共有できる。"""
+    first = repository.add(
+        create_book_item(
+            title="1冊目",
+            tags=("小説",),
+        )
+    )
+    second = repository.add(
+        create_book_item(
+            title="2冊目",
+            tags=("小説",),
+        )
+    )
+
+    tags = repository.get_all_tags()
+
+    assert len(tags) == 1
+    assert tags[0].name == "小説"
+    assert repository.count_books_by_tag(
+        tags[0].id,  # type: ignore[arg-type]
+    ) == 2
+    assert repository.get_by_id(
+        first.id,  # type: ignore[arg-type]
+    ).tags == ("小説",)  # type: ignore[union-attr]
+    assert repository.get_by_id(
+        second.id,  # type: ignore[arg-type]
+    ).tags == ("小説",)  # type: ignore[union-attr]
+
+
+def test_add_does_not_duplicate_same_book_tag_relation(
+    repository: BookRepository,
+) -> None:
+    """同じ書籍とタグの関連を重複登録しない。"""
+    registered = repository.add(
+        create_book_item(
+            title="重複タグ書籍",
+            tags=("小説", "小説"),
+        )
+    )
+
+    stored = repository.get_by_id(
+        registered.id,  # type: ignore[arg-type]
+    )
+
+    assert stored is not None
+    assert stored.tags == ("小説",)
+
+
+def test_add_rolls_back_book_and_tags_on_tag_error(
+    repository: BookRepository,
+) -> None:
+    """タグ登録失敗時に書籍とタグをすべて戻す。"""
+    with pytest.raises(
+        sqlite3.DatabaseError,
+        match="登録したタグのIDを取得できませんでした。",
+    ):
+        repository.add(
+            create_book_item(
+                title="登録失敗書籍",
+                tags=("正常タグ", "不正|タグ"),
+            )
+        )
+
+    assert repository.get_all() == []
+    assert repository.get_all_tags() == []
+
+
+def test_get_all_restores_tags_for_each_book(
+    repository: BookRepository,
+) -> None:
+    """一覧取得時に各書籍のタグを復元する。"""
+    first = repository.add(
+        create_book_item(
+            title="1冊目",
+            tags=("小説",),
+        )
+    )
+    second = repository.add(
+        create_book_item(
+            title="2冊目",
+            tags=("仕事", "技術書"),
+        )
+    )
+
+    result = repository.get_all()
+
+    assert result[0] == replace(
+        second,
+        tags=("仕事", "技術書"),
+    )
+    assert result[1] == first
+
+
+def test_get_all_sorted_restores_tags(
+    repository: BookRepository,
+) -> None:
+    """並べ替え取得時にタグを復元する。"""
+    registered = repository.add(
+        create_book_item(
+            title="タグ付き書籍",
+            tags=("小説",),
+        )
+    )
+
+    result = repository.get_all_sorted(
+        sort_by="title",
+    )
+
+    assert result == [registered]
+
+
+@pytest.mark.parametrize(
+    "search_method",
+    [
+        "search_by_title",
+        "search_by_author",
+        "search_by_publisher",
+        "find_by_isbn",
+        "find_by_magazine_code",
+    ],
+)
+def test_individual_search_restores_tags(
+    repository: BookRepository,
+    search_method: str,
+) -> None:
+    """個別検索で取得した書籍へタグを復元する。"""
+    registered = repository.add(
+        create_book_item(
+            title="検索対象書籍",
+            isbn="9784101010014",
+            magazine_code="1234507",
+            author="検索対象著者",
+            publisher="検索対象出版社",
+            tags=("検索タグ",),
+        )
+    )
+    arguments = {
+        "search_by_title": "検索対象",
+        "search_by_author": "検索対象",
+        "search_by_publisher": "検索対象",
+        "find_by_isbn": "9784101010014",
+        "find_by_magazine_code": "1234507",
+    }
+
+    method = getattr(repository, search_method)
+    result = method(arguments[search_method])
+
+    assert result == [registered]
+
+
+def test_update_replaces_book_tags(
+    repository: BookRepository,
+) -> None:
+    """書籍更新時にタグの追加と解除ができる。"""
+    registered = repository.add(
+        create_book_item(
+            title="更新対象書籍",
+            tags=("解除するタグ", "残すタグ"),
+        )
+    )
+    updated = replace(
+        registered,
+        tags=("残すタグ", "追加するタグ"),
+        updated_at="2026-09-04 12:00:00",
+    )
+
+    result = repository.update(updated)
+    stored = repository.get_by_id(
+        registered.id,  # type: ignore[arg-type]
+    )
+
+    assert result is True
+    assert stored is not None
+    assert stored.tags == (
+        "残すタグ",
+        "追加するタグ",
+    )
+
+
+def test_update_can_clear_all_book_tags(
+    repository: BookRepository,
+) -> None:
+    """書籍に設定されたすべてのタグを解除できる。"""
+    registered = repository.add(
+        create_book_item(
+            title="更新対象書籍",
+            tags=("小説",),
+        )
+    )
+    updated = replace(
+        registered,
+        tags=(),
+        updated_at="2026-09-04 12:00:00",
+    )
+
+    result = repository.update(updated)
+
+    assert result is True
+    assert repository.get_by_id(
+        registered.id,  # type: ignore[arg-type]
+    ).tags == ()  # type: ignore[union-attr]
+    assert [
+        tag.name
+        for tag in repository.get_all_tags()
+    ] == ["小説"]
+
+
+def test_update_missing_book_does_not_create_tag(
+    repository: BookRepository,
+) -> None:
+    """存在しない書籍の更新でタグを作成しない。"""
+    book = create_book_item(
+        title="存在しない書籍",
+        tags=("作成されないタグ",),
+    )
+    book.id = 999
+
+    result = repository.update(book)
+
+    assert result is False
+    assert repository.get_all_tags() == []
+
+
+def test_get_all_tags_returns_tags_in_name_order(
+    repository: BookRepository,
+) -> None:
+    """登録済みタグを名称の昇順で取得する。"""
+    repository.add(
+        create_book_item(
+            title="タグ付き書籍",
+            tags=("技術書", "Python", "仕事"),
+        )
+    )
+
+    result = repository.get_all_tags()
+
+    assert [tag.name for tag in result] == [
+        "Python",
+        "仕事",
+        "技術書",
+    ]
+    assert all(
+        isinstance(tag, Tag)
+        for tag in result
+    )
+
+
+def test_get_tag_by_id_and_name(
+    repository: BookRepository,
+) -> None:
+    """IDと名称から同じタグを取得できる。"""
+    repository.add(
+        create_book_item(tags=("小説",))
+    )
+    tag = repository.get_tag_by_name("小説")
+
+    assert tag is not None
+    assert tag.id is not None
+    assert repository.get_tag_by_id(tag.id) == tag
+
+
+def test_get_tag_returns_none_for_missing_value(
+    repository: BookRepository,
+) -> None:
+    """存在しないIDと名称ではNoneを返す。"""
+    assert repository.get_tag_by_id(999) is None
+    assert repository.get_tag_by_name("存在しないタグ") is None
+
+
+def test_rename_tag_updates_all_linked_books(
+    repository: BookRepository,
+) -> None:
+    """タグ名変更を関連するすべての書籍へ反映する。"""
+    first = repository.add(
+        create_book_item(
+            title="1冊目",
+            tags=("旧名称",),
+        )
+    )
+    second = repository.add(
+        create_book_item(
+            title="2冊目",
+            tags=("旧名称",),
+        )
+    )
+    tag = repository.get_tag_by_name("旧名称")
+
+    assert tag is not None
+    result = repository.rename_tag(
+        tag_id=tag.id,  # type: ignore[arg-type]
+        name="新名称",
+        updated_at="2026-09-04 13:00:00",
+    )
+
+    assert result is True
+    assert repository.get_tag_by_name("旧名称") is None
+    renamed = repository.get_tag_by_name("新名称")
+    assert renamed is not None
+    assert renamed.updated_at == "2026-09-04 13:00:00"
+    assert repository.get_by_id(
+        first.id,  # type: ignore[arg-type]
+    ).tags == ("新名称",)  # type: ignore[union-attr]
+    assert repository.get_by_id(
+        second.id,  # type: ignore[arg-type]
+    ).tags == ("新名称",)  # type: ignore[union-attr]
+
+
+def test_rename_tag_returns_false_for_missing_id(
+    repository: BookRepository,
+) -> None:
+    """存在しないタグIDの名称変更ではFalseを返す。"""
+    result = repository.rename_tag(
+        tag_id=999,
+        name="新名称",
+        updated_at="2026-09-04 13:00:00",
+    )
+
+    assert result is False
+
+
+def test_rename_tag_rejects_duplicate_name(
+    repository: BookRepository,
+) -> None:
+    """別タグと同じ名称への変更を拒否する。"""
+    repository.add(
+        create_book_item(
+            tags=("既存タグ", "変更対象"),
+        )
+    )
+    target = repository.get_tag_by_name("変更対象")
+
+    assert target is not None
+    with pytest.raises(sqlite3.IntegrityError):
+        repository.rename_tag(
+            tag_id=target.id,  # type: ignore[arg-type]
+            name="既存タグ",
+            updated_at="2026-09-04 13:00:00",
+        )
+
+
+def test_count_books_by_tag_returns_zero_for_unused_tag(
+    repository: BookRepository,
+) -> None:
+    """未使用タグの書籍数として0を返す。"""
+    registered = repository.add(
+        create_book_item(tags=("未使用になるタグ",))
+    )
+    updated = replace(
+        registered,
+        tags=(),
+    )
+    repository.update(updated)
+    tag = repository.get_tag_by_name("未使用になるタグ")
+
+    assert tag is not None
+    assert repository.count_books_by_tag(
+        tag.id,  # type: ignore[arg-type]
+    ) == 0
+
+
+def test_delete_tag_removes_relations_from_books(
+    repository: BookRepository,
+) -> None:
+    """タグ削除時にすべての書籍との関連を解除する。"""
+    first = repository.add(
+        create_book_item(
+            title="1冊目",
+            tags=("削除対象", "残すタグ"),
+        )
+    )
+    second = repository.add(
+        create_book_item(
+            title="2冊目",
+            tags=("削除対象",),
+        )
+    )
+    target = repository.get_tag_by_name("削除対象")
+
+    assert target is not None
+    result = repository.delete_tag(
+        target.id,  # type: ignore[arg-type]
+    )
+
+    assert result is True
+    assert repository.get_by_id(
+        first.id,  # type: ignore[arg-type]
+    ).tags == ("残すタグ",)  # type: ignore[union-attr]
+    assert repository.get_by_id(
+        second.id,  # type: ignore[arg-type]
+    ).tags == ()  # type: ignore[union-attr]
+
+
+def test_delete_tag_returns_false_for_missing_id(
+    repository: BookRepository,
+) -> None:
+    """存在しないタグIDの削除ではFalseを返す。"""
+    assert repository.delete_tag(999) is False
+
+
+def test_delete_book_keeps_unused_tag(
+    repository: BookRepository,
+) -> None:
+    """書籍削除後も未使用となったタグを保持する。"""
+    registered = repository.add(
+        create_book_item(tags=("残るタグ",))
+    )
+    tag = repository.get_tag_by_name("残るタグ")
+
+    assert tag is not None
+    repository.delete(
+        registered.id,  # type: ignore[arg-type]
+    )
+
+    assert repository.get_tag_by_name("残るタグ") == tag
+    assert repository.count_books_by_tag(
+        tag.id,  # type: ignore[arg-type]
+    ) == 0
+
+
+def test_search_by_conditions_finds_tagged_books(
+    repository: BookRepository,
+) -> None:
+    """指定したタグが設定された書籍を検索できる。"""
+    first = repository.add(
+        create_book_item(
+            title="1冊目",
+            tags=("小説",),
+        )
+    )
+    second = repository.add(
+        create_book_item(
+            title="2冊目",
+            tags=("小説", "歴史"),
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="3冊目",
+            tags=("技術書",),
+        )
+    )
+
+    result = repository.search_by_conditions(
+        tag_name="小説",
+    )
+
+    assert result == [
+        replace(
+            second,
+            tags=("小説", "歴史"),
+        ),
+        first,
+    ]
+
+
+def test_search_by_conditions_finds_untagged_books(
+    repository: BookRepository,
+) -> None:
+    """タグ未設定の書籍だけを検索できる。"""
+    matched = repository.add(
+        create_book_item(
+            title="タグなし",
+            tags=(),
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="タグあり",
+            tags=("小説",),
+        )
+    )
+
+    result = repository.search_by_conditions(
+        untagged_only=True,
+    )
+
+    assert result == [matched]
+
+
+def test_search_by_conditions_combines_tag_and_existing_condition(
+    repository: BookRepository,
+) -> None:
+    """タグと既存条件をANDで検索できる。"""
+    matched = repository.add(
+        create_book_item(
+            title="Python入門",
+            is_favorite=True,
+            tags=("技術書",),
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="Python応用",
+            is_favorite=False,
+            tags=("技術書",),
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="別の書籍",
+            is_favorite=True,
+            tags=("小説",),
+        )
+    )
+
+    result = repository.search_by_conditions(
+        title="Python",
+        favorite_filter="favorite",
+        tag_name="技術書",
+    )
+
+    assert result == [matched]
+
+
+def test_search_by_conditions_tag_uses_exact_match(
+    repository: BookRepository,
+) -> None:
+    """タグ名を完全一致で検索する。"""
+    exact = repository.add(
+        create_book_item(
+            title="完全一致",
+            tags=("Python",),
+        )
+    )
+    repository.add(
+        create_book_item(
+            title="部分一致のみ",
+            tags=("Python入門",),
+        )
+    )
+
+    result = repository.search_by_conditions(
+        tag_name="Python",
+    )
+
+    assert result == [exact]
+
+
+def test_search_by_conditions_handles_sql_special_tag_name(
+    repository: BookRepository,
+) -> None:
+    """SQL特殊文字を含むタグ名を安全に検索できる。"""
+    registered = repository.add(
+        create_book_item(
+            tags=("O'Reilly, 100%",),
+        )
+    )
+
+    result = repository.search_by_conditions(
+        tag_name="O'Reilly, 100%",
+    )
+
+    assert result == [registered]
+
+
+def test_search_by_conditions_rejects_conflicting_tag_filters(
+    repository: BookRepository,
+) -> None:
+    """タグ名とタグ未設定の同時指定を拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match="タグとタグ未設定を同時に指定できません。",
+    ):
+        repository.search_by_conditions(
+            tag_name="小説",
+            untagged_only=True,
+        )

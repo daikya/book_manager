@@ -6,6 +6,7 @@ from pathlib import Path
 
 from book_manager.database.connection import create_connection
 from book_manager.models.book_item import BookItem
+from book_manager.models.tag import Tag
 
 
 BOOK_ITEM_COLUMNS = """
@@ -53,7 +54,7 @@ CUSTOM_SORT_EXPRESSIONS = {
 }
 
 class BookRepository:
-    """book_itemsテーブルの永続化処理を担当する。"""
+    """書籍情報と関連するタグの永続化処理を担当する。"""
 
     def __init__(
         self,
@@ -115,11 +116,18 @@ class BookRepository:
                     parameters,
                 )
 
-            book_id = cursor.lastrowid
+                book_id = cursor.lastrowid
 
-            if book_id is None:
-                raise sqlite3.DatabaseError(
-                    "登録した書籍のIDを取得できませんでした。"
+                if book_id is None:
+                    raise sqlite3.DatabaseError(
+                        "登録した書籍のIDを取得できませんでした。"
+                    )
+
+                self._replace_book_tags(
+                    connection,
+                    book_id=book_id,
+                    tag_names=book_item.tags,
+                    timestamp=book_item.created_at,
                 )
 
             return replace(
@@ -152,7 +160,10 @@ class BookRepository:
             if row is None:
                 return None
 
-            return self._row_to_book_item(row)
+            return self._rows_to_book_items(
+                connection,
+                [row],
+            )[0]
         finally:
             connection.close()
 
@@ -170,10 +181,10 @@ class BookRepository:
         try:
             rows = connection.execute(query).fetchall()
 
-            return [
-                self._row_to_book_item(row)
-                for row in rows
-            ]
+            return self._rows_to_book_items(
+                connection,
+                rows,
+            )
         finally:
             connection.close()
 
@@ -234,10 +245,10 @@ class BookRepository:
                 query,
             ).fetchall()
 
-            return [
-                self._row_to_book_item(row)
-                for row in rows
-            ]
+            return self._rows_to_book_items(
+                connection,
+                rows,
+            )
         finally:
             connection.close()
 
@@ -263,10 +274,10 @@ class BookRepository:
                 (f"%{keyword}%",),
             ).fetchall()
 
-            return [
-                self._row_to_book_item(row)
-                for row in rows
-            ]
+            return self._rows_to_book_items(
+                connection,
+                rows,
+            )
         finally:
             connection.close()
 
@@ -293,10 +304,10 @@ class BookRepository:
                 (f"%{keyword}%",),
             ).fetchall()
 
-            return [
-                self._row_to_book_item(row)
-                for row in rows
-            ]
+            return self._rows_to_book_items(
+                connection,
+                rows,
+            )
         finally:
             connection.close()
     def search_by_publisher(
@@ -322,10 +333,10 @@ class BookRepository:
                 (f"%{keyword}%",),
             ).fetchall()
 
-            return [
-                self._row_to_book_item(row)
-                for row in rows
-            ]
+            return self._rows_to_book_items(
+                connection,
+                rows,
+            )
         finally:
             connection.close()
 
@@ -350,10 +361,10 @@ class BookRepository:
                 (isbn,),
             ).fetchall()
 
-            return [
-                self._row_to_book_item(row)
-                for row in rows
-            ]
+            return self._rows_to_book_items(
+                connection,
+                rows,
+            )
         finally:
             connection.close()
 
@@ -378,10 +389,10 @@ class BookRepository:
                 (magazine_code,),
             ).fetchall()
 
-            return [
-                self._row_to_book_item(row)
-                for row in rows
-            ]
+            return self._rows_to_book_items(
+                connection,
+                rows,
+            )
         finally:
             connection.close()
 
@@ -396,8 +407,15 @@ class BookRepository:
         reading_status_filter: str | None = None,
         favorite_filter: str | None = None,
         rating_filter: str | int | None = None,
+        tag_name: str | None = None,
+        untagged_only: bool = False,
     ) -> list[BookItem]:
         """複数条件によるAND検索を行う。"""
+        if tag_name is not None and untagged_only:
+            raise ValueError(
+                "タグとタグ未設定を同時に指定できません。"
+            )
+
         conditions: list[str] = []
         parameters: list[str | int] = []
 
@@ -480,6 +498,31 @@ class BookRepository:
                 rating_filter,
             )
 
+        if tag_name is not None:
+            conditions.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM book_item_tags AS bit
+                    INNER JOIN tags AS t
+                        ON t.id = bit.tag_id
+                    WHERE bit.book_item_id = book_items.id
+                      AND t.name = ?
+                )
+                """
+            )
+            parameters.append(tag_name)
+        elif untagged_only:
+            conditions.append(
+                """
+                NOT EXISTS (
+                    SELECT 1
+                    FROM book_item_tags AS bit
+                    WHERE bit.book_item_id = book_items.id
+                )
+                """
+            )
+
         if not conditions:
             return self.get_all()
 
@@ -505,10 +548,10 @@ class BookRepository:
                 parameters,
             ).fetchall()
 
-            return [
-                self._row_to_book_item(row)
-                for row in rows
-            ]
+            return self._rows_to_book_items(
+                connection,
+                rows,
+            )
         finally:
             connection.close()
 
@@ -570,7 +613,17 @@ class BookRepository:
                     parameters,
                 )
 
-            return cursor.rowcount > 0
+                if cursor.rowcount == 0:
+                    return False
+
+                self._replace_book_tags(
+                    connection,
+                    book_id=book_item.id,
+                    tag_names=book_item.tags,
+                    timestamp=book_item.updated_at,
+                )
+
+            return True
         finally:
             connection.close()
 
@@ -596,6 +649,291 @@ class BookRepository:
             return cursor.rowcount > 0
         finally:
             connection.close()
+
+    def get_all_tags(self) -> list[Tag]:
+        """登録済みタグを名称の昇順で取得する。"""
+        query = """
+            SELECT
+                id,
+                name,
+                created_at,
+                updated_at
+            FROM tags
+            ORDER BY name ASC
+        """
+        connection = create_connection(self._database_path)
+
+        try:
+            rows = connection.execute(query).fetchall()
+
+            return [
+                self._row_to_tag(row)
+                for row in rows
+            ]
+        finally:
+            connection.close()
+
+    def get_tag_by_id(
+        self,
+        tag_id: int,
+    ) -> Tag | None:
+        """IDを指定してタグを1件取得する。"""
+        return self._get_tag(
+            "id = ?",
+            tag_id,
+        )
+
+    def get_tag_by_name(
+        self,
+        name: str,
+    ) -> Tag | None:
+        """名称を指定してタグを1件取得する。"""
+        return self._get_tag(
+            "name = ?",
+            name,
+        )
+
+    def rename_tag(
+        self,
+        *,
+        tag_id: int,
+        name: str,
+        updated_at: str,
+    ) -> bool:
+        """登録済みタグの名称を変更する。"""
+        query = """
+            UPDATE tags
+            SET
+                name = ?,
+                updated_at = ?
+            WHERE id = ?
+        """
+        connection = create_connection(self._database_path)
+
+        try:
+            with connection:
+                cursor = connection.execute(
+                    query,
+                    (
+                        name,
+                        updated_at,
+                        tag_id,
+                    ),
+                )
+
+            return cursor.rowcount > 0
+        finally:
+            connection.close()
+
+    def delete_tag(
+        self,
+        tag_id: int,
+    ) -> bool:
+        """IDを指定してタグを削除する。"""
+        query = """
+            DELETE FROM tags
+            WHERE id = ?
+        """
+        connection = create_connection(self._database_path)
+
+        try:
+            with connection:
+                cursor = connection.execute(
+                    query,
+                    (tag_id,),
+                )
+
+            return cursor.rowcount > 0
+        finally:
+            connection.close()
+
+    def count_books_by_tag(
+        self,
+        tag_id: int,
+    ) -> int:
+        """指定したタグを使用している書籍数を返す。"""
+        query = """
+            SELECT COUNT(*)
+            FROM book_item_tags
+            WHERE tag_id = ?
+        """
+        connection = create_connection(self._database_path)
+
+        try:
+            row = connection.execute(
+                query,
+                (tag_id,),
+            ).fetchone()
+
+            if row is None:
+                return 0
+
+            return int(row[0])
+        finally:
+            connection.close()
+
+    def _get_tag(
+        self,
+        condition: str,
+        value: str | int,
+    ) -> Tag | None:
+        """指定条件に一致するタグを1件取得する。"""
+        query = f"""
+            SELECT
+                id,
+                name,
+                created_at,
+                updated_at
+            FROM tags
+            WHERE {condition}
+        """
+        connection = create_connection(self._database_path)
+
+        try:
+            row = connection.execute(
+                query,
+                (value,),
+            ).fetchone()
+
+            if row is None:
+                return None
+
+            return self._row_to_tag(row)
+        finally:
+            connection.close()
+
+    @staticmethod
+    def _replace_book_tags(
+        connection: sqlite3.Connection,
+        *,
+        book_id: int,
+        tag_names: tuple[str, ...],
+        timestamp: str | None,
+    ) -> None:
+        """書籍に設定されたタグ関連を置き換える。"""
+        connection.execute(
+            """
+            DELETE FROM book_item_tags
+            WHERE book_item_id = ?
+            """,
+            (book_id,),
+        )
+
+        for tag_name in tag_names:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO tags (
+                    name,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    tag_name,
+                    timestamp,
+                    timestamp,
+                ),
+            )
+            tag_row = connection.execute(
+                """
+                SELECT id
+                FROM tags
+                WHERE name = ?
+                """,
+                (tag_name,),
+            ).fetchone()
+
+            if tag_row is None:
+                raise sqlite3.DatabaseError(
+                    "登録したタグのIDを取得できませんでした。"
+                )
+
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO book_item_tags (
+                    book_item_id,
+                    tag_id
+                )
+                VALUES (?, ?)
+                """,
+                (
+                    book_id,
+                    int(tag_row[0]),
+                ),
+            )
+
+    def _rows_to_book_items(
+        self,
+        connection: sqlite3.Connection,
+        rows: list[sqlite3.Row],
+    ) -> list[BookItem]:
+        """SQLiteの複数行をタグ付きBookItemへ変換する。"""
+        books = [
+            self._row_to_book_item(row)
+            for row in rows
+        ]
+
+        if not books:
+            return []
+
+        book_ids = [
+            book.id
+            for book in books
+            if book.id is not None
+        ]
+        placeholders = ", ".join(
+            "?"
+            for _ in book_ids
+        )
+        tag_rows = connection.execute(
+            f"""
+            SELECT
+                bit.book_item_id,
+                t.name
+            FROM book_item_tags AS bit
+            INNER JOIN tags AS t
+                ON t.id = bit.tag_id
+            WHERE bit.book_item_id IN ({placeholders})
+            ORDER BY t.name ASC
+            """,
+            book_ids,
+        ).fetchall()
+        tags_by_book_id: dict[int, list[str]] = {}
+
+        for tag_row in tag_rows:
+            book_id = int(tag_row["book_item_id"])
+            tags_by_book_id.setdefault(
+                book_id,
+                [],
+            ).append(
+                str(tag_row["name"])
+            )
+
+        return [
+            replace(
+                book,
+                tags=tuple(
+                    tags_by_book_id.get(
+                        book.id,
+                        [],
+                    )
+                ),
+            )
+            for book in books
+        ]
+
+    @staticmethod
+    def _row_to_tag(
+        row: sqlite3.Row,
+    ) -> Tag:
+        """SQLiteの行をTagへ変換する。"""
+        return Tag(
+            id=row["id"],
+            name=row["name"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
 
     @staticmethod
     def _row_to_book_item(
