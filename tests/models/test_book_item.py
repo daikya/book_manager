@@ -31,6 +31,7 @@ def test_book_item_optional_fields_default_to_none() -> None:
     assert book_item.notes is None
     assert book_item.created_at is None
     assert book_item.updated_at is None
+    assert book_item.tags == ()
 
 
 def test_book_item_accepts_all_fields() -> None:
@@ -53,6 +54,7 @@ def test_book_item_accepts_all_fields() -> None:
         notes="再読。",
         created_at="2026-07-21 15:00:00",
         updated_at="2026-07-21 15:00:00",
+        tags=("小説", "日本文学"),
     )
 
     assert book_item.title == "吾輩は猫である"
@@ -78,6 +80,7 @@ def test_book_item_accepts_all_fields() -> None:
     assert book_item.notes == "再読。"
     assert book_item.created_at == "2026-07-21 15:00:00"
     assert book_item.updated_at == "2026-07-21 15:00:00"
+    assert book_item.tags == ("小説", "日本文学")
 
 
 def test_book_item_requires_title() -> None:
@@ -180,3 +183,37 @@ def test_book_item_can_store_rating() -> None:
     )
 
     assert book_item.rating == 5
+
+
+def test_book_item_tags_defaults_to_empty_tuple() -> None:
+    """タグの初期値が空タプルになる。"""
+    book_item = BookItem(
+        title="テスト書籍",
+    )
+
+    assert book_item.tags == ()
+
+
+def test_book_item_can_store_multiple_tags() -> None:
+    """複数のタグ名をタプルとして保持できる。"""
+    book_item = BookItem(
+        title="テスト書籍",
+        tags=("Python", "技術書", "仕事"),
+    )
+
+    assert book_item.tags == (
+        "Python",
+        "技術書",
+        "仕事",
+    )
+
+
+def test_book_item_tag_default_is_immutable_tuple() -> None:
+    """タグの初期値が不変なタプルである。"""
+    first = BookItem(title="1冊目")
+    second = BookItem(title="2冊目")
+
+    assert isinstance(first.tags, tuple)
+    assert isinstance(second.tags, tuple)
+    assert first.tags == ()
+    assert second.tags == ()

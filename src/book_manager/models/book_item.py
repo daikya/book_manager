@@ -24,3 +24,4 @@ class BookItem:
     notes: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
+    tags: tuple[str, ...] = ()
