@@ -53,6 +53,7 @@ def test_export_writes_headers(
             "読書状態",
             "お気に入り",
             "評価",
+            "タグ",
             "備考",
             "登録日時",
             "更新日時",
@@ -106,6 +107,7 @@ def test_export_writes_book_values(
         "読書中",
         "はい",
         "5",
+        "",
         "備考",
         "2026-08-20 10:00:00",
         "2026-08-20 11:00:00",
@@ -179,6 +181,7 @@ def test_export_writes_none_as_empty_string(
         "",
         "",
         "",
+        "",
     ]
 
 
@@ -215,7 +218,7 @@ def test_export_preserves_newlines(
     )
 
     assert rows[1][6] == description
-    assert rows[1][11] == notes
+    assert rows[1][12] == notes
 
 
 def test_export_preserves_comma(
@@ -241,7 +244,7 @@ def test_export_preserves_comma(
     )
 
     assert rows[1][0] == "テスト,書籍"
-    assert rows[1][11] == "メモ,追記"
+    assert rows[1][12] == "メモ,追記"
 
 
 def test_export_preserves_double_quote(
@@ -267,7 +270,7 @@ def test_export_preserves_double_quote(
     )
 
     assert rows[1][0] == '「"引用"」を含む書籍'
-    assert rows[1][11] == 'メモに"引用"あり'
+    assert rows[1][12] == 'メモに"引用"あり'
 
 
 def test_export_writes_utf8_bom(
@@ -578,3 +581,66 @@ def test_export_writes_none_rating_as_empty_string(
     )
 
     assert rows[1][10] == ""
+
+
+def test_export_writes_single_tag(
+    tmp_path: Path,
+) -> None:
+    """一つのタグをタグ列へ出力する。"""
+    output_path = tmp_path / "books.csv"
+    book = BookItem(
+        title="タグ付き書籍",
+        tags=("小説",),
+    )
+
+    CsvExportService().export([book], output_path)
+
+    rows = _read_csv(output_path)
+    assert rows[1][11] == "小説"
+
+
+def test_export_writes_multiple_tags_in_name_order(
+    tmp_path: Path,
+) -> None:
+    """複数タグを名称の昇順にして縦線で連結する。"""
+    output_path = tmp_path / "books.csv"
+    book = BookItem(
+        title="複数タグ書籍",
+        tags=("技術書", "Python", "仕事"),
+    )
+
+    CsvExportService().export([book], output_path)
+
+    rows = _read_csv(output_path)
+    assert rows[1][11] == "Python|仕事|技術書"
+
+
+def test_export_writes_empty_tag_column(
+    tmp_path: Path,
+) -> None:
+    """タグ未設定を書き出すとタグ列を空欄にする。"""
+    output_path = tmp_path / "books.csv"
+
+    CsvExportService().export(
+        [BookItem(title="タグなし")],
+        output_path,
+    )
+
+    rows = _read_csv(output_path)
+    assert rows[1][11] == ""
+
+
+def test_export_preserves_csv_special_characters_in_tags(
+    tmp_path: Path,
+) -> None:
+    """タグ内のカンマとダブルクォートを安全に出力する。"""
+    output_path = tmp_path / "books.csv"
+    tags = ('Python,"実践"', "技術書")
+
+    CsvExportService().export(
+        [BookItem(title="特殊文字タグ", tags=tags)],
+        output_path,
+    )
+
+    rows = _read_csv(output_path)
+    assert rows[1][11] == 'Python,"実践"|技術書'

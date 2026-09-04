@@ -25,7 +25,26 @@ class CsvImportService:
         "著者名",
         "出版社",
         "出版形態",
-        "内容紹介",        "読了年月",
+        "内容紹介",
+        "読了年月",
+        "読書状態",
+        "お気に入り",
+        "評価",
+        "タグ",
+        "備考",
+        "登録日時",
+        "更新日時",
+    )
+
+    LEGACY_HEADERS = (
+        "書籍名",
+        "ISBN",
+        "雑誌コード",
+        "著者名",
+        "出版社",
+        "出版形態",
+        "内容紹介",
+        "読了年月",
         "読書状態",
         "お気に入り",
         "評価",
@@ -96,7 +115,10 @@ class CsvImportService:
 
         header = tuple(rows[0])
 
-        if header != self.HEADERS:
+        if header not in {
+            self.HEADERS,
+            self.LEGACY_HEADERS,
+        }:
             raise ValueError(
                 "CSVヘッダーが仕様と一致しません。"
             )
@@ -109,7 +131,7 @@ class CsvImportService:
             rows[1:],
             start=2,
         ):
-            if len(row) != len(self.HEADERS):
+            if len(row) != len(header):
                 errors.append(
                     CsvImportIssue(
                         row_number=row_number,
@@ -118,15 +140,20 @@ class CsvImportService:
                 )
                 continue
 
+            values = dict(zip(header, row, strict=True))
+
             try:
                 reading_status = self._convert_reading_status(
-                    row[8],
+                    values["読書状態"],
                 )
                 is_favorite = self._convert_is_favorite(
-                    row[9],
+                    values["お気に入り"],
                 )
                 rating = self._convert_rating(
-                    row[10],
+                    values["評価"],
+                )
+                tags = self._convert_tags(
+                    values.get("タグ", ""),
                 )
             except ValueError as exc:
                 errors.append(
@@ -137,8 +164,8 @@ class CsvImportService:
                 )
                 continue
 
-            isbn = row[1]
-            magazine_code = row[2]
+            isbn = values["ISBN"]
+            magazine_code = values["雑誌コード"]
 
             if isbn:
                 try:
@@ -196,18 +223,19 @@ class CsvImportService:
 
             try:
                 self._book_service.add_book(
-                    title=row[0],
+                    title=values["書籍名"],
                     isbn=isbn,
                     magazine_code=magazine_code,
-                    author=row[3],
-                    publisher=row[4],
-                    publication_format=row[5],
-                    description=row[6],
-                    completion_month=row[7],
+                    author=values["著者名"],
+                    publisher=values["出版社"],
+                    publication_format=values["出版形態"],
+                    description=values["内容紹介"],
+                    completion_month=values["読了年月"],
                     reading_status=reading_status,
                     is_favorite=is_favorite,
                     rating=rating,
-                    notes=row[11],
+                    tags=tags,
+                    notes=values["備考"],
                 )
             except ValueError as exc:
                 errors.append(
@@ -277,3 +305,16 @@ class CsvImportService:
             )
 
         return rating
+
+    @staticmethod
+    def _convert_tags(
+        value: str,
+    ) -> tuple[str, ...]:
+        """CSV上のタグ欄をタグ名のタプルへ変換する。"""
+        if value == "":
+            return ()
+
+        return tuple(
+            tag_name.strip()
+            for tag_name in value.split("|")
+        )

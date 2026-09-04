@@ -8,6 +8,9 @@ import csv
 from datetime import datetime
 
 from book_manager.services.book_service import BookService
+from book_manager.services.csv_export_service import (
+    CsvExportService,
+)
 from book_manager.services.csv_import_service import CsvImportService
 from book_manager.models.csv_import_result import (
     CsvImportIssue,
@@ -308,7 +311,7 @@ def test_import_file_imports_valid_row(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -343,6 +346,7 @@ def test_import_file_imports_valid_row(
         reading_status="reading",
         is_favorite=True,
         rating=4,
+        tags=(),
         notes="テスト備考",
     )
 
@@ -372,7 +376,7 @@ def test_import_file_records_error_for_invalid_column_count(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -449,7 +453,7 @@ def test_import_file_records_error_for_invalid_converted_value(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -506,7 +510,7 @@ def test_import_file_continues_after_row_error(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -559,6 +563,7 @@ def test_import_file_continues_after_row_error(
         reading_status="completed",
         is_favorite=False,
         rating=5,
+        tags=(),
         notes="正常な備考",
     )
 
@@ -596,7 +601,7 @@ def test_import_file_skips_existing_isbn(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -658,7 +663,7 @@ def test_import_file_skips_existing_magazine_code(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -717,7 +722,7 @@ def test_import_file_does_not_check_duplicate_when_identifiers_are_empty(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -769,7 +774,7 @@ def test_import_file_skips_by_isbn_before_magazine_code(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -833,7 +838,7 @@ def test_import_file_skips_duplicate_isbn_within_csv(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -912,7 +917,7 @@ def test_import_file_records_book_service_value_error(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -971,7 +976,7 @@ def test_import_file_continues_after_book_service_value_error(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
 
         for title, isbn in (
@@ -1035,7 +1040,7 @@ def test_import_file_records_isbn_lookup_value_error(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -1094,7 +1099,7 @@ def test_import_file_records_magazine_code_lookup_value_error(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -1154,7 +1159,7 @@ def test_import_file_propagates_unexpected_add_book_error(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -1202,7 +1207,7 @@ def test_import_file_propagates_unexpected_lookup_error(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -1262,7 +1267,7 @@ def test_import_file_skips_duplicate_isbn_with_real_database(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -1357,7 +1362,7 @@ def test_import_file_skips_duplicate_magazine_code_with_real_database(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -1439,7 +1444,7 @@ def test_import_file_uses_logical_csv_record_number(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -1497,7 +1502,7 @@ def test_import_file_preserves_special_characters_in_fields(
     ) as file:
         writer = csv.writer(file)
         writer.writerow(
-            CsvImportService.HEADERS,
+            CsvImportService.LEGACY_HEADERS,
         )
         writer.writerow(
             (
@@ -1540,5 +1545,331 @@ def test_import_file_preserves_special_characters_in_fields(
         reading_status="unread",
         is_favorite=False,
         rating=None,
+        tags=(),
         notes='備考1行目\n備考2行目,"補足"',
     )
+
+
+def test_import_file_accepts_new_header(
+    tmp_path: Path,
+) -> None:
+    """タグ列を含む新しい15列ヘッダーを受け付ける。"""
+    input_path = tmp_path / "books.csv"
+
+    with input_path.open(
+        "w",
+        encoding="utf-8-sig",
+        newline="",
+    ) as file:
+        csv.writer(file).writerow(CsvImportService.HEADERS)
+
+    service = CsvImportService(
+        book_service=Mock(spec=BookService),
+    )
+
+    assert service.import_file(input_path) == CsvImportResult(
+        imported_count=0,
+        skipped_count=0,
+        error_count=0,
+        skipped=(),
+        errors=(),
+    )
+
+
+@pytest.mark.parametrize(
+    ("csv_value", "expected"),
+    [
+        ("", ()),
+        ("小説", ("小説",)),
+        (
+            " 小説 | 歴史 |小説 ",
+            ("小説", "歴史", "小説"),
+        ),
+    ],
+)
+def test_convert_tags(
+    csv_value: str,
+    expected: tuple[str, ...],
+) -> None:
+    """タグ欄を分割し、各タグの前後空白を除去する。"""
+    assert CsvImportService._convert_tags(csv_value) == expected
+
+
+def test_import_file_passes_tags_to_book_service(
+    tmp_path: Path,
+) -> None:
+    """新形式CSVのタグをBookServiceへ渡す。"""
+    book_service = Mock(spec=BookService)
+    book_service.find_books_by_isbn.return_value = []
+    input_path = tmp_path / "books.csv"
+
+    with input_path.open(
+        "w",
+        encoding="utf-8-sig",
+        newline="",
+    ) as file:
+        writer = csv.writer(file)
+        writer.writerow(CsvImportService.HEADERS)
+        writer.writerow(
+            (
+                "タグ付き書籍",
+                "9784101010014",
+                "",
+                "著者",
+                "出版社",
+                "単行本",
+                "内容紹介",
+                "202608",
+                "読書中",
+                "はい",
+                "4",
+                " 小説 | 歴史 |小説 ",
+                "備考",
+                "",
+                "",
+            )
+        )
+
+    result = CsvImportService(
+        book_service=book_service,
+    ).import_file(input_path)
+
+    assert result.imported_count == 1
+    book_service.add_book.assert_called_once_with(
+        title="タグ付き書籍",
+        isbn="9784101010014",
+        magazine_code="",
+        author="著者",
+        publisher="出版社",
+        publication_format="単行本",
+        description="内容紹介",
+        completion_month="202608",
+        reading_status="reading",
+        is_favorite=True,
+        rating=4,
+        tags=("小説", "歴史", "小説"),
+        notes="備考",
+    )
+
+
+def test_import_file_passes_empty_tags_for_legacy_csv(
+    tmp_path: Path,
+) -> None:
+    """旧14列形式では空のタグをBookServiceへ渡す。"""
+    book_service = Mock(spec=BookService)
+    input_path = tmp_path / "books.csv"
+
+    with input_path.open(
+        "w",
+        encoding="utf-8-sig",
+        newline="",
+    ) as file:
+        writer = csv.writer(file)
+        writer.writerow(CsvImportService.LEGACY_HEADERS)
+        writer.writerow(
+            (
+                "旧形式書籍",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "いいえ",
+                "",
+                "",
+                "",
+                "",
+            )
+        )
+
+    result = CsvImportService(
+        book_service=book_service,
+    ).import_file(input_path)
+
+    assert result.imported_count == 1
+    assert book_service.add_book.call_args.kwargs["tags"] == ()
+
+
+def test_import_file_registers_and_reuses_tags(
+    tmp_path: Path,
+) -> None:
+    """未登録タグを登録し、同名タグを複数書籍で再利用する。"""
+    database_path = tmp_path / "books.db"
+    initialize_database(database_path)
+    repository = BookRepository(database_path)
+    book_service = BookService(
+        repository,
+        now_provider=lambda: datetime(2026, 9, 4, 10, 0),
+    )
+    input_path = tmp_path / "books.csv"
+
+    with input_path.open(
+        "w",
+        encoding="utf-8-sig",
+        newline="",
+    ) as file:
+        writer = csv.writer(file)
+        writer.writerow(CsvImportService.HEADERS)
+        for title in ("1冊目", "2冊目"):
+            writer.writerow(
+                (
+                    title,
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "未読",
+                    "いいえ",
+                    "",
+                    " 共通タグ | 技術書 ",
+                    "",
+                    "",
+                    "",
+                )
+            )
+
+    result = CsvImportService(
+        book_service=book_service,
+    ).import_file(input_path)
+
+    assert result.imported_count == 2
+    assert [tag.name for tag in book_service.get_all_tags()] == [
+        "共通タグ",
+        "技術書",
+    ]
+    assert all(
+        book.tags == ("共通タグ", "技術書")
+        for book in book_service.get_all_books()
+    )
+
+
+def test_import_file_does_not_keep_tags_from_error_row(
+    tmp_path: Path,
+) -> None:
+    """不正タグを含む行では書籍とタグを登録しない。"""
+    database_path = tmp_path / "books.db"
+    initialize_database(database_path)
+    book_service = BookService(BookRepository(database_path))
+    input_path = tmp_path / "books.csv"
+
+    with input_path.open(
+        "w",
+        encoding="utf-8-sig",
+        newline="",
+    ) as file:
+        writer = csv.writer(file)
+        writer.writerow(CsvImportService.HEADERS)
+        writer.writerow(
+            (
+                "不正タグ書籍",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "未読",
+                "いいえ",
+                "",
+                f"正常タグ|{'あ' * 31}",
+                "",
+                "",
+                "",
+            )
+        )
+
+    result = CsvImportService(
+        book_service=book_service,
+    ).import_file(input_path)
+
+    assert result.imported_count == 0
+    assert result.error_count == 1
+    assert result.errors[0].message == (
+        "タグ名は30文字以内で入力してください。"
+    )
+    assert book_service.get_all_books() == []
+    assert book_service.get_all_tags() == []
+
+
+def test_import_file_does_not_keep_tags_from_duplicate_row(
+    tmp_path: Path,
+) -> None:
+    """重複によりスキップした行のタグを登録しない。"""
+    database_path = tmp_path / "books.db"
+    initialize_database(database_path)
+    book_service = BookService(BookRepository(database_path))
+    book_service.add_book(
+        title="登録済み",
+        isbn="9784101010014",
+    )
+    input_path = tmp_path / "books.csv"
+
+    with input_path.open(
+        "w",
+        encoding="utf-8-sig",
+        newline="",
+    ) as file:
+        writer = csv.writer(file)
+        writer.writerow(CsvImportService.HEADERS)
+        writer.writerow(
+            (
+                "重複書籍",
+                "9784101010014",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "未読",
+                "いいえ",
+                "",
+                "登録されないタグ",
+                "",
+                "",
+                "",
+            )
+        )
+
+    result = CsvImportService(
+        book_service=book_service,
+    ).import_file(input_path)
+
+    assert result.skipped_count == 1
+    assert book_service.get_all_tags() == []
+
+
+def test_exported_csv_can_restore_tags_on_import(
+    tmp_path: Path,
+) -> None:
+    """エクスポートした新形式CSVからタグを復元する。"""
+    source_path = tmp_path / "source.db"
+    destination_path = tmp_path / "destination.db"
+    initialize_database(source_path)
+    initialize_database(destination_path)
+    source_service = BookService(BookRepository(source_path))
+    destination_service = BookService(
+        BookRepository(destination_path)
+    )
+    registered = source_service.add_book(
+        title="往復確認",
+        tags=("技術書", "Python"),
+    )
+    csv_path = tmp_path / "books.csv"
+    CsvExportService().export([registered], csv_path)
+
+    result = CsvImportService(
+        book_service=destination_service,
+    ).import_file(csv_path)
+
+    assert result.imported_count == 1
+    imported = destination_service.get_all_books()
+    assert len(imported) == 1
+    assert imported[0].tags == ("Python", "技術書")
