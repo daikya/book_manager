@@ -519,9 +519,9 @@ docs/development_guidelines.md
 
 ## 18. 現在の状態
 
-book_managerはVersion 1.6.0まで正式リリース済みである。
+book_managerはVersion 1.7.0まで正式リリース済みである。
 
-Version 1.7は、タグ・カテゴリ機能の実装、自動テストおよびWindows実環境での主要操作確認を完了し、リリース準備中である。
+Version 1.7.0は、タグ・カテゴリ機能の実装、812件の自動テスト全件成功およびWindows実環境での主要操作確認を経て、2026-09-04に正式リリースした。
 
 Version 1.0では基本的な書籍管理機能を完成させた。
 
