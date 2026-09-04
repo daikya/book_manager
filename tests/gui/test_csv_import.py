@@ -27,6 +27,7 @@ def create_application() -> BookManagerApplication:
         )
     )
     application._load_all_books = Mock()
+    application._refresh_tag_options = Mock()
 
     return application
 

@@ -14,6 +14,7 @@ def create_application() -> BookManagerApplication:
     application._root = Mock()
     application._backup_service = Mock()
     application._selected_book_id = 123
+    application._refresh_tag_options = Mock()
 
     return application
 

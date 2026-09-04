@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 import traceback
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import TYPE_CHECKING
 from PIL import Image, ImageTk
 from pathlib import Path
@@ -1560,7 +1560,7 @@ class BookManagerApplication:
         )
 
         button_frame.columnconfigure(
-            9,
+            10,
             weight=1,
         )
 
@@ -1664,6 +1664,17 @@ class BookManagerApplication:
             padx=(0, 6),
         )
 
+        self._tag_management_button = ttk.Button(
+            button_frame,
+            text="タグ管理",
+            command=self._on_manage_tags,
+        )
+        self._tag_management_button.grid(
+            row=0,
+            column=9,
+            padx=(0, 6),
+        )
+
         self._exit_button = ttk.Button(
             button_frame,
             text="終了",
@@ -1671,7 +1682,7 @@ class BookManagerApplication:
         )
         self._exit_button.grid(
             row=0,
-            column=10,
+            column=11,
             sticky="e",
         )
 
@@ -2472,6 +2483,244 @@ class BookManagerApplication:
             command=dialog.destroy,
         ).grid(row=1, column=1, padx=10, pady=(0, 10))
         dialog.wait_window()
+
+    def _on_manage_tags(self) -> None:
+        """タグの名称変更と削除を行うダイアログを表示する。"""
+        dialog = tk.Toplevel(self._root)
+        dialog.title("タグ管理")
+        dialog.transient(self._root)
+        dialog.grab_set()
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(0, weight=1)
+
+        tag_tree = ttk.Treeview(
+            dialog,
+            columns=("name", "book_count"),
+            show="headings",
+            selectmode="browse",
+            height=12,
+        )
+        tag_tree.heading("name", text="タグ名")
+        tag_tree.heading("book_count", text="使用冊数")
+        tag_tree.column(
+            "name",
+            width=260,
+            minwidth=160,
+            anchor="w",
+        )
+        tag_tree.column(
+            "book_count",
+            width=90,
+            minwidth=80,
+            anchor="center",
+            stretch=False,
+        )
+        tag_tree.grid(
+            row=0,
+            column=0,
+            columnspan=3,
+            sticky="nsew",
+            padx=10,
+            pady=10,
+        )
+
+        ttk.Button(
+            dialog,
+            text="タグ名変更",
+            command=lambda: self._rename_selected_tag(
+                tag_tree,
+            ),
+        ).grid(row=1, column=0, padx=10, pady=(0, 10))
+        ttk.Button(
+            dialog,
+            text="タグ削除",
+            command=lambda: self._delete_selected_tag(
+                tag_tree,
+            ),
+        ).grid(row=1, column=1, padx=10, pady=(0, 10))
+        ttk.Button(
+            dialog,
+            text="閉じる",
+            command=dialog.destroy,
+        ).grid(row=1, column=2, padx=10, pady=(0, 10))
+
+        self._populate_tag_management_tree(tag_tree)
+        dialog.wait_window()
+
+    def _populate_tag_management_tree(
+        self,
+        tag_tree: ttk.Treeview,
+    ) -> None:
+        """タグ管理一覧へタグ名と使用冊数を表示する。"""
+        for item_id in tag_tree.get_children():
+            tag_tree.delete(item_id)
+
+        for tag in self._service.get_all_tags():
+            if tag.id is None:
+                continue
+
+            tag_tree.insert(
+                "",
+                "end",
+                iid=str(tag.id),
+                values=(
+                    tag.name,
+                    self._service.count_books_by_tag(tag.id),
+                ),
+            )
+
+    def _get_selected_tag(
+        self,
+        tag_tree: ttk.Treeview,
+    ) -> tuple[int, str] | None:
+        """タグ管理一覧で選択中のタグIDと名称を返す。"""
+        selection = tag_tree.selection()
+
+        if not selection:
+            messagebox.showwarning(
+                "タグ未選択",
+                "操作するタグを選択してください。",
+                parent=tag_tree.winfo_toplevel(),
+            )
+            return None
+
+        item_id = selection[0]
+        values = tag_tree.item(item_id, "values")
+
+        return int(item_id), str(values[0])
+
+    def _rename_selected_tag(
+        self,
+        tag_tree: ttk.Treeview,
+    ) -> None:
+        """タグ管理一覧で選択中のタグ名を変更する。"""
+        selected_tag = self._get_selected_tag(tag_tree)
+
+        if selected_tag is None:
+            return
+
+        tag_id, current_name = selected_tag
+        new_name = simpledialog.askstring(
+            "タグ名変更",
+            "新しいタグ名を入力してください。",
+            initialvalue=current_name,
+            parent=tag_tree.winfo_toplevel(),
+        )
+
+        if new_name is None:
+            return
+
+        try:
+            renamed = self._service.rename_tag(
+                tag_id=tag_id,
+                name=new_name,
+            )
+
+            if not renamed:
+                messagebox.showwarning(
+                    "タグが見つかりません",
+                    "変更対象のタグが見つかりませんでした。",
+                    parent=tag_tree.winfo_toplevel(),
+                )
+                self._refresh_after_tag_change(tag_tree)
+                return
+
+            self._refresh_after_tag_change(tag_tree)
+            messagebox.showinfo(
+                "タグ名変更完了",
+                "タグ名を変更しました。",
+                parent=tag_tree.winfo_toplevel(),
+            )
+        except ValueError as error:
+            messagebox.showerror(
+                "タグ名の確認",
+                str(error),
+                parent=tag_tree.winfo_toplevel(),
+            )
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "タグ名変更エラー",
+                "タグ名を変更できませんでした。",
+                parent=tag_tree.winfo_toplevel(),
+            )
+
+    def _delete_selected_tag(
+        self,
+        tag_tree: ttk.Treeview,
+    ) -> None:
+        """タグ管理一覧で選択中のタグを削除する。"""
+        selected_tag = self._get_selected_tag(tag_tree)
+
+        if selected_tag is None:
+            return
+
+        tag_id, tag_name = selected_tag
+        book_count = self._service.count_books_by_tag(tag_id)
+        confirmed = messagebox.askyesno(
+            "タグ削除の確認",
+            (
+                f"タグ「{tag_name}」は{book_count}件の書籍で"
+                "使用されています。\n"
+                "このタグを削除すると、すべての書籍から"
+                "解除されます。\n"
+                "削除しますか？"
+            ),
+            parent=tag_tree.winfo_toplevel(),
+        )
+
+        if not confirmed:
+            return
+
+        try:
+            deleted = self._service.delete_tag(tag_id)
+
+            if not deleted:
+                messagebox.showwarning(
+                    "タグが見つかりません",
+                    "削除対象のタグが見つかりませんでした。",
+                    parent=tag_tree.winfo_toplevel(),
+                )
+                self._refresh_after_tag_change(tag_tree)
+                return
+
+            self._refresh_after_tag_change(tag_tree)
+            messagebox.showinfo(
+                "タグ削除完了",
+                "タグを削除しました。",
+                parent=tag_tree.winfo_toplevel(),
+            )
+        except ValueError as error:
+            messagebox.showerror(
+                "タグ削除エラー",
+                str(error),
+                parent=tag_tree.winfo_toplevel(),
+            )
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "タグ削除エラー",
+                "タグを削除できませんでした。",
+                parent=tag_tree.winfo_toplevel(),
+            )
+
+    def _refresh_after_tag_change(
+        self,
+        tag_tree: ttk.Treeview,
+    ) -> None:
+        """タグ変更後にタグと書籍の表示を最新状態へ更新する。"""
+        selected_book_id = self._selected_book_id
+        self._populate_tag_management_tree(tag_tree)
+        self._refresh_tag_options()
+        self._on_reload()
+
+        if selected_book_id is None:
+            return
+
+        book_item = self._service.get_book(selected_book_id)
+
+        if book_item is not None:
+            self._display_book_in_form(book_item)
 
 # ここからイベントハンドラ
 
