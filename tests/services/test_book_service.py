@@ -10,6 +10,7 @@ from book_manager.database.initializer import (
     initialize_database,
 )
 from book_manager.models.book_item import BookItem
+from book_manager.models.tag import Tag
 from book_manager.repositories.book_repository import (
     BookRepository,
 )
@@ -116,6 +117,7 @@ def add_sample_book(
     reading_status: str | None = None,
     is_favorite: bool = False,
     rating: int | None = None,
+    tags: tuple[str, ...] | list[str] = (),
 ) -> BookItem:
     """テスト用の書籍を登録する。"""
     return service.add_book(
@@ -133,6 +135,7 @@ def add_sample_book(
         is_favorite=is_favorite,
         rating=rating,
         notes="テスト用データ",
+        tags=tags,
     )
 
 
@@ -2297,3 +2300,408 @@ def test_rating_is_independent_from_other_reading_fields(
     assert registered.reading_status == "unread"
     assert registered.is_favorite is False
     assert registered.rating == 5
+
+
+def test_add_book_normalizes_tags(
+    service: BookService,
+) -> None:
+    """タグを正規化し、重複排除して昇順で登録する。"""
+    registered = service.add_book(
+        title="タグ付き書籍",
+        tags=[
+            " 技術書 ",
+            "",
+            "仕事",
+            "技術書",
+            "  ",
+            "Python 入門",
+        ],
+    )
+
+    assert registered.tags == (
+        "Python 入門",
+        "仕事",
+        "技術書",
+    )
+    assert service.get_book(
+        registered.id,  # type: ignore[arg-type]
+    ) == registered
+
+
+def test_add_book_distinguishes_tag_case(
+    service: BookService,
+) -> None:
+    """タグ名の大文字と小文字を区別する。"""
+    registered = service.add_book(
+        title="大文字小文字確認",
+        tags=("Python", "python"),
+    )
+
+    assert registered.tags == ("Python", "python")
+
+
+def test_add_book_accepts_thirty_character_tag(
+    service: BookService,
+) -> None:
+    """30文字のタグ名を受け付ける。"""
+    tag_name = "あ" * 30
+
+    registered = service.add_book(
+        title="30文字タグ",
+        tags=(tag_name,),
+    )
+
+    assert registered.tags == (tag_name,)
+
+
+@pytest.mark.parametrize(
+    ("tag_name", "message"),
+    [
+        (
+            "あ" * 31,
+            "タグ名は30文字以内で入力してください。",
+        ),
+        (
+            "小説|文学",
+            "タグ名に「|」または改行は使用できません。",
+        ),
+        (
+            "小説\n文学",
+            "タグ名に「|」または改行は使用できません。",
+        ),
+    ],
+)
+def test_add_book_rejects_invalid_tag_name(
+    service: BookService,
+    tag_name: str,
+    message: str,
+) -> None:
+    """不正なタグ名を拒否する。"""
+    with pytest.raises(ValueError, match=message):
+        service.add_book(
+            title="不正タグ",
+            tags=(tag_name,),
+        )
+
+
+def test_add_book_rejects_string_as_tags(
+    service: BookService,
+) -> None:
+    """タグ一覧へ文字列一つを直接渡すことを拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match="タグはタプルまたはリストで指定してください。",
+    ):
+        service.add_book(
+            title="文字列タグ",
+            tags="小説",  # type: ignore[arg-type]
+        )
+
+
+def test_add_book_rejects_non_string_tag_element(
+    service: BookService,
+) -> None:
+    """文字列以外のタグ要素を拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match="タグ名は文字列で指定してください。",
+    ):
+        service.add_book(
+            title="型不正タグ",
+            tags=["小説", 1],  # type: ignore[list-item]
+        )
+
+
+def test_update_book_normalizes_and_replaces_tags(
+    service: BookService,
+) -> None:
+    """更新時にタグを正規化して置き換える。"""
+    registered = add_sample_book(
+        service,
+        tags=("旧タグ",),
+    )
+    updated = replace(
+        registered,
+        tags=(" 新タグ ", "仕事", "新タグ"),
+    )
+
+    result = service.update_book(updated)
+
+    assert result is True
+    stored = service.get_book(
+        registered.id,  # type: ignore[arg-type]
+    )
+    assert stored is not None
+    assert stored.tags == ("仕事", "新タグ")
+    assert updated.tags == (" 新タグ ", "仕事", "新タグ")
+
+
+def test_update_book_can_clear_tags(
+    service: BookService,
+) -> None:
+    """更新時にすべてのタグを解除できる。"""
+    registered = add_sample_book(
+        service,
+        tags=("解除対象",),
+    )
+
+    assert service.update_book(
+        replace(registered, tags=()),
+    )
+    stored = service.get_book(
+        registered.id,  # type: ignore[arg-type]
+    )
+    assert stored is not None
+    assert stored.tags == ()
+
+
+def test_search_books_filters_by_tag(
+    service: BookService,
+) -> None:
+    """前後空白を除去したタグ名で検索する。"""
+    matched = add_sample_book(
+        service,
+        title="検索対象",
+        tags=("技術書",),
+    )
+    add_sample_book(
+        service,
+        title="検索対象外",
+        tags=("小説",),
+    )
+
+    result = service.search_books(
+        tag_name=" 技術書 ",
+    )
+
+    assert result == [matched]
+
+
+def test_search_books_filters_untagged_books(
+    service: BookService,
+) -> None:
+    """タグ未設定の書籍だけを検索する。"""
+    matched = add_sample_book(
+        service,
+        title="タグなし",
+    )
+    add_sample_book(
+        service,
+        title="タグあり",
+        tags=("小説",),
+    )
+
+    result = service.search_books(untagged_only=True)
+
+    assert result == [matched]
+
+
+def test_search_books_combines_tag_with_existing_conditions(
+    service: BookService,
+) -> None:
+    """タグと既存条件をANDで検索する。"""
+    matched = add_sample_book(
+        service,
+        title="Python入門",
+        is_favorite=True,
+        tags=("技術書",),
+    )
+    add_sample_book(
+        service,
+        title="Python応用",
+        is_favorite=False,
+        tags=("技術書",),
+    )
+
+    result = service.search_books(
+        title="Python",
+        favorite_filter="favorite",
+        tag_name="技術書",
+    )
+
+    assert result == [matched]
+
+
+def test_search_books_treats_blank_tag_as_no_condition(
+    service: BookService,
+) -> None:
+    """空白だけのタグ検索を条件なしとして扱う。"""
+    registered = add_sample_book(service)
+
+    assert service.search_books(tag_name="  ") == [registered]
+
+
+def test_search_books_rejects_conflicting_tag_filters(
+    service: BookService,
+) -> None:
+    """タグ名とタグ未設定の同時指定を拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match="タグとタグ未設定を同時に指定できません。",
+    ):
+        service.search_books(
+            tag_name="小説",
+            untagged_only=True,
+        )
+
+
+def test_search_books_rejects_invalid_tag_name(
+    service: BookService,
+) -> None:
+    """検索条件の不正なタグ名を拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match="タグ名に「|」または改行は使用できません。",
+    ):
+        service.search_books(tag_name="小説|文学")
+
+
+def test_get_all_tags_returns_tag_models(
+    service: BookService,
+) -> None:
+    """登録済みタグを名称の昇順で取得する。"""
+    add_sample_book(
+        service,
+        tags=("技術書", "Python", "仕事"),
+    )
+
+    result = service.get_all_tags()
+
+    assert [tag.name for tag in result] == [
+        "Python",
+        "仕事",
+        "技術書",
+    ]
+    assert all(isinstance(tag, Tag) for tag in result)
+
+
+def test_rename_tag_normalizes_name_and_sets_timestamp(
+    service: BookService,
+) -> None:
+    """タグ名を正規化し、更新日時を設定して変更する。"""
+    registered = add_sample_book(
+        service,
+        tags=("旧名称",),
+    )
+    tag = service.get_all_tags()[0]
+
+    result = service.rename_tag(
+        tag_id=tag.id,  # type: ignore[arg-type]
+        name=" 新名称 ",
+    )
+
+    assert result is True
+    renamed = service.get_all_tags()[0]
+    assert renamed.name == "新名称"
+    assert renamed.updated_at == "2026-07-22 10:30:00"
+    stored = service.get_book(
+        registered.id,  # type: ignore[arg-type]
+    )
+    assert stored is not None
+    assert stored.tags == ("新名称",)
+
+
+def test_rename_tag_same_name_succeeds_without_update(
+    service: BookService,
+) -> None:
+    """現在と同じ名称への変更を成功として扱う。"""
+    add_sample_book(service, tags=("小説",))
+    tag = service.get_all_tags()[0]
+
+    result = service.rename_tag(
+        tag_id=tag.id,  # type: ignore[arg-type]
+        name=" 小説 ",
+    )
+
+    assert result is True
+    assert service.get_all_tags()[0] == tag
+
+
+def test_rename_tag_returns_false_before_validating_missing_tag(
+    service: BookService,
+) -> None:
+    """存在しないタグでは名称検証前にFalseを返す。"""
+    assert service.rename_tag(
+        tag_id=999,
+        name="",
+    ) is False
+
+
+def test_rename_tag_rejects_duplicate_name(
+    service: BookService,
+) -> None:
+    """別の既存タグと同じ名称への変更を拒否する。"""
+    add_sample_book(
+        service,
+        tags=("既存タグ", "変更対象"),
+    )
+    target = next(
+        tag
+        for tag in service.get_all_tags()
+        if tag.name == "変更対象"
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="同じ名前のタグがすでに登録されています。",
+    ):
+        service.rename_tag(
+            tag_id=target.id,  # type: ignore[arg-type]
+            name="既存タグ",
+        )
+
+
+def test_rename_tag_rejects_invalid_name(
+    service: BookService,
+) -> None:
+    """不正な新しいタグ名を拒否する。"""
+    add_sample_book(service, tags=("変更対象",))
+    tag = service.get_all_tags()[0]
+
+    with pytest.raises(
+        ValueError,
+        match="タグ名を入力してください。",
+    ):
+        service.rename_tag(
+            tag_id=tag.id,  # type: ignore[arg-type]
+            name="  ",
+        )
+
+
+def test_count_books_by_tag_and_delete_tag(
+    service: BookService,
+) -> None:
+    """タグの使用冊数を取得し、タグと関連を削除する。"""
+    first = add_sample_book(
+        service,
+        title="1冊目",
+        tags=("削除対象",),
+    )
+    second = add_sample_book(
+        service,
+        title="2冊目",
+        tags=("削除対象",),
+    )
+    tag = service.get_all_tags()[0]
+
+    assert service.count_books_by_tag(
+        tag.id,  # type: ignore[arg-type]
+    ) == 2
+    assert service.delete_tag(
+        tag.id,  # type: ignore[arg-type]
+    ) is True
+    assert service.get_all_tags() == []
+    assert service.get_book(
+        first.id,  # type: ignore[arg-type]
+    ).tags == ()  # type: ignore[union-attr]
+    assert service.get_book(
+        second.id,  # type: ignore[arg-type]
+    ).tags == ()  # type: ignore[union-attr]
+
+
+def test_delete_and_count_missing_tag(
+    service: BookService,
+) -> None:
+    """存在しないタグの削除と使用冊数取得結果を返す。"""
+    assert service.count_books_by_tag(999) == 0
+    assert service.delete_tag(999) is False

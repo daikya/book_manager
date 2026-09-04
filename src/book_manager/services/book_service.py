@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from book_manager.models.book_item import BookItem
+from book_manager.models.tag import Tag
 from book_manager.repositories.book_repository import BookRepository
 from book_manager.validators.completion_month_validator import (
     validate_completion_month,
@@ -30,6 +31,9 @@ from book_manager.validators.reading_status_validator import (
 )
 from book_manager.validators.rating_validator import (
     validate_rating,
+)
+from book_manager.validators.tag_validator import (
+    validate_tag_name,
 )
 
 
@@ -73,6 +77,7 @@ class BookService:
         is_favorite: bool = False,
         rating: int | None = None,
         notes: str | None = None,
+        tags: tuple[str, ...] | list[str] = (),
     ) -> BookItem:
         """書籍情報を登録する。
 
@@ -91,6 +96,7 @@ class BookService:
             is_favorite: お気に入り状態。
             rating: 評価。
             notes: 備考。
+            tags: タグ名のタプルまたはリスト。
 
         Returns:
             登録後のBookItem。
@@ -146,6 +152,7 @@ class BookService:
         normalized_notes = self._normalize_optional_text(
             notes
         )
+        normalized_tags = self._normalize_tags(tags)
 
         self._validate_optional_values(
             isbn=normalized_isbn,
@@ -179,6 +186,7 @@ class BookService:
             notes=normalized_notes,
             created_at=current_timestamp,
             updated_at=current_timestamp,
+            tags=normalized_tags,
         )
 
         return self._repository.add(book_item)
@@ -484,6 +492,8 @@ class BookService:
         reading_status_filter: str | None = None,
         favorite_filter: str | None = None,
         rating_filter: str | int | None = None,
+        tag_name: str | None = None,
+        untagged_only: bool = False,
     ) -> list[BookItem]:
         """複数条件によるAND検索を行う。"""
         normalized_title = self._normalize_optional_text(
@@ -503,6 +513,17 @@ class BookService:
                 magazine_code,
             )
         )
+        normalized_tag_name = self._normalize_optional_text(
+            tag_name,
+        )
+
+        if normalized_tag_name is not None:
+            validate_tag_name(normalized_tag_name)
+
+        if normalized_tag_name is not None and untagged_only:
+            raise ValueError(
+                "タグとタグ未設定を同時に指定できません。"
+            )
 
         if normalized_isbn is not None:
             validate_isbn(
@@ -553,17 +574,21 @@ class BookService:
                     "評価の検索条件が正しくありません。"
                 )
 
-        if all(
-            value is None
-            for value in (
-                normalized_title,
-                normalized_author,
-                normalized_publisher,
-                normalized_isbn,
-                normalized_magazine_code,
-                reading_status_filter,
-                favorite_filter,
-                rating_filter,
+        if (
+            not untagged_only
+            and all(
+                value is None
+                for value in (
+                    normalized_title,
+                    normalized_author,
+                    normalized_publisher,
+                    normalized_isbn,
+                    normalized_magazine_code,
+                    reading_status_filter,
+                    favorite_filter,
+                    rating_filter,
+                    normalized_tag_name,
+                )
             )
         ):
             return self._repository.get_all()
@@ -577,6 +602,8 @@ class BookService:
             reading_status_filter=reading_status_filter,
             favorite_filter=favorite_filter,
             rating_filter=rating_filter,
+            tag_name=normalized_tag_name,
+            untagged_only=untagged_only,
         )
 
     def update_book(
@@ -658,6 +685,9 @@ class BookService:
         normalized_notes = self._normalize_optional_text(
             book_item.notes
         )
+        normalized_tags = self._normalize_tags(
+            book_item.tags,
+        )
 
         self._validate_optional_values(
             isbn=normalized_isbn,
@@ -690,6 +720,7 @@ class BookService:
             notes=normalized_notes,
             created_at=existing.created_at,
             updated_at=self._current_timestamp(),
+            tags=normalized_tags,
         )
 
         return self._repository.update(
@@ -702,6 +733,54 @@ class BookService:
     ) -> bool:
         """IDを指定して書籍情報を削除する。"""
         return self._repository.delete(book_id)
+
+    def get_all_tags(self) -> list[Tag]:
+        """登録済みタグを名称の昇順で取得する。"""
+        return self._repository.get_all_tags()
+
+    def rename_tag(
+        self,
+        *,
+        tag_id: int,
+        name: str,
+    ) -> bool:
+        """登録済みタグの名称を変更する。"""
+        existing = self._repository.get_tag_by_id(tag_id)
+
+        if existing is None:
+            return False
+
+        if not isinstance(name, str):
+            validate_tag_name(name)
+
+        normalized_name = name.strip()
+        validate_tag_name(normalized_name)
+
+        if existing.name == normalized_name:
+            return True
+
+        duplicate = self._repository.get_tag_by_name(
+            normalized_name,
+        )
+
+        if duplicate is not None:
+            raise ValueError(
+                "同じ名前のタグがすでに登録されています。"
+            )
+
+        return self._repository.rename_tag(
+            tag_id=tag_id,
+            name=normalized_name,
+            updated_at=self._current_timestamp(),
+        )
+
+    def delete_tag(self, tag_id: int) -> bool:
+        """IDを指定してタグを削除する。"""
+        return self._repository.delete_tag(tag_id)
+
+    def count_books_by_tag(self, tag_id: int) -> int:
+        """指定したタグを使用している書籍数を返す。"""
+        return self._repository.count_books_by_tag(tag_id)
 
     @staticmethod
     def _normalize_title(title: str) -> str:
@@ -729,6 +808,35 @@ class BookService:
             return None
 
         return normalized_value
+
+    @classmethod
+    def _normalize_tags(
+        cls,
+        tags: tuple[str, ...] | list[str],
+    ) -> tuple[str, ...]:
+        """タグ名を正規化、検証、重複排除して昇順で返す。"""
+        if not isinstance(tags, (tuple, list)):
+            raise ValueError(
+                "タグはタプルまたはリストで指定してください。"
+            )
+
+        normalized_tags: list[str] = []
+
+        for tag_name in tags:
+            if not isinstance(tag_name, str):
+                validate_tag_name(tag_name)
+
+            normalized_tag_name = tag_name.strip()
+
+            if normalized_tag_name == "":
+                continue
+
+            validate_tag_name(normalized_tag_name)
+
+            if normalized_tag_name not in normalized_tags:
+                normalized_tags.append(normalized_tag_name)
+
+        return tuple(sorted(normalized_tags))
 
     @staticmethod
     def _normalize_isbn(
