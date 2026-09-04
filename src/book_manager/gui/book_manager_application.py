@@ -172,6 +172,10 @@ class BookManagerApplication:
         "★5",
     )
 
+    SEARCH_TAG_ALL = "すべて"
+    SEARCH_TAG_UNTAGGED = "タグ未設定"
+    TAG_SEPARATOR = "|"
+
     TREE_COLUMNS = (
         "id",
         "title",
@@ -184,6 +188,7 @@ class BookManagerApplication:
         "reading_status",
         "is_favorite",
         "rating",
+        "tags",
     )
 
     def __init__(
@@ -243,6 +248,10 @@ class BookManagerApplication:
             master=self._root,
             value="すべて",
         )
+        self._search_tag_var = tk.StringVar(
+            master=self._root,
+            value=self.SEARCH_TAG_ALL,
+        )
 
         self._sort_type_var = tk.StringVar(
             master=self._root,
@@ -285,6 +294,9 @@ class BookManagerApplication:
             master=self._root,
             value="未評価",
         )
+        self._tags_var = tk.StringVar(
+            master=self._root,
+        )
         self._count_status_var = tk.StringVar(
             master=self._root,
             value="全 0件",
@@ -296,6 +308,7 @@ class BookManagerApplication:
 
         self._configure_root()
         self._create_widgets()
+        self._refresh_tag_options()
         self._load_all_books()
 
         self._title_entry.focus_set()
@@ -678,6 +691,35 @@ class BookManagerApplication:
             pady=(8, 0),
         )
 
+        ttk.Label(
+            search_frame,
+            text="タグ",
+        ).grid(
+            row=1,
+            column=6,
+            sticky="w",
+            padx=(0, 6),
+            pady=(8, 0),
+        )
+
+        self._search_tag_combobox = ttk.Combobox(
+            search_frame,
+            textvariable=self._search_tag_var,
+            values=(
+                self.SEARCH_TAG_ALL,
+                self.SEARCH_TAG_UNTAGGED,
+            ),
+            state="readonly",
+            width=14,
+        )
+        self._search_tag_combobox.grid(
+            row=1,
+            column=7,
+            sticky="w",
+            padx=(0, 10),
+            pady=(8, 0),
+        )
+
         self._search_button = ttk.Button(
             search_frame,
             text="検索",
@@ -685,7 +727,7 @@ class BookManagerApplication:
         )
         self._search_button.grid(
             row=1,
-            column=6,
+            column=8,
             padx=(0, 6),
             pady=(8, 0),
         )
@@ -697,8 +739,7 @@ class BookManagerApplication:
         )
         self._clear_search_button.grid(
             row=1,
-            column=7,
-            columnspan=3,
+            column=9,
             sticky="w",
             pady=(8, 0),
         )
@@ -1017,6 +1058,13 @@ class BookManagerApplication:
                 "anchor": "center",
                 "stretch": False,
             },
+            "tags": {
+                "heading": "タグ",
+                "width": 180,
+                "minwidth": 120,
+                "anchor": "w",
+                "stretch": True,
+            },
         }
 
         for column_name, definition in column_definitions.items():
@@ -1077,11 +1125,11 @@ class BookManagerApplication:
             minsize=190,
         )
         form_frame.rowconfigure(
-            4,
+            5,
             weight=1,
         )
         form_frame.rowconfigure(
-            5,
+            6,
             weight=1,
         )
 
@@ -1314,9 +1362,49 @@ class BookManagerApplication:
 
         ttk.Label(
             form_frame,
-            text="内容紹介",
+            text="タグ",
         ).grid(
             row=4,
+            column=0,
+            sticky="w",
+            padx=(0, 6),
+            pady=4,
+        )
+
+        tag_frame = ttk.Frame(form_frame)
+        tag_frame.grid(
+            row=4,
+            column=1,
+            columnspan=3,
+            sticky="ew",
+            pady=4,
+        )
+        tag_frame.columnconfigure(0, weight=1)
+        self._tags_entry = ttk.Entry(
+            tag_frame,
+            textvariable=self._tags_var,
+        )
+        self._tags_entry.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+            padx=(0, 6),
+        )
+        self._select_tags_button = ttk.Button(
+            tag_frame,
+            text="タグ選択",
+            command=self._on_select_tags,
+        )
+        self._select_tags_button.grid(
+            row=0,
+            column=1,
+        )
+
+        ttk.Label(
+            form_frame,
+            text="内容紹介",
+        ).grid(
+            row=5,
             column=0,
             sticky="nw",
             padx=(0, 6),
@@ -1327,7 +1415,7 @@ class BookManagerApplication:
             form_frame,
         )
         description_frame.grid(
-            row=4,
+            row=5,
             column=1,
             columnspan=3,
             sticky="nsew",
@@ -1371,7 +1459,7 @@ class BookManagerApplication:
             form_frame,
             text="備考",
         ).grid(
-            row=5,
+            row=6,
             column=0,
             sticky="nw",
             padx=(0, 6),
@@ -1382,7 +1470,7 @@ class BookManagerApplication:
             form_frame,
         )
         notes_frame.grid(
-            row=5,
+            row=6,
             column=1,
             columnspan=3,
             sticky="nsew",
@@ -1429,7 +1517,7 @@ class BookManagerApplication:
         cover_frame.grid(
             row=0,
             column=4,
-            rowspan=6,
+            rowspan=7,
             sticky="ns",
             padx=(12, 0),
             pady=4,
@@ -1746,6 +1834,7 @@ class BookManagerApplication:
                             "",
                         )
                     ),
+                    self.TAG_SEPARATOR.join(book.tags),
                 ),
             )
             displayed_count += 1
@@ -1803,6 +1892,9 @@ class BookManagerApplication:
                 book_item.rating,
                 "未評価",
             )
+        )
+        self._tags_var.set(
+            self.TAG_SEPARATOR.join(book_item.tags),
         )
         self._replace_text(
             self._description_text,
@@ -2027,6 +2119,7 @@ class BookManagerApplication:
         )
         self._is_favorite_var.set(False)
         self._rating_var.set("未評価")
+        self._tags_var.set("")
         self._description_text.delete(
             "1.0",
             tk.END,
@@ -2053,7 +2146,10 @@ class BookManagerApplication:
         self._clear_cover_state()
     def _get_form_values(
         self,
-    ) -> dict[str, str | int | bool | None]:
+    ) -> dict[
+        str,
+        str | int | bool | tuple[str, ...] | None,
+    ]:
         """入力フォームの値を取得する。"""
         return {
             "title": self._title_var.get(),
@@ -2086,6 +2182,13 @@ class BookManagerApplication:
             "rating": self.RATING_VALUES.get(
                 self._rating_var.get()
             ),
+            "tags": tuple(
+                tag_name.strip()
+                for tag_name in self._tags_var.get().split(
+                    self.TAG_SEPARATOR
+                )
+                if tag_name.strip()
+            ),
             "notes": self._notes_text.get(
                 "1.0",
                 tk.END,
@@ -2115,6 +2218,7 @@ class BookManagerApplication:
             reading_status=values["reading_status"],
             is_favorite=values["is_favorite"],
             rating=values["rating"],
+            tags=values["tags"],
             notes=values["notes"],
         )
 
@@ -2227,6 +2331,19 @@ class BookManagerApplication:
                 self._search_rating_var.get()
             ]
         )
+        selected_tag = self._search_tag_var.get()
+        tag_name = (
+            selected_tag
+            if selected_tag
+            not in {
+                self.SEARCH_TAG_ALL,
+                self.SEARCH_TAG_UNTAGGED,
+            }
+            else None
+        )
+        untagged_only = (
+            selected_tag == self.SEARCH_TAG_UNTAGGED
+        )
 
         return self._service.search_books(
             title=self._search_title_var.get(),
@@ -2237,6 +2354,8 @@ class BookManagerApplication:
             reading_status_filter=reading_status_filter,
             favorite_filter=favorite_filter,
             rating_filter=rating_filter,
+            tag_name=tag_name,
+            untagged_only=untagged_only,
         )
 
     def _has_search_conditions(
@@ -2260,6 +2379,7 @@ class BookManagerApplication:
                 self._search_reading_status_var.get(),
                 self._search_favorite_var.get(),
                 self._search_rating_var.get(),
+                self._search_tag_var.get(),
             )
         )
 
@@ -2267,6 +2387,91 @@ class BookManagerApplication:
             has_text_condition
             or has_filter_condition
         )
+
+    def _refresh_tag_options(self) -> None:
+        """検索用タグ選択肢を最新状態へ更新する。"""
+        current_value = self._search_tag_var.get()
+        tag_names = tuple(
+            tag.name
+            for tag in self._service.get_all_tags()
+        )
+        options = (
+            self.SEARCH_TAG_ALL,
+            self.SEARCH_TAG_UNTAGGED,
+            *tag_names,
+        )
+        self._search_tag_combobox.configure(values=options)
+
+        if current_value not in options:
+            self._search_tag_var.set(self.SEARCH_TAG_ALL)
+
+    def _on_select_tags(self) -> None:
+        """登録済みタグからフォームへ設定するタグを選択する。"""
+        tags = self._service.get_all_tags()
+
+        if not tags:
+            messagebox.showinfo(
+                "タグ選択",
+                "登録済みのタグはありません。",
+                parent=self._root,
+            )
+            return
+
+        dialog = tk.Toplevel(self._root)
+        dialog.title("タグ選択")
+        dialog.transient(self._root)
+        dialog.grab_set()
+
+        listbox = tk.Listbox(
+            dialog,
+            selectmode=tk.MULTIPLE,
+            exportselection=False,
+            height=min(12, len(tags)),
+            width=36,
+        )
+        listbox.grid(
+            row=0,
+            column=0,
+            columnspan=2,
+            sticky="nsew",
+            padx=10,
+            pady=10,
+        )
+
+        selected_names = {
+            name.strip()
+            for name in self._tags_var.get().split(
+                self.TAG_SEPARATOR
+            )
+            if name.strip()
+        }
+
+        for index, tag in enumerate(tags):
+            listbox.insert(tk.END, tag.name)
+            if tag.name in selected_names:
+                listbox.selection_set(index)
+
+        def apply_selection() -> None:
+            names = sorted(
+                listbox.get(index)
+                for index in listbox.curselection()
+            )
+            self._tags_var.set(
+                self.TAG_SEPARATOR.join(names)
+            )
+            dialog.destroy()
+
+        ttk.Button(
+            dialog,
+            text="設定",
+            command=apply_selection,
+        ).grid(row=1, column=0, padx=10, pady=(0, 10))
+        ttk.Button(
+            dialog,
+            text="キャンセル",
+            command=dialog.destroy,
+        ).grid(row=1, column=1, padx=10, pady=(0, 10))
+        dialog.wait_window()
 
 # ここからイベントハンドラ
 
@@ -2324,6 +2529,9 @@ class BookManagerApplication:
         )
         self._search_rating_var.set(
             "すべて"
+        )
+        self._search_tag_var.set(
+            self.SEARCH_TAG_ALL
         )
 
         self._load_all_books()
@@ -2491,6 +2699,7 @@ class BookManagerApplication:
                 reading_status=values["reading_status"],
                 is_favorite=values["is_favorite"],
                 rating=values["rating"],
+                tags=values["tags"],
                 notes=values["notes"],
             )
 
@@ -2499,6 +2708,7 @@ class BookManagerApplication:
                     "登録済み書籍のIDを取得できませんでした。",
                 )
 
+            self._refresh_tag_options()
             self._load_all_books()
 
             messagebox.showinfo(
@@ -2591,6 +2801,7 @@ class BookManagerApplication:
                 self._clear_form()
                 return
 
+            self._refresh_tag_options()
             self._load_all_books()
 
             messagebox.showinfo(
@@ -2830,6 +3041,7 @@ class BookManagerApplication:
                 Path(input_filename),
             )
 
+            self._refresh_tag_options()
             self._load_all_books()
 
             message_lines = [
@@ -2918,6 +3130,7 @@ class BookManagerApplication:
             )
 
             self._selected_book_id = None
+            self._refresh_tag_options()
             self._load_all_books()
 
             messagebox.showinfo(

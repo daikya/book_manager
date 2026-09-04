@@ -27,6 +27,8 @@ def create_form_application(
     application._reading_status_var = Mock()
     application._is_favorite_var = Mock()
     application._rating_var = Mock()
+    application._tags_var = Mock()
+    application._tags_var.get.return_value = ""
     application._title_var.get.return_value = "テスト書籍"
     application._isbn_var.get.return_value = ""
     application._magazine_code_var.get.return_value = ""
@@ -98,6 +100,8 @@ def test_display_book_in_form_sets_true_is_favorite() -> None:
     application._reading_status_var = Mock()
     application._is_favorite_var = Mock()
     application._rating_var = Mock()
+    application._tags_var = Mock()
+    application._tags_var.get.return_value = ""
     application._description_text = Mock()
     application._notes_text = Mock()
 
@@ -137,6 +141,8 @@ def test_display_book_in_form_sets_false_is_favorite() -> None:
     application._reading_status_var = Mock()
     application._is_favorite_var = Mock()
     application._rating_var = Mock()
+    application._tags_var = Mock()
+    application._tags_var.get.return_value = ""
     application._description_text = Mock()
     application._notes_text = Mock()
 
@@ -176,6 +182,8 @@ def test_clear_form_resets_is_favorite() -> None:
     application._reading_status_var = Mock()
     application._is_favorite_var = Mock()
     application._rating_var = Mock()
+    application._tags_var = Mock()
+    application._tags_var.get.return_value = ""
     application._description_text = Mock()
     application._notes_text = Mock()
     application._book_tree = Mock()
@@ -224,7 +232,7 @@ def test_display_books_shows_star_for_favorite() -> None:
         ]
     )
 
-    assert values[-2] == "★"
+    assert values[-3] == "★"
 
 
 def test_display_books_shows_empty_string_for_non_favorite() -> None:
@@ -259,4 +267,4 @@ def test_display_books_shows_empty_string_for_non_favorite() -> None:
         ]
     )
 
-    assert values[-2] == ""
+    assert values[-3] == ""

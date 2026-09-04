@@ -106,6 +106,8 @@ def test_get_form_values_converts_rating(
     application._is_favorite_var.get.return_value = False
 
     application._rating_var = Mock()
+    application._tags_var = Mock()
+    application._tags_var.get.return_value = ""
     application._rating_var.get.return_value = (
         display_value
     )
@@ -145,6 +147,7 @@ def test_create_book_item_from_form_sets_rating() -> None:
             "reading_status": None,
             "is_favorite": False,
             "rating": 5,
+            "tags": (),
             "notes": None,
         },
     )
@@ -183,6 +186,8 @@ def test_display_book_in_form_sets_rating(
     application._reading_status_var = Mock()
     application._is_favorite_var = Mock()
     application._rating_var = Mock()
+    application._tags_var = Mock()
+    application._tags_var.get.return_value = ""
 
     application._description_text = Mock()
     application._notes_text = Mock()
@@ -223,6 +228,8 @@ def test_display_book_in_form_sets_unrated() -> None:
     application._reading_status_var = Mock()
     application._is_favorite_var = Mock()
     application._rating_var = Mock()
+    application._tags_var = Mock()
+    application._tags_var.get.return_value = ""
 
     application._description_text = Mock()
     application._notes_text = Mock()
@@ -263,6 +270,8 @@ def test_clear_form_resets_rating() -> None:
     application._reading_status_var = Mock()
     application._is_favorite_var = Mock()
     application._rating_var = Mock()
+    application._tags_var = Mock()
+    application._tags_var.get.return_value = ""
 
     application._description_text = Mock()
     application._notes_text = Mock()
@@ -326,7 +335,7 @@ def test_display_books_shows_rating(
         ]
     )
 
-    assert values[-1] == expected
+    assert values[-2] == expected
 
 
 def test_display_books_shows_empty_string_for_unrated() -> None:
@@ -361,4 +370,4 @@ def test_display_books_shows_empty_string_for_unrated() -> None:
         ]
     )
 
-    assert values[-1] == ""
+    assert values[-2] == ""

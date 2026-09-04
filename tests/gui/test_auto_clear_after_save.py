@@ -20,6 +20,7 @@ def create_application() -> BookManagerApplication:
     application._title_entry = Mock()
     application._is_favorite_var = Mock()
     application._load_all_books = Mock()
+    application._refresh_tag_options = Mock()
     application._clear_form = Mock()
     application._confirm_duplicate_candidates = Mock(
         return_value=True,
@@ -39,6 +40,7 @@ def create_application() -> BookManagerApplication:
             "reading_status": None,
             "is_favorite": False,
             "rating": None,
+            "tags": (),
             "notes": None,
         },
     )
