@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from book_manager.database.connection import create_connection
 from book_manager.database.initializer import initialize_database
 from book_manager.database.schema import SCHEMA_VERSION
 
@@ -136,10 +137,10 @@ def test_initialize_database_creates_rating_column(
         connection.close()
 
 
-def test_initialize_database_migrates_version_1_to_5(
+def test_initialize_database_migrates_version_1_to_6(
     tmp_path: Path,
 ) -> None:
-    """Version 1のDBをVersion 5へ移行する。"""
+    """Version 1のDBをVersion 6へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -227,10 +228,10 @@ def test_initialize_database_migrates_version_1_to_5(
     finally:
         connection.close()
 
-def test_initialize_database_migrates_version_2_to_5(
+def test_initialize_database_migrates_version_2_to_6(
     tmp_path: Path,
 ) -> None:
-    """Version 2のDBをVersion 5へ移行する。"""
+    """Version 2のDBをVersion 6へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -321,10 +322,10 @@ def test_initialize_database_migrates_version_2_to_5(
     finally:
         connection.close()
 
-def test_initialize_database_migrates_version_3_to_5(
+def test_initialize_database_migrates_version_3_to_6(
     tmp_path: Path,
 ) -> None:
-    """Version 3のDBをVersion 5へ移行する。"""
+    """Version 3のDBをVersion 6へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -418,10 +419,10 @@ def test_initialize_database_migrates_version_3_to_5(
     finally:
         connection.close()
 
-def test_initialize_database_migrates_version_4_to_5(
+def test_initialize_database_migrates_version_4_to_6(
     tmp_path: Path,
 ) -> None:
-    """Version 4のDBへ評価列を追加する。"""
+    """Version 4のDBをVersion 6へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -518,6 +519,114 @@ def test_initialize_database_migrates_version_4_to_5(
         connection.close()
 
 
+def test_initialize_database_migrates_version_5_to_6(
+    tmp_path: Path,
+) -> None:
+    """Version 5のDBをVersion 6へ移行する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        with connection:
+            connection.execute(
+                """
+                CREATE TABLE book_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    isbn TEXT,
+                    magazine_code TEXT,
+                    title TEXT NOT NULL,
+                    author TEXT,
+                    publisher TEXT,
+                    publication_format TEXT,
+                    description TEXT,
+                    cover_image_url TEXT,
+                    cover_image_path TEXT,
+                    completion_month TEXT,
+                    reading_status TEXT,
+                    is_favorite INTEGER NOT NULL DEFAULT 0,
+                    rating INTEGER,
+                    notes TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO book_items (
+                    title,
+                    reading_status,
+                    is_favorite,
+                    rating,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "タグ機能追加前の書籍",
+                    "completed",
+                    1,
+                    5,
+                    "2026-09-03 10:00:00",
+                    "2026-09-03 10:00:00",
+                ),
+            )
+            connection.execute(
+                "PRAGMA user_version = 5"
+            )
+    finally:
+        connection.close()
+
+    initialize_database(database_path)
+
+    assert get_user_version(database_path) == SCHEMA_VERSION
+
+    table_names = get_schema_object_names(
+        database_path,
+        "table",
+    )
+
+    assert "tags" in table_names
+    assert "book_item_tags" in table_names
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        row = connection.execute(
+            """
+            SELECT
+                title,
+                reading_status,
+                is_favorite,
+                rating
+            FROM book_items
+            """
+        ).fetchone()
+
+        assert row == (
+            "タグ機能追加前の書籍",
+            "completed",
+            1,
+            5,
+        )
+
+        tag_count = connection.execute(
+            "SELECT COUNT(*) FROM tags"
+        ).fetchone()
+        relation_count = connection.execute(
+            "SELECT COUNT(*) FROM book_item_tags"
+        ).fetchone()
+
+        assert tag_count is not None
+        assert tag_count[0] == 0
+        assert relation_count is not None
+        assert relation_count[0] == 0
+    finally:
+        connection.close()
+
+
 def test_initialize_database_creates_parent_directory(
     tmp_path: Path,
 ) -> None:
@@ -561,6 +670,92 @@ def test_initialize_database_creates_book_items_table(
     assert "book_items" in table_names
 
 
+def test_initialize_database_creates_tag_tables(
+    tmp_path: Path,
+) -> None:
+    """タグマスタと書籍タグ関連テーブルを作成する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+
+    table_names = get_schema_object_names(
+        database_path,
+        "table",
+    )
+
+    assert "tags" in table_names
+    assert "book_item_tags" in table_names
+
+
+def test_initialize_database_creates_expected_tag_columns(
+    tmp_path: Path,
+) -> None:
+    """タグ関連テーブルを正しい列構成で作成する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+
+    assert get_table_column_names(
+        database_path,
+        "tags",
+    ) == {
+        "id",
+        "name",
+        "created_at",
+        "updated_at",
+    }
+    assert get_table_column_names(
+        database_path,
+        "book_item_tags",
+    ) == {
+        "book_item_id",
+        "tag_id",
+    }
+
+
+def test_initialize_database_creates_tag_foreign_keys(
+    tmp_path: Path,
+) -> None:
+    """書籍タグ関連テーブルへ外部キーを作成する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        rows = connection.execute(
+            "PRAGMA foreign_key_list(book_item_tags)"
+        ).fetchall()
+    finally:
+        connection.close()
+
+    foreign_keys = {
+        (
+            str(row[2]),
+            str(row[3]),
+            str(row[4]),
+            str(row[6]),
+        )
+        for row in rows
+    }
+
+    assert foreign_keys == {
+        (
+            "book_items",
+            "book_item_id",
+            "id",
+            "CASCADE",
+        ),
+        (
+            "tags",
+            "tag_id",
+            "id",
+            "CASCADE",
+        ),
+    }
+
+
 def test_initialize_database_creates_expected_indexes(
     tmp_path: Path,
 ) -> None:
@@ -578,9 +773,158 @@ def test_initialize_database_creates_expected_indexes(
         "idx_book_items_title",
         "idx_book_items_isbn",
         "idx_book_items_magazine_code",
+        "idx_book_item_tags_tag_id",
     }
 
     assert expected_index_names <= index_names
+
+
+def test_deleting_book_cascades_only_tag_relation(
+    tmp_path: Path,
+) -> None:
+    """書籍削除時に関連だけを削除してタグを保持する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+    connection = create_connection(database_path)
+
+    try:
+        with connection:
+            book_cursor = connection.execute(
+                """
+                INSERT INTO book_items (
+                    title,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    "タグ付き書籍",
+                    "2026-09-04 10:00:00",
+                    "2026-09-04 10:00:00",
+                ),
+            )
+            tag_cursor = connection.execute(
+                """
+                INSERT INTO tags (
+                    name,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    "小説",
+                    "2026-09-04 10:00:00",
+                    "2026-09-04 10:00:00",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO book_item_tags (
+                    book_item_id,
+                    tag_id
+                )
+                VALUES (?, ?)
+                """,
+                (
+                    book_cursor.lastrowid,
+                    tag_cursor.lastrowid,
+                ),
+            )
+            connection.execute(
+                "DELETE FROM book_items WHERE id = ?",
+                (book_cursor.lastrowid,),
+            )
+
+        relation_count = connection.execute(
+            "SELECT COUNT(*) FROM book_item_tags"
+        ).fetchone()
+        tag_count = connection.execute(
+            "SELECT COUNT(*) FROM tags"
+        ).fetchone()
+
+        assert relation_count is not None
+        assert relation_count[0] == 0
+        assert tag_count is not None
+        assert tag_count[0] == 1
+    finally:
+        connection.close()
+
+
+def test_deleting_tag_cascades_tag_relation(
+    tmp_path: Path,
+) -> None:
+    """タグ削除時に書籍との関連を削除する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+    connection = create_connection(database_path)
+
+    try:
+        with connection:
+            book_cursor = connection.execute(
+                """
+                INSERT INTO book_items (
+                    title,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    "タグ付き書籍",
+                    "2026-09-04 10:00:00",
+                    "2026-09-04 10:00:00",
+                ),
+            )
+            tag_cursor = connection.execute(
+                """
+                INSERT INTO tags (
+                    name,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    "技術書",
+                    "2026-09-04 10:00:00",
+                    "2026-09-04 10:00:00",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO book_item_tags (
+                    book_item_id,
+                    tag_id
+                )
+                VALUES (?, ?)
+                """,
+                (
+                    book_cursor.lastrowid,
+                    tag_cursor.lastrowid,
+                ),
+            )
+            connection.execute(
+                "DELETE FROM tags WHERE id = ?",
+                (tag_cursor.lastrowid,),
+            )
+
+        relation_count = connection.execute(
+            "SELECT COUNT(*) FROM book_item_tags"
+        ).fetchone()
+        book_count = connection.execute(
+            "SELECT COUNT(*) FROM book_items"
+        ).fetchone()
+
+        assert relation_count is not None
+        assert relation_count[0] == 0
+        assert book_count is not None
+        assert book_count[0] == 1
+    finally:
+        connection.close()
 
 
 def test_initialize_database_sets_user_version(

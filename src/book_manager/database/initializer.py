@@ -8,6 +8,7 @@ from book_manager.database.schema import (
     MIGRATE_VERSION_2_TO_3,
     MIGRATE_VERSION_3_TO_4,
     MIGRATE_VERSION_4_TO_5,
+    MIGRATE_VERSION_5_TO_6,
     SCHEMA_STATEMENTS,
     SCHEMA_VERSION,
 )
@@ -70,6 +71,9 @@ def initialize_database(database_path: Path | str) -> None:
                 for statement in MIGRATE_VERSION_4_TO_5:
                     connection.execute(statement)
 
+                for statement in MIGRATE_VERSION_5_TO_6:
+                    connection.execute(statement)
+
             elif user_version == 2:
                 for statement in MIGRATE_VERSION_2_TO_3:
                     connection.execute(statement)
@@ -80,6 +84,9 @@ def initialize_database(database_path: Path | str) -> None:
                 for statement in MIGRATE_VERSION_4_TO_5:
                     connection.execute(statement)
 
+                for statement in MIGRATE_VERSION_5_TO_6:
+                    connection.execute(statement)
+
             elif user_version == 3:
                 for statement in MIGRATE_VERSION_3_TO_4:
                     connection.execute(statement)
@@ -87,8 +94,18 @@ def initialize_database(database_path: Path | str) -> None:
                 for statement in MIGRATE_VERSION_4_TO_5:
                     connection.execute(statement)
 
+                for statement in MIGRATE_VERSION_5_TO_6:
+                    connection.execute(statement)
+
             elif user_version == 4:
                 for statement in MIGRATE_VERSION_4_TO_5:
+                    connection.execute(statement)
+
+                for statement in MIGRATE_VERSION_5_TO_6:
+                    connection.execute(statement)
+
+            elif user_version == 5:
+                for statement in MIGRATE_VERSION_5_TO_6:
                     connection.execute(statement)
 
             if user_version < SCHEMA_VERSION:

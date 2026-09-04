@@ -36,6 +36,25 @@ def test_create_connection_sets_row_factory(
         connection.close()
 
 
+def test_create_connection_enables_foreign_keys(
+    tmp_path: Path,
+) -> None:
+    """外部キー制約が有効になることを確認する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    connection = create_connection(database_path)
+
+    try:
+        row = connection.execute(
+            "PRAGMA foreign_keys"
+        ).fetchone()
+
+        assert row is not None
+        assert row[0] == 1
+    finally:
+        connection.close()
+
+
 def test_create_connection_can_execute_sql(
     tmp_path: Path,
 ) -> None:
