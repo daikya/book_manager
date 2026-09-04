@@ -1228,7 +1228,7 @@ src/book_manager/models/tag.py
 src/book_manager/validators/tag_validator.py
 tests/models/test_tag.py
 tests/validators/test_tag_validator.py
-tests/gui/test_tag_category.py
+tests/gui/test_tag_management.py
 ```
 
 主な変更対象は次のとおりとする。
@@ -1328,7 +1328,7 @@ pytest .\tests\services\test_csv_export_service.py .\tests\services\test_csv_imp
 ```
 
 ```powershell
-pytest .\tests\gui\test_tag_category.py .\tests\gui\test_multi_condition_search.py .\tests\gui\test_treeview_header_sort.py -q
+pytest .\tests\gui\test_tag_management.py .\tests\gui\test_multi_condition_search.py .\tests\gui\test_treeview_header_sort.py -q
 ```
 
 最終確認では全テストを実行する。
@@ -1375,28 +1375,28 @@ Windows実環境で、少なくとも次を確認する。
 
 Version 1.7のタグ・カテゴリ機能は、少なくとも次の条件を満たした時点で完成とする。
 
-* [ ] 一つの書籍へ複数のタグを設定できる。
-* [ ] 同じタグを複数の書籍で共有できる。
-* [ ] タグ未設定の書籍を従来どおり扱える。
-* [ ] タグ名を正規化・検証できる。
-* [ ] 同じタグを重複登録しない。
-* [ ] タグ名を変更できる。
-* [ ] 使用中・未使用のタグを削除できる。
-* [ ] 書籍登録・更新とタグ関連を一つのトランザクションで保存できる。
-* [ ] 書籍削除時にタグ関連を安全に削除できる。
-* [ ] 既存データを失わずにスキーマVersion 6へ移行できる。
-* [ ] 書籍一覧へタグを表示できる。
-* [ ] タグおよびタグ未設定で書籍を絞り込める。
-* [ ] タグ条件を既存検索条件と組み合わせられる。
-* [ ] タグ絞り込み中も既存の並べ替えを利用できる。
-* [ ] CSVエクスポートでタグを出力できる。
-* [ ] 新形式CSVからタグを取り込める。
-* [ ] タグ列のない旧形式CSVを取り込める。
-* [ ] バックアップ・復元でタグを保持できる。
-* [ ] 関連するfocused pytestがすべて成功する。
-* [ ] 全pytestが成功する。
-* [ ] Windows実環境で主要操作を確認する。
-* [ ] 既存機能に回帰がない。
+* [x] 一つの書籍へ複数のタグを設定できる。
+* [x] 同じタグを複数の書籍で共有できる。
+* [x] タグ未設定の書籍を従来どおり扱える。
+* [x] タグ名を正規化・検証できる。
+* [x] 同じタグを重複登録しない。
+* [x] タグ名を変更できる。
+* [x] 使用中・未使用のタグを削除できる。
+* [x] 書籍登録・更新とタグ関連を一つのトランザクションで保存できる。
+* [x] 書籍削除時にタグ関連を安全に削除できる。
+* [x] 既存データを失わずにスキーマVersion 6へ移行できる。
+* [x] 書籍一覧へタグを表示できる。
+* [x] タグおよびタグ未設定で書籍を絞り込める。
+* [x] タグ条件を既存検索条件と組み合わせられる。
+* [x] タグ絞り込み中も既存の並べ替えを利用できる。
+* [x] CSVエクスポートでタグを出力できる。
+* [x] 新形式CSVからタグを取り込める。
+* [x] タグ列のない旧形式CSVを取り込める。
+* [x] バックアップ・復元でタグを保持できる。
+* [x] 関連するfocused pytestがすべて成功する。
+* [x] 全pytestが成功する。
+* [x] Windows実環境で主要操作を確認する。
+* [x] 既存機能に回帰がない。
 
 ---
 
@@ -1421,6 +1421,44 @@ Version 1.7では、次を正式な設計判断とする。
 * 同名タグへの名称変更で自動統合しない。
 * CSVは新15列と旧14列の両方をインポートできるようにする。
 * 書籍とタグ関連の更新は一つのトランザクションで行う。
+
+---
+
+## 28. 実装結果
+
+Version 1.7のタグ・カテゴリ機能は、設計したDatabase・Model・Validator・Repository・Service・CSV・GUIの各層へ実装した。
+
+主な実装結果は次のとおりである。
+
+* 書籍へ複数のタグを設定し、登録済みタグを複数書籍で共通利用できる。
+* タグ名の正規化、文字数、禁止文字および重複を検証できる。
+* `tags`と`book_item_tags`による多対多関係を構築した。
+* 既存データを維持したままスキーマVersion 5から6へ移行できる。
+* 書籍登録・更新とタグ関連を一つのトランザクションで保存できる。
+* タグおよびタグ未設定で絞り込み、既存検索条件と組み合わせられる。
+* 書籍一覧へタグを表示し、タグ名の変更と削除をGUIから操作できる。
+* 使用中タグの削除前に使用冊数と確認メッセージを表示できる。
+* CSVの新15列形式でタグを保持し、旧14列形式も取り込める。
+* CSVインポート、バックアップ復元、アプリ再起動後もタグ情報を保持できる。
+
+## 29. テスト・実機確認結果
+
+実装段階ごとのfocused pytest、GUIテスト全体および全体回帰テストを実行した。
+
+```text
+Database                     32 passed
+Model・Validator             42 passed
+Repository                  117 passed
+BookService                 156 passed
+CSV Service                  87 passed
+タグ管理GUI                  10 passed
+GUI全体                     124 passed
+全体回帰テスト              812 passed
+```
+
+Windows実環境では、タグの登録・再利用・編集・解除・一覧表示・絞り込み・名称変更・削除・再起動後の保持を確認した。
+
+以上により、本設計書で定めたVersion 1.7の完了条件を満たしている。
 
 ---
 
