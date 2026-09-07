@@ -1,6 +1,6 @@
 """SQLite schema definitions."""
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 CREATE_BOOK_ITEMS_TABLE = """
@@ -79,6 +79,38 @@ ON book_item_tags (tag_id)
 """
 
 
+CREATE_READING_HISTORIES_TABLE = """
+CREATE TABLE IF NOT EXISTS reading_histories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    book_item_id INTEGER NOT NULL,
+    started_on TEXT,
+    completed_on TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (book_item_id)
+        REFERENCES book_items (id)
+        ON DELETE CASCADE,
+    CHECK (
+        started_on IS NOT NULL
+        OR completed_on IS NOT NULL
+        OR notes IS NOT NULL
+    ),
+    CHECK (
+        started_on IS NULL
+        OR completed_on IS NULL
+        OR started_on <= completed_on
+    )
+)
+"""
+
+
+CREATE_READING_HISTORIES_BOOK_ITEM_ID_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_reading_histories_book_item_id
+ON reading_histories (book_item_id)
+"""
+
+
 MIGRATE_VERSION_1_TO_2 = (
     """
     ALTER TABLE book_items
@@ -117,6 +149,11 @@ MIGRATE_VERSION_5_TO_6 = (
     CREATE_BOOK_ITEM_TAGS_TAG_ID_INDEX,
 )
 
+MIGRATE_VERSION_6_TO_7 = (
+    CREATE_READING_HISTORIES_TABLE,
+    CREATE_READING_HISTORIES_BOOK_ITEM_ID_INDEX,
+)
+
 SCHEMA_STATEMENTS = (
     CREATE_BOOK_ITEMS_TABLE,
     CREATE_BOOK_ITEMS_TITLE_INDEX,
@@ -125,4 +162,6 @@ SCHEMA_STATEMENTS = (
     CREATE_TAGS_TABLE,
     CREATE_BOOK_ITEM_TAGS_TABLE,
     CREATE_BOOK_ITEM_TAGS_TAG_ID_INDEX,
+    CREATE_READING_HISTORIES_TABLE,
+    CREATE_READING_HISTORIES_BOOK_ITEM_ID_INDEX,
 )

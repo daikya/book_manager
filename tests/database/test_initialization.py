@@ -137,10 +137,10 @@ def test_initialize_database_creates_rating_column(
         connection.close()
 
 
-def test_initialize_database_migrates_version_1_to_6(
+def test_initialize_database_migrates_version_1_to_7(
     tmp_path: Path,
 ) -> None:
-    """Version 1のDBをVersion 6へ移行する。"""
+    """Version 1のDBをVersion 7へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -228,10 +228,10 @@ def test_initialize_database_migrates_version_1_to_6(
     finally:
         connection.close()
 
-def test_initialize_database_migrates_version_2_to_6(
+def test_initialize_database_migrates_version_2_to_7(
     tmp_path: Path,
 ) -> None:
-    """Version 2のDBをVersion 6へ移行する。"""
+    """Version 2のDBをVersion 7へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -322,10 +322,10 @@ def test_initialize_database_migrates_version_2_to_6(
     finally:
         connection.close()
 
-def test_initialize_database_migrates_version_3_to_6(
+def test_initialize_database_migrates_version_3_to_7(
     tmp_path: Path,
 ) -> None:
-    """Version 3のDBをVersion 6へ移行する。"""
+    """Version 3のDBをVersion 7へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -419,10 +419,10 @@ def test_initialize_database_migrates_version_3_to_6(
     finally:
         connection.close()
 
-def test_initialize_database_migrates_version_4_to_6(
+def test_initialize_database_migrates_version_4_to_7(
     tmp_path: Path,
 ) -> None:
-    """Version 4のDBをVersion 6へ移行する。"""
+    """Version 4のDBをVersion 7へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -519,10 +519,10 @@ def test_initialize_database_migrates_version_4_to_6(
         connection.close()
 
 
-def test_initialize_database_migrates_version_5_to_6(
+def test_initialize_database_migrates_version_5_to_7(
     tmp_path: Path,
 ) -> None:
-    """Version 5のDBをVersion 6へ移行する。"""
+    """Version 5のDBをVersion 7へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -627,6 +627,166 @@ def test_initialize_database_migrates_version_5_to_6(
         connection.close()
 
 
+def test_initialize_database_migrates_version_6_to_7(
+    tmp_path: Path,
+) -> None:
+    """Version 6のDBをVersion 7へ移行する。"""
+    database_path = tmp_path / "test_book_manager.db"
+    connection = sqlite3.connect(database_path)
+
+    try:
+        with connection:
+            connection.execute(
+                """
+                CREATE TABLE book_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    isbn TEXT,
+                    magazine_code TEXT,
+                    title TEXT NOT NULL,
+                    author TEXT,
+                    publisher TEXT,
+                    publication_format TEXT,
+                    description TEXT,
+                    cover_image_url TEXT,
+                    cover_image_path TEXT,
+                    completion_month TEXT,
+                    reading_status TEXT,
+                    is_favorite INTEGER NOT NULL DEFAULT 0,
+                    rating INTEGER,
+                    notes TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE tags (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE book_item_tags (
+                    book_item_id INTEGER NOT NULL,
+                    tag_id INTEGER NOT NULL,
+                    PRIMARY KEY (book_item_id, tag_id),
+                    FOREIGN KEY (book_item_id)
+                        REFERENCES book_items (id)
+                        ON DELETE CASCADE,
+                    FOREIGN KEY (tag_id)
+                        REFERENCES tags (id)
+                        ON DELETE CASCADE
+                )
+                """
+            )
+            book_cursor = connection.execute(
+                """
+                INSERT INTO book_items (
+                    title,
+                    completion_month,
+                    reading_status,
+                    is_favorite,
+                    rating,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "読書履歴追加前の書籍",
+                    "2026-08",
+                    "completed",
+                    1,
+                    5,
+                    "2026-09-06 10:00:00",
+                    "2026-09-06 10:00:00",
+                ),
+            )
+            tag_cursor = connection.execute(
+                """
+                INSERT INTO tags (
+                    name,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    "小説",
+                    "2026-09-06 10:00:00",
+                    "2026-09-06 10:00:00",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO book_item_tags (
+                    book_item_id,
+                    tag_id
+                )
+                VALUES (?, ?)
+                """,
+                (
+                    book_cursor.lastrowid,
+                    tag_cursor.lastrowid,
+                ),
+            )
+            connection.execute("PRAGMA user_version = 6")
+    finally:
+        connection.close()
+
+    initialize_database(database_path)
+
+    assert get_user_version(database_path) == SCHEMA_VERSION
+    assert "reading_histories" in get_schema_object_names(
+        database_path,
+        "table",
+    )
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        book_row = connection.execute(
+            """
+            SELECT
+                title,
+                completion_month,
+                reading_status,
+                is_favorite,
+                rating
+            FROM book_items
+            """
+        ).fetchone()
+        tag_row = connection.execute(
+            """
+            SELECT t.name
+            FROM tags AS t
+            INNER JOIN book_item_tags AS bit
+                ON bit.tag_id = t.id
+            """
+        ).fetchone()
+        history_count = connection.execute(
+            "SELECT COUNT(*) FROM reading_histories"
+        ).fetchone()
+
+        assert book_row == (
+            "読書履歴追加前の書籍",
+            "2026-08",
+            "completed",
+            1,
+            5,
+        )
+        assert tag_row == ("小説",)
+        assert history_count is not None
+        assert history_count[0] == 0
+    finally:
+        connection.close()
+
+
 def test_initialize_database_creates_parent_directory(
     tmp_path: Path,
 ) -> None:
@@ -713,6 +873,80 @@ def test_initialize_database_creates_expected_tag_columns(
     }
 
 
+def test_initialize_database_creates_reading_histories_table(
+    tmp_path: Path,
+) -> None:
+    """読書履歴テーブルを作成する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+
+    table_names = get_schema_object_names(
+        database_path,
+        "table",
+    )
+
+    assert "reading_histories" in table_names
+
+
+def test_initialize_database_creates_expected_reading_history_columns(
+    tmp_path: Path,
+) -> None:
+    """読書履歴テーブルを正しい列構成で作成する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+
+    assert get_table_column_names(
+        database_path,
+        "reading_histories",
+    ) == {
+        "id",
+        "book_item_id",
+        "started_on",
+        "completed_on",
+        "notes",
+        "created_at",
+        "updated_at",
+    }
+
+
+def test_initialize_database_creates_reading_history_foreign_key(
+    tmp_path: Path,
+) -> None:
+    """読書履歴テーブルへ書籍の外部キーを作成する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+    connection = sqlite3.connect(database_path)
+
+    try:
+        rows = connection.execute(
+            "PRAGMA foreign_key_list(reading_histories)"
+        ).fetchall()
+    finally:
+        connection.close()
+
+    foreign_keys = {
+        (
+            str(row[2]),
+            str(row[3]),
+            str(row[4]),
+            str(row[6]),
+        )
+        for row in rows
+    }
+
+    assert foreign_keys == {
+        (
+            "book_items",
+            "book_item_id",
+            "id",
+            "CASCADE",
+        ),
+    }
+
+
 def test_initialize_database_creates_tag_foreign_keys(
     tmp_path: Path,
 ) -> None:
@@ -774,6 +1008,7 @@ def test_initialize_database_creates_expected_indexes(
         "idx_book_items_isbn",
         "idx_book_items_magazine_code",
         "idx_book_item_tags_tag_id",
+        "idx_reading_histories_book_item_id",
     }
 
     assert expected_index_names <= index_names
@@ -923,6 +1158,164 @@ def test_deleting_tag_cascades_tag_relation(
         assert relation_count[0] == 0
         assert book_count is not None
         assert book_count[0] == 1
+    finally:
+        connection.close()
+
+
+def test_deleting_book_cascades_reading_histories(
+    tmp_path: Path,
+) -> None:
+    """書籍削除時に関連する読書履歴を削除する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+    connection = create_connection(database_path)
+
+    try:
+        with connection:
+            book_cursor = connection.execute(
+                """
+                INSERT INTO book_items (
+                    title,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    "履歴付き書籍",
+                    "2026-09-07 10:00:00",
+                    "2026-09-07 10:00:00",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO reading_histories (
+                    book_item_id,
+                    started_on,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    book_cursor.lastrowid,
+                    "2026-09-01",
+                    "2026-09-07 10:00:00",
+                    "2026-09-07 10:00:00",
+                ),
+            )
+            connection.execute(
+                "DELETE FROM book_items WHERE id = ?",
+                (book_cursor.lastrowid,),
+            )
+
+        history_count = connection.execute(
+            "SELECT COUNT(*) FROM reading_histories"
+        ).fetchone()
+
+        assert history_count is not None
+        assert history_count[0] == 0
+    finally:
+        connection.close()
+
+
+def test_reading_history_rejects_all_empty_values(
+    tmp_path: Path,
+) -> None:
+    """日付とメモがすべてNULLの履歴を拒否する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+    connection = create_connection(database_path)
+
+    try:
+        with connection:
+            book_cursor = connection.execute(
+                """
+                INSERT INTO book_items (
+                    title,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    "テスト書籍",
+                    "2026-09-07 10:00:00",
+                    "2026-09-07 10:00:00",
+                ),
+            )
+
+        with pytest.raises(sqlite3.IntegrityError):
+            with connection:
+                connection.execute(
+                    """
+                    INSERT INTO reading_histories (
+                        book_item_id,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?)
+                    """,
+                    (
+                        book_cursor.lastrowid,
+                        "2026-09-07 10:00:00",
+                        "2026-09-07 10:00:00",
+                    ),
+                )
+    finally:
+        connection.close()
+
+
+def test_reading_history_rejects_descending_dates(
+    tmp_path: Path,
+) -> None:
+    """読書開始日が読了日より後の履歴を拒否する。"""
+    database_path = tmp_path / "test_book_manager.db"
+
+    initialize_database(database_path)
+    connection = create_connection(database_path)
+
+    try:
+        with connection:
+            book_cursor = connection.execute(
+                """
+                INSERT INTO book_items (
+                    title,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    "テスト書籍",
+                    "2026-09-07 10:00:00",
+                    "2026-09-07 10:00:00",
+                ),
+            )
+
+        with pytest.raises(sqlite3.IntegrityError):
+            with connection:
+                connection.execute(
+                    """
+                    INSERT INTO reading_histories (
+                        book_item_id,
+                        started_on,
+                        completed_on,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        book_cursor.lastrowid,
+                        "2026-09-08",
+                        "2026-09-07",
+                        "2026-09-07 10:00:00",
+                        "2026-09-07 10:00:00",
+                    ),
+                )
     finally:
         connection.close()
 
