@@ -46,9 +46,11 @@ docs/
 ├── external_book_metadata_design.md
 ├── favorite_design.md
 ├── rating_design.md
+├── reading_history_design.md
 ├── reading_status_design.md
 ├── reading_information_sort_design.md
 ├── search_filter_design.md
+├── tag_category_design.md
 │
 ├── adr/
 │   └── ADR-0001-sqlite-selection.md
@@ -154,6 +156,12 @@ book_manager全体の開発方針および運用ルールを定義する。
 ### `reading_status_design.md`
 
 Version 1.3で追加した読書ステータス管理機能を定義する。
+
+### `reading_history_design.md`
+
+Version 1.8で追加した読書履歴管理機能を定義する。
+
+一つの書籍に対する複数履歴、日付・メモの検証、データベース構造、Repository・Service・GUI連携、既存読書情報からの独立性およびバックアップ・復元方針を管理する。
 
 ### `reading_information_sort_design.md`
 
@@ -519,7 +527,7 @@ docs/development_guidelines.md
 
 ## 18. 現在の状態
 
-book_managerはVersion 1.7.0まで正式リリース済みである。
+book_managerはVersion 1.7.0まで正式リリース済みであり、Version 1.8の実装と検証を完了している。
 
 Version 1.7.0は、タグ・カテゴリ機能の実装、812件の自動テスト全件成功およびWindows実環境での主要操作確認を経て、2026-09-04に正式リリースした。
 
@@ -576,6 +584,18 @@ Version 1.7では、蔵書の分類と整理機能の強化として次の機能
 - タグ列を持たない旧形式CSVとの互換性
 - 既存データを維持したスキーマVersion 6への移行
 - 812件の自動テスト全件成功
+- Windows実環境での主要操作確認
+
+Version 1.8では、読書記録と再読履歴の管理として次の機能を実装した。
+
+- 一つの書籍への複数読書履歴の登録
+- 読書開始日・読了日・読書メモの記録
+- 読書履歴の一覧表示・変更・削除
+- 現在の読書状態・読了年月から独立した履歴管理
+- 書籍削除時の関連履歴の自動削除
+- 既存データを維持したスキーマVersion 7への移行
+- バックアップ・復元での読書履歴保持
+- 911件の自動テスト全件成功
 - Windows実環境での主要操作確認
 
 今後の開発内容は、
