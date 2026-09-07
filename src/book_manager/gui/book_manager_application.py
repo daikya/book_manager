@@ -13,6 +13,7 @@ import ctypes
 import sys
 
 from book_manager.models.book_item import BookItem
+from book_manager.models.reading_history import ReadingHistory
 from book_manager.models.fetched_book_data import (
     FetchedBookData,
 )
@@ -33,6 +34,9 @@ if TYPE_CHECKING:
     )
     from book_manager.services.csv_import_service import (
         CsvImportService,
+    )
+    from book_manager.services.reading_history_service import (
+        ReadingHistoryService,
     )
 
 
@@ -198,6 +202,7 @@ class BookManagerApplication:
         csv_export_service: CsvExportService,
         csv_import_service: CsvImportService,
         backup_service: BackupService,
+        reading_history_service: ReadingHistoryService,
     ) -> None:
         """GUIを初期化する。
 
@@ -213,6 +218,7 @@ class BookManagerApplication:
         self._csv_export_service = csv_export_service
         self._csv_import_service = csv_import_service
         self._backup_service = backup_service
+        self._reading_history_service = reading_history_service
         self._selected_book_id: int | None = None
         self._cover_photo: tk.PhotoImage | None = None
         self._current_cover_image_url: str | None = None
@@ -416,6 +422,7 @@ class BookManagerApplication:
         main_frame.rowconfigure(
             1,
             weight=3,
+            minsize=330,
         )
         main_frame.rowconfigure(
             2,
@@ -889,13 +896,13 @@ class BookManagerApplication:
         list_frame = ttk.LabelFrame(
             parent,
             text="書籍一覧",
-            padding=8,
+            padding=(8, 4),
         )
         list_frame.grid(
             row=1,
             column=0,
             sticky="nsew",
-            pady=(0, 8),
+            pady=(0, 4),
         )
 
         list_frame.rowconfigure(
@@ -913,7 +920,7 @@ class BookManagerApplication:
 
         style.configure(
             "Book.Treeview",
-            rowheight=60,
+            rowheight=56,
         )
 
         self._book_tree = ttk.Treeview(
@@ -922,7 +929,7 @@ class BookManagerApplication:
             show="tree headings",
             selectmode="browse",
             style="Book.Treeview",
-            height=5,
+            height=4,
         )
 
         self._configure_tree_columns()
@@ -1560,7 +1567,7 @@ class BookManagerApplication:
         )
 
         button_frame.columnconfigure(
-            10,
+            11,
             weight=1,
         )
 
@@ -1675,6 +1682,17 @@ class BookManagerApplication:
             padx=(0, 6),
         )
 
+        self._reading_history_button = ttk.Button(
+            button_frame,
+            text="読書履歴",
+            command=self._on_manage_reading_histories,
+        )
+        self._reading_history_button.grid(
+            row=0,
+            column=10,
+            padx=(0, 6),
+        )
+
         self._exit_button = ttk.Button(
             button_frame,
             text="終了",
@@ -1772,7 +1790,7 @@ class BookManagerApplication:
                 thumbnail_image = image.copy()
 
             thumbnail_image.thumbnail(
-                (40, 55),
+                (40, 52),
                 Image.Resampling.LANCZOS,
             )
 
@@ -2721,6 +2739,546 @@ class BookManagerApplication:
 
         if book_item is not None:
             self._display_book_in_form(book_item)
+
+    def _on_manage_reading_histories(self) -> None:
+        """選択中の書籍の読書履歴ダイアログを表示する。"""
+        if self._selected_book_id is None:
+            messagebox.showwarning(
+                "書籍未選択",
+                "読書履歴を表示する書籍を選択してください。",
+                parent=self._root,
+            )
+            return
+
+        book_item = self._service.get_book(
+            self._selected_book_id
+        )
+
+        if book_item is None:
+            messagebox.showwarning(
+                "書籍が見つかりません",
+                "対象の書籍が見つかりませんでした。",
+                parent=self._root,
+            )
+            return
+
+        self._open_reading_history_dialog(book_item)
+
+    def _open_reading_history_dialog(
+        self,
+        book_item: BookItem,
+    ) -> None:
+        """指定された書籍の読書履歴ダイアログを構築する。"""
+        if book_item.id is None:
+            return
+
+        dialog = tk.Toplevel(self._root)
+        dialog.title("読書履歴")
+        dialog.geometry("800x600")
+        dialog.minsize(680, 520)
+        dialog.transient(self._root)
+        dialog.grab_set()
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(2, weight=1)
+
+        self._reading_history_book_id = book_item.id
+        self._selected_reading_history_id: int | None = None
+        self._reading_history_started_on_var = tk.StringVar(
+            master=dialog,
+        )
+        self._reading_history_completed_on_var = tk.StringVar(
+            master=dialog,
+        )
+
+        ttk.Label(
+            dialog,
+            text=f"対象書籍：{book_item.title}",
+            wraplength=750,
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w",
+            padx=12,
+            pady=(12, 6),
+        )
+
+        input_frame = ttk.LabelFrame(
+            dialog,
+            text="履歴内容",
+            padding=10,
+        )
+        input_frame.grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            padx=12,
+            pady=(0, 8),
+        )
+        input_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(input_frame, text="読書開始日").grid(
+            row=0,
+            column=0,
+            sticky="w",
+            padx=(0, 8),
+            pady=(0, 6),
+        )
+        ttk.Entry(
+            input_frame,
+            textvariable=self._reading_history_started_on_var,
+        ).grid(
+            row=0,
+            column=1,
+            sticky="ew",
+            pady=(0, 6),
+        )
+        ttk.Label(input_frame, text="YYYY-MM-DD").grid(
+            row=0,
+            column=2,
+            sticky="w",
+            padx=(8, 0),
+            pady=(0, 6),
+        )
+
+        ttk.Label(input_frame, text="読了日").grid(
+            row=1,
+            column=0,
+            sticky="w",
+            padx=(0, 8),
+            pady=(0, 6),
+        )
+        ttk.Entry(
+            input_frame,
+            textvariable=self._reading_history_completed_on_var,
+        ).grid(
+            row=1,
+            column=1,
+            sticky="ew",
+            pady=(0, 6),
+        )
+        ttk.Label(input_frame, text="YYYY-MM-DD").grid(
+            row=1,
+            column=2,
+            sticky="w",
+            padx=(8, 0),
+            pady=(0, 6),
+        )
+
+        ttk.Label(input_frame, text="読書メモ").grid(
+            row=2,
+            column=0,
+            sticky="nw",
+            padx=(0, 8),
+        )
+        self._reading_history_notes_text = tk.Text(
+            input_frame,
+            height=5,
+            wrap="word",
+        )
+        self._reading_history_notes_text.grid(
+            row=2,
+            column=1,
+            columnspan=2,
+            sticky="ew",
+        )
+
+        history_frame = ttk.Frame(dialog)
+        history_frame.grid(
+            row=2,
+            column=0,
+            sticky="nsew",
+            padx=12,
+            pady=(0, 8),
+        )
+        history_frame.columnconfigure(0, weight=1)
+        history_frame.rowconfigure(0, weight=1)
+
+        self._reading_history_tree = ttk.Treeview(
+            history_frame,
+            columns=("started_on", "completed_on", "notes"),
+            show="headings",
+            selectmode="browse",
+        )
+        self._reading_history_tree.heading(
+            "started_on",
+            text="開始日",
+        )
+        self._reading_history_tree.heading(
+            "completed_on",
+            text="読了日",
+        )
+        self._reading_history_tree.heading(
+            "notes",
+            text="読書メモ",
+        )
+        self._reading_history_tree.column(
+            "started_on",
+            width=110,
+            stretch=False,
+        )
+        self._reading_history_tree.column(
+            "completed_on",
+            width=110,
+            stretch=False,
+        )
+        self._reading_history_tree.column(
+            "notes",
+            width=480,
+        )
+        self._reading_history_tree.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+        )
+        scrollbar = ttk.Scrollbar(
+            history_frame,
+            orient="vertical",
+            command=self._reading_history_tree.yview,
+        )
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self._reading_history_tree.configure(
+            yscrollcommand=scrollbar.set,
+        )
+        self._reading_history_tree.bind(
+            "<<TreeviewSelect>>",
+            self._on_reading_history_select,
+        )
+
+        button_frame = ttk.Frame(dialog)
+        button_frame.grid(
+            row=3,
+            column=0,
+            sticky="ew",
+            padx=12,
+            pady=(0, 12),
+        )
+        button_frame.columnconfigure(4, weight=1)
+
+        ttk.Button(
+            button_frame,
+            text="新規登録",
+            command=self._add_reading_history,
+        ).grid(row=0, column=0, padx=(0, 6))
+        ttk.Button(
+            button_frame,
+            text="更新",
+            command=self._update_reading_history,
+        ).grid(row=0, column=1, padx=(0, 6))
+        ttk.Button(
+            button_frame,
+            text="削除",
+            command=self._delete_reading_history,
+        ).grid(row=0, column=2, padx=(0, 6))
+        ttk.Button(
+            button_frame,
+            text="入力クリア",
+            command=self._clear_reading_history_form,
+        ).grid(row=0, column=3, padx=(0, 6))
+        ttk.Button(
+            button_frame,
+            text="閉じる",
+            command=dialog.destroy,
+        ).grid(row=0, column=5)
+
+        try:
+            self._populate_reading_history_tree(
+                book_item.id,
+                self._reading_history_tree,
+            )
+        except ValueError as error:
+            messagebox.showerror(
+                "読書履歴エラー",
+                str(error),
+                parent=dialog,
+            )
+            dialog.destroy()
+            return
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "読書履歴エラー",
+                "読書履歴を処理できませんでした。",
+                parent=dialog,
+            )
+            dialog.destroy()
+            return
+
+        dialog.wait_window()
+
+    def _populate_reading_history_tree(
+        self,
+        book_item_id: int,
+        history_tree: ttk.Treeview,
+    ) -> None:
+        """指定書籍の読書履歴を一覧へ表示する。"""
+        for item_id in history_tree.get_children():
+            history_tree.delete(item_id)
+
+        histories = (
+            self._reading_history_service.get_histories_for_book(
+                book_item_id
+            )
+        )
+
+        for history in histories:
+            if history.id is None:
+                continue
+
+            history_tree.insert(
+                "",
+                "end",
+                iid=str(history.id),
+                values=(
+                    history.started_on or "",
+                    history.completed_on or "",
+                    self._reading_history_notes_summary(
+                        history.notes
+                    ),
+                ),
+            )
+
+    @staticmethod
+    def _reading_history_notes_summary(
+        notes: str | None,
+    ) -> str:
+        """一覧表示用に読書メモを一行へ要約する。"""
+        if notes is None:
+            return ""
+
+        single_line = " ".join(notes.splitlines())
+        maximum_length = 50
+
+        if len(single_line) <= maximum_length:
+            return single_line
+
+        return f"{single_line[:maximum_length]}…"
+
+    def _on_reading_history_select(
+        self,
+        _event: tk.Event[tk.Misc] | None = None,
+    ) -> None:
+        """選択した読書履歴を入力欄へ表示する。"""
+        selection = self._reading_history_tree.selection()
+
+        if not selection:
+            return
+
+        reading_history_id = int(selection[0])
+
+        try:
+            history = self._reading_history_service.get_history(
+                reading_history_id
+            )
+
+            if history is None:
+                messagebox.showwarning(
+                    "読書履歴が見つかりません",
+                    "選択した読書履歴が見つかりませんでした。",
+                    parent=self._reading_history_tree.winfo_toplevel(),
+                )
+                self._populate_reading_history_tree(
+                    self._reading_history_book_id,
+                    self._reading_history_tree,
+                )
+                self._clear_reading_history_form()
+                return
+
+            self._selected_reading_history_id = history.id
+            self._reading_history_started_on_var.set(
+                history.started_on or ""
+            )
+            self._reading_history_completed_on_var.set(
+                history.completed_on or ""
+            )
+            self._reading_history_notes_text.delete("1.0", tk.END)
+            self._reading_history_notes_text.insert(
+                "1.0",
+                history.notes or "",
+            )
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "読書履歴エラー",
+                "読書履歴を処理できませんでした。",
+                parent=self._reading_history_tree.winfo_toplevel(),
+            )
+
+    def _get_reading_history_form_values(
+        self,
+    ) -> tuple[str, str, str]:
+        """読書履歴入力欄の値を取得する。"""
+        return (
+            self._reading_history_started_on_var.get(),
+            self._reading_history_completed_on_var.get(),
+            self._reading_history_notes_text.get("1.0", "end-1c"),
+        )
+
+    def _add_reading_history(self) -> None:
+        """入力内容を新しい読書履歴として登録する。"""
+        started_on, completed_on, notes = (
+            self._get_reading_history_form_values()
+        )
+        parent = self._reading_history_tree.winfo_toplevel()
+
+        try:
+            self._reading_history_service.add_history(
+                book_item_id=self._reading_history_book_id,
+                started_on=started_on,
+                completed_on=completed_on,
+                notes=notes,
+            )
+            self._populate_reading_history_tree(
+                self._reading_history_book_id,
+                self._reading_history_tree,
+            )
+            self._clear_reading_history_form()
+            messagebox.showinfo(
+                "読書履歴登録完了",
+                "読書履歴を登録しました。",
+                parent=parent,
+            )
+        except ValueError as error:
+            messagebox.showerror(
+                "読書履歴の確認",
+                str(error),
+                parent=parent,
+            )
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "読書履歴エラー",
+                "読書履歴を処理できませんでした。",
+                parent=parent,
+            )
+
+    def _update_reading_history(self) -> None:
+        """選択中の読書履歴を入力内容で更新する。"""
+        parent = self._reading_history_tree.winfo_toplevel()
+
+        if self._selected_reading_history_id is None:
+            messagebox.showwarning(
+                "読書履歴未選択",
+                "更新する読書履歴を選択してください。",
+                parent=parent,
+            )
+            return
+
+        started_on, completed_on, notes = (
+            self._get_reading_history_form_values()
+        )
+        history = ReadingHistory(
+            id=self._selected_reading_history_id,
+            book_item_id=self._reading_history_book_id,
+            started_on=started_on,
+            completed_on=completed_on,
+            notes=notes,
+        )
+
+        try:
+            updated = self._reading_history_service.update_history(
+                history
+            )
+
+            if not updated:
+                messagebox.showwarning(
+                    "読書履歴が見つかりません",
+                    "更新する読書履歴が見つかりませんでした。",
+                    parent=parent,
+                )
+                self._populate_reading_history_tree(
+                    self._reading_history_book_id,
+                    self._reading_history_tree,
+                )
+                self._clear_reading_history_form()
+                return
+
+            self._populate_reading_history_tree(
+                self._reading_history_book_id,
+                self._reading_history_tree,
+            )
+            self._clear_reading_history_form()
+            messagebox.showinfo(
+                "読書履歴更新完了",
+                "読書履歴を更新しました。",
+                parent=parent,
+            )
+        except ValueError as error:
+            messagebox.showerror(
+                "読書履歴の確認",
+                str(error),
+                parent=parent,
+            )
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "読書履歴エラー",
+                "読書履歴を処理できませんでした。",
+                parent=parent,
+            )
+
+    def _delete_reading_history(self) -> None:
+        """選択中の読書履歴を確認後に削除する。"""
+        parent = self._reading_history_tree.winfo_toplevel()
+
+        if self._selected_reading_history_id is None:
+            messagebox.showwarning(
+                "読書履歴未選択",
+                "削除する読書履歴を選択してください。",
+                parent=parent,
+            )
+            return
+
+        confirmed = messagebox.askyesno(
+            "読書履歴削除の確認",
+            "選択した読書履歴を削除しますか？",
+            parent=parent,
+        )
+
+        if not confirmed:
+            return
+
+        try:
+            deleted = self._reading_history_service.delete_history(
+                self._selected_reading_history_id
+            )
+
+            if not deleted:
+                messagebox.showwarning(
+                    "読書履歴が見つかりません",
+                    "削除する読書履歴が見つかりませんでした。",
+                    parent=parent,
+                )
+            else:
+                messagebox.showinfo(
+                    "読書履歴削除完了",
+                    "読書履歴を削除しました。",
+                    parent=parent,
+                )
+
+            self._populate_reading_history_tree(
+                self._reading_history_book_id,
+                self._reading_history_tree,
+            )
+            self._clear_reading_history_form()
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "読書履歴エラー",
+                "読書履歴を処理できませんでした。",
+                parent=parent,
+            )
+
+    def _clear_reading_history_form(self) -> None:
+        """読書履歴の入力欄と選択状態をクリアする。"""
+        self._selected_reading_history_id = None
+        self._reading_history_started_on_var.set("")
+        self._reading_history_completed_on_var.set("")
+        self._reading_history_notes_text.delete("1.0", tk.END)
+
+        selections = self._reading_history_tree.selection()
+
+        if selections:
+            self._reading_history_tree.selection_remove(*selections)
 
 # ここからイベントハンドラ
 

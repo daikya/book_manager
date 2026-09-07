@@ -27,6 +27,9 @@ from book_manager.metadata.openbd_client import (
 from book_manager.repositories.book_repository import (
     BookRepository,
 )
+from book_manager.repositories.reading_history_repository import (
+    ReadingHistoryRepository,
+)
 from book_manager.services.book_service import (
     BookService,
 )
@@ -42,6 +45,9 @@ from book_manager.services.csv_export_service import (
 )
 from book_manager.services.csv_import_service import (
     CsvImportService,
+)
+from book_manager.services.reading_history_service import (
+    ReadingHistoryService,
 )
 
 
@@ -69,6 +75,9 @@ def main() -> None:
     )
 
     repository = BookRepository(
+        database_path,
+    )
+    reading_history_repository = ReadingHistoryRepository(
         database_path,
     )
 
@@ -124,12 +133,18 @@ def main() -> None:
         book_service=service,
     )
 
+    reading_history_service = ReadingHistoryService(
+        reading_history_repository,
+        repository,
+    )
+
     BookManagerApplication(
         root,
         service,
         csv_export_service,
         csv_import_service,
         backup_service,
+        reading_history_service,
     )
 
     try:
