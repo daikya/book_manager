@@ -108,6 +108,57 @@ def _create_initialized_book_manager_database(
         connection.close()
 
 
+def _insert_book_and_reading_history(
+    database_path: Path,
+    *,
+    title: str,
+    history_notes: str,
+) -> None:
+    """書籍と一回分の読書履歴をテスト用DBへ登録する。"""
+    connection = sqlite3.connect(database_path)
+
+    try:
+        with connection:
+            book_cursor = connection.execute(
+                """
+                INSERT INTO book_items (
+                    title,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    title,
+                    "2026-09-07 10:00:00",
+                    "2026-09-07 10:00:00",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO reading_histories (
+                    book_item_id,
+                    started_on,
+                    completed_on,
+                    notes,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    book_cursor.lastrowid,
+                    "2026-09-01",
+                    "2026-09-07",
+                    history_notes,
+                    "2026-09-07 10:00:00",
+                    "2026-09-07 10:00:00",
+                ),
+            )
+    finally:
+        connection.close()
+
+
 def test_create_backup_creates_backup_without_interval_check(
     tmp_path: Path,
 ) -> None:
@@ -305,6 +356,60 @@ def test_backup_preserves_database_contents(
 
     assert row is not None
     assert row[0] == "test-data"
+
+
+def test_backup_preserves_reading_histories(
+    tmp_path: Path,
+) -> None:
+    """バックアップ先に書籍と読書履歴が保持される。"""
+    database_path = tmp_path / "books.db"
+    backup_directory = tmp_path / "backups"
+    initialize_database(database_path)
+    _insert_book_and_reading_history(
+        database_path,
+        title="バックアップ対象書籍",
+        history_notes="バックアップ対象の読書履歴",
+    )
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=backup_directory,
+        now_provider=lambda: datetime(
+            2026,
+            9,
+            7,
+            11,
+            0,
+            0,
+        ),
+    )
+
+    backup_path = service.create_backup()
+
+    assert backup_path is not None
+    connection = sqlite3.connect(backup_path)
+
+    try:
+        row = connection.execute(
+            """
+            SELECT
+                b.title,
+                rh.started_on,
+                rh.completed_on,
+                rh.notes
+            FROM reading_histories AS rh
+            INNER JOIN book_items AS b
+                ON b.id = rh.book_item_id
+            """
+        ).fetchone()
+    finally:
+        connection.close()
+
+    assert row == (
+        "バックアップ対象書籍",
+        "2026-09-01",
+        "2026-09-07",
+        "バックアップ対象の読書履歴",
+    )
 
 
 def test_create_backup_if_needed_skips_within_24_hours(
@@ -765,6 +870,64 @@ def test_restore_backup_replaces_current_database(
 
     assert row is not None
     assert row[0] == "backup-data"
+
+
+def test_restore_backup_restores_reading_histories(
+    tmp_path: Path,
+) -> None:
+    """Version 7のバックアップから読書履歴を復元する。"""
+    database_path = tmp_path / "books.db"
+    backup_path = tmp_path / "restore_source.db"
+    backup_directory = tmp_path / "backups"
+    initialize_database(database_path)
+    initialize_database(backup_path)
+    _insert_book_and_reading_history(
+        database_path,
+        title="復元前の書籍",
+        history_notes="復元前の履歴",
+    )
+    _insert_book_and_reading_history(
+        backup_path,
+        title="復元対象書籍",
+        history_notes="復元された読書履歴",
+    )
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=backup_directory,
+        now_provider=lambda: datetime(
+            2026,
+            9,
+            7,
+            12,
+            0,
+            0,
+        ),
+    )
+
+    service.restore_backup(backup_path)
+
+    connection = sqlite3.connect(database_path)
+
+    try:
+        rows = connection.execute(
+            """
+            SELECT
+                b.title,
+                rh.notes
+            FROM reading_histories AS rh
+            INNER JOIN book_items AS b
+                ON b.id = rh.book_item_id
+            """
+        ).fetchall()
+    finally:
+        connection.close()
+
+    assert rows == [
+        (
+            "復元対象書籍",
+            "復元された読書履歴",
+        )
+    ]
 
 
 def test_restore_backup_creates_safety_backup(
