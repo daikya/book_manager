@@ -977,7 +977,7 @@ Treeviewで履歴を選択した場合、IDで最新データを取得し、開�
 ### 16.13 GUIテスト
 
 ```text
-tests/gui/test_reading_history.py
+tests/gui/test_reading_history_gui.py
 ```
 
 少なくとも次を確認する。
@@ -1092,7 +1092,7 @@ tests/models/test_reading_history.py
 tests/repositories/test_reading_history_repository.py
 tests/services/test_reading_history_service.py
 tests/validators/test_reading_history_validator.py
-tests/gui/test_reading_history.py
+tests/gui/test_reading_history_gui.py
 docs/reading_history_design.md
 ```
 
@@ -1168,7 +1168,7 @@ pytest .\tests\services\test_reading_history_service.py -q
 ```
 
 ```powershell
-pytest .\tests\gui\test_reading_history.py .\tests\gui\test_reading_status.py -q
+pytest .\tests\gui\test_reading_history_gui.py .\tests\gui\test_reading_status.py -q
 ```
 
 最終確認では全テストを実行する。
@@ -1214,21 +1214,21 @@ Windows実環境で、少なくとも次を確認する。
 
 Version 1.8の読書履歴管理機能は、少なくとも次の条件を満たした時点で完成とする。
 
-* [ ] 一冊へ複数の読書履歴を登録できる。
-* [ ] 読書開始日・読了日・読書メモを記録できる。
-* [ ] 読書履歴を変更・削除できる。
-* [ ] 日付形式と実在日を検証できる。
-* [ ] 読書開始日と読了日の前後関係を検証できる。
-* [ ] 読書履歴を新しい順に取得・表示できる。
-* [ ] 読書履歴がない書籍を従来どおり扱える。
-* [ ] 読書状態・読了年月と読書履歴を独立して管理できる。
-* [ ] 書籍削除時に関連履歴を安全に削除できる。
-* [ ] 既存データを失わずにスキーマVersion 7へ移行できる。
-* [ ] バックアップ・復元で読書履歴を保持できる。
-* [ ] 関連するfocused pytestがすべて成功する。
-* [ ] 全pytestが成功する。
-* [ ] Windows実環境で主要操作を確認する。
-* [ ] 既存機能に回帰がない。
+* [x] 一冊へ複数の読書履歴を登録できる。
+* [x] 読書開始日・読了日・読書メモを記録できる。
+* [x] 読書履歴を変更・削除できる。
+* [x] 日付形式と実在日を検証できる。
+* [x] 読書開始日と読了日の前後関係を検証できる。
+* [x] 読書履歴を新しい順に取得・表示できる。
+* [x] 読書履歴がない書籍を従来どおり扱える。
+* [x] 読書状態・読了年月と読書履歴を独立して管理できる。
+* [x] 書籍削除時に関連履歴を安全に削除できる。
+* [x] 既存データを失わずにスキーマVersion 7へ移行できる。
+* [x] バックアップ・復元で読書履歴を保持できる。
+* [x] 関連するfocused pytestがすべて成功する。
+* [x] 全pytestが成功する。
+* [x] Windows実環境で主要操作を確認する。
+* [x] 既存機能に回帰がない。
 
 ---
 
@@ -1252,6 +1252,24 @@ Version 1.8では、次を正式な設計判断とする。
 * スキーマVersionを6から7へ更新する。
 * 既存の15列CSV形式は変更しない。
 * 履歴画面は選択中の一冊を対象とするモーダルダイアログとする。
+
+---
+
+## 28. 実装結果
+
+Version 1.8では、本設計に基づく読書履歴管理機能の実装と検証を完了した。
+
+主な結果は次のとおりである。
+
+* SQLiteスキーマをVersion 7へ更新し、Version 6から既存データを維持して移行できるようにした。
+* `ReadingHistory`、`ReadingHistoryValidator`、`ReadingHistoryRepository`および`ReadingHistoryService`を追加した。
+* 選択中の書籍を対象とするモーダル画面へ、履歴の登録・一覧表示・変更・削除を追加した。
+* 読書履歴と現在の読書状態・読了年月を独立して管理する仕様を維持した。
+* 書籍削除時の関連履歴削除と、バックアップ・復元での履歴保持を自動テストで確認した。
+* GUIテストはModelテストとのモジュール名衝突を避けるため、`tests/gui/test_reading_history_gui.py`とした。
+* 書籍一覧で4行を安定して表示できるように画面レイアウトを調整した。
+* focused pytestおよび全911件のpytestが成功した。
+* Windows実環境で主要操作と既存機能に回帰がないことを確認した。
 
 ---
 
