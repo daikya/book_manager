@@ -47,6 +47,7 @@ docs/
 ├── favorite_design.md
 ├── rating_design.md
 ├── reading_history_design.md
+├── reading_statistics_design.md
 ├── reading_status_design.md
 ├── reading_information_sort_design.md
 ├── search_filter_design.md
@@ -162,6 +163,12 @@ Version 1.3で追加した読書ステータス管理機能を定義する。
 Version 1.8で追加した読書履歴管理機能を定義する。
 
 一つの書籍に対する複数履歴、日付・メモの検証、データベース構造、Repository・Service・GUI連携、既存読書情報からの独立性およびバックアップ・復元方針を管理する。
+
+### `reading_statistics_design.md`
+
+Version 1.9で追加した読書記録の集計・可視化機能を定義する。
+
+全体集計、年別・月別集計、集計結果Model、Repository・Service・GUIの責務、Canvas棒グラフ、空状態およびテスト方針を管理する。
 
 ### `reading_information_sort_design.md`
 
@@ -527,7 +534,7 @@ docs/development_guidelines.md
 
 ## 18. 現在の状態
 
-book_managerはVersion 1.8.0まで正式リリース済みである。
+book_managerはVersion 1.8.0まで正式リリース済みであり、Version 1.9の実装と検証を完了している。
 
 Version 1.7.0は、タグ・カテゴリ機能の実装、812件の自動テスト全件成功およびWindows実環境での主要操作確認を経て、2026-09-04に正式リリースした。
 
@@ -599,6 +606,17 @@ Version 1.8では、読書記録と再読履歴の管理として次の機能を
 - Windows実環境での主要操作確認
 
 Version 1.8.0は、読書履歴管理機能の実装、911件の自動テスト全件成功およびWindows実環境での主要操作確認を経て、2026-09-07に正式リリースした。
+
+Version 1.9では、読書記録の集計と可視化として次の機能を実装した。
+
+- 読書履歴総数・履歴のある書籍数・読了記録数・再読書籍数の集計
+- 読了記録が存在する年の選択
+- 1月から12月までの月別読了数表示
+- TkinterのCanvasによる月別棒グラフ
+- 読了記録がない場合の空状態表示
+- スキーマVersion 7と既存CSV形式の維持
+- 970件の自動テスト全件成功
+- Windows実環境での主要な集計値とグラフ表示確認
 
 今後の開発内容は、
 
