@@ -9,6 +9,9 @@ import pytest
 from book_manager.database.initializer import initialize_database
 from book_manager.models.book_item import BookItem
 from book_manager.models.reading_history import ReadingHistory
+from book_manager.models.reading_statistics import (
+    ReadingStatisticsSummary,
+)
 from book_manager.repositories.book_repository import BookRepository
 from book_manager.repositories.reading_history_repository import (
     ReadingHistoryRepository,
@@ -413,3 +416,216 @@ def test_notes_are_bound_as_sql_parameter(
     restored = repository.get_by_id(registered.id)
     assert restored is not None
     assert restored.notes == notes
+
+
+def test_get_statistics_summary_returns_zero_without_histories(
+    repositories: tuple[BookRepository, ReadingHistoryRepository],
+) -> None:
+    """読書履歴がない場合はすべて0件を返す。"""
+    _, repository = repositories
+
+    assert repository.get_statistics_summary() == (
+        ReadingStatisticsSummary(
+            total_history_count=0,
+            books_with_history_count=0,
+            completed_history_count=0,
+            reread_book_count=0,
+        )
+    )
+
+
+def test_get_statistics_summary_counts_each_definition(
+    repositories: tuple[BookRepository, ReadingHistoryRepository],
+) -> None:
+    """履歴・書籍・読了・再読を定義どおり集計する。"""
+    book_repository, repository = repositories
+    first_book = add_book(book_repository, title="再読した書籍")
+    second_book = add_book(book_repository, title="一回読んだ書籍")
+    third_book = add_book(book_repository, title="履歴のない書籍")
+    assert first_book.id is not None
+    assert second_book.id is not None
+    assert third_book.id is not None
+
+    repository.add(
+        create_reading_history(
+            book_item_id=first_book.id,
+            started_on="2025-01-01",
+            completed_on="2025-01-10",
+        )
+    )
+    repository.add(
+        create_reading_history(
+            book_item_id=first_book.id,
+            started_on="2026-02-01",
+            completed_on=None,
+            notes="再読中",
+        )
+    )
+    repository.add(
+        create_reading_history(
+            book_item_id=second_book.id,
+            started_on=None,
+            completed_on=None,
+            notes="メモだけの履歴",
+        )
+    )
+
+    assert repository.get_statistics_summary() == (
+        ReadingStatisticsSummary(
+            total_history_count=3,
+            books_with_history_count=2,
+            completed_history_count=1,
+            reread_book_count=1,
+        )
+    )
+
+
+def test_get_statistics_summary_counts_multiple_reread_books(
+    repositories: tuple[BookRepository, ReadingHistoryRepository],
+) -> None:
+    """履歴が二件以上ある複数の書籍を再読書籍として数える。"""
+    book_repository, repository = repositories
+
+    for title in ("一冊目", "二冊目"):
+        book = add_book(book_repository, title=title)
+        assert book.id is not None
+        repository.add(
+            create_reading_history(book_item_id=book.id)
+        )
+        repository.add(
+            create_reading_history(
+                book_item_id=book.id,
+                started_on="2026-10-01",
+                completed_on="2026-10-10",
+            )
+        )
+
+    summary = repository.get_statistics_summary()
+
+    assert summary.total_history_count == 4
+    assert summary.books_with_history_count == 2
+    assert summary.completed_history_count == 4
+    assert summary.reread_book_count == 2
+
+
+def test_get_completed_years_returns_distinct_descending_years(
+    repositories: tuple[BookRepository, ReadingHistoryRepository],
+) -> None:
+    """読了記録の年を重複なく新しい順で返す。"""
+    book_repository, repository = repositories
+    book = add_book(book_repository)
+    assert book.id is not None
+
+    for completed_on in (
+        "2024-12-31",
+        "2026-01-01",
+        "2025-06-15",
+        "2026-09-08",
+    ):
+        repository.add(
+            create_reading_history(
+                book_item_id=book.id,
+                started_on=None,
+                completed_on=completed_on,
+            )
+        )
+
+    assert repository.get_completed_years() == [2026, 2025, 2024]
+
+
+def test_get_completed_years_ignores_histories_without_completed_on(
+    repositories: tuple[BookRepository, ReadingHistoryRepository],
+) -> None:
+    """読了日がない履歴を対象年へ含めない。"""
+    book_repository, repository = repositories
+    book = add_book(book_repository)
+    assert book.id is not None
+    repository.add(
+        create_reading_history(
+            book_item_id=book.id,
+            completed_on=None,
+        )
+    )
+
+    assert repository.get_completed_years() == []
+
+
+def test_get_monthly_completed_counts_groups_target_year(
+    repositories: tuple[BookRepository, ReadingHistoryRepository],
+) -> None:
+    """指定年の読了記録を月ごとに集計する。"""
+    book_repository, repository = repositories
+    book = add_book(book_repository)
+    assert book.id is not None
+
+    for completed_on in (
+        "2026-01-01",
+        "2026-01-31",
+        "2026-03-15",
+        "2025-01-10",
+        "2027-12-20",
+    ):
+        repository.add(
+            create_reading_history(
+                book_item_id=book.id,
+                started_on=None,
+                completed_on=completed_on,
+            )
+        )
+
+    assert repository.get_monthly_completed_counts(2026) == {
+        1: 2,
+        3: 1,
+    }
+
+
+def test_get_monthly_completed_counts_handles_year_boundaries(
+    repositories: tuple[BookRepository, ReadingHistoryRepository],
+) -> None:
+    """年初と年末の読了記録を対象年へ含める。"""
+    book_repository, repository = repositories
+    book = add_book(book_repository)
+    assert book.id is not None
+
+    for completed_on in ("2026-01-01", "2026-12-31"):
+        repository.add(
+            create_reading_history(
+                book_item_id=book.id,
+                started_on=None,
+                completed_on=completed_on,
+            )
+        )
+
+    assert repository.get_monthly_completed_counts(2026) == {
+        1: 1,
+        12: 1,
+    }
+
+
+def test_get_monthly_completed_counts_returns_empty_for_missing_year(
+    repositories: tuple[BookRepository, ReadingHistoryRepository],
+) -> None:
+    """指定年に読了記録がない場合は空の辞書を返す。"""
+    _, repository = repositories
+
+    assert repository.get_monthly_completed_counts(2026) == {}
+
+
+@pytest.mark.parametrize("year", [1, 9999])
+def test_get_monthly_completed_counts_supports_year_limits(
+    repositories: tuple[BookRepository, ReadingHistoryRepository],
+    year: int,
+) -> None:
+    """1年と9999年の読了記録を集計できる。"""
+    book_repository, repository = repositories
+    book = add_book(book_repository)
+    assert book.id is not None
+    repository.add(
+        create_reading_history(
+            book_item_id=book.id,
+            started_on=None,
+            completed_on=f"{year:04d}-01-01",
+        )
+    )
+
+    assert repository.get_monthly_completed_counts(year) == {1: 1}

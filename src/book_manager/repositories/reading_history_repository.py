@@ -6,6 +6,9 @@ from pathlib import Path
 
 from book_manager.database.connection import create_connection
 from book_manager.models.reading_history import ReadingHistory
+from book_manager.models.reading_statistics import (
+    ReadingStatisticsSummary,
+)
 
 
 READING_HISTORY_COLUMNS = """
@@ -193,6 +196,105 @@ class ReadingHistoryRepository:
                 )
 
             return cursor.rowcount > 0
+        finally:
+            connection.close()
+
+    def get_statistics_summary(
+        self,
+    ) -> ReadingStatisticsSummary:
+        """読書履歴の全体集計を取得する。"""
+        query = """
+            SELECT
+                COUNT(*) AS total_history_count,
+                COUNT(DISTINCT book_item_id)
+                    AS books_with_history_count,
+                COUNT(completed_on)
+                    AS completed_history_count,
+                (
+                    SELECT COUNT(*)
+                    FROM (
+                        SELECT book_item_id
+                        FROM reading_histories
+                        GROUP BY book_item_id
+                        HAVING COUNT(*) >= 2
+                    ) AS reread_books
+                ) AS reread_book_count
+            FROM reading_histories
+        """
+        connection = create_connection(self._database_path)
+
+        try:
+            row = connection.execute(query).fetchone()
+
+            if row is None:
+                raise sqlite3.DatabaseError(
+                    "読書履歴の集計結果を取得できませんでした。"
+                )
+
+            return ReadingStatisticsSummary(
+                total_history_count=row["total_history_count"],
+                books_with_history_count=(
+                    row["books_with_history_count"]
+                ),
+                completed_history_count=(
+                    row["completed_history_count"]
+                ),
+                reread_book_count=row["reread_book_count"],
+            )
+        finally:
+            connection.close()
+
+    def get_completed_years(self) -> list[int]:
+        """読了記録が存在する年を新しい順で取得する。"""
+        query = """
+            SELECT DISTINCT
+                CAST(
+                    substr(completed_on, 1, 4)
+                    AS INTEGER
+                ) AS year
+            FROM reading_histories
+            WHERE completed_on IS NOT NULL
+            ORDER BY year DESC
+        """
+        connection = create_connection(self._database_path)
+
+        try:
+            rows = connection.execute(query).fetchall()
+
+            return [row["year"] for row in rows]
+        finally:
+            connection.close()
+
+    def get_monthly_completed_counts(
+        self,
+        year: int,
+    ) -> dict[int, int]:
+        """指定年について月ごとの読了数を取得する。"""
+        query = """
+            SELECT
+                CAST(
+                    substr(completed_on, 6, 2)
+                    AS INTEGER
+                ) AS month,
+                COUNT(*) AS completed_count
+            FROM reading_histories
+            WHERE substr(completed_on, 1, 4) = ?
+            GROUP BY month
+            ORDER BY month ASC
+        """
+        year_text = f"{year:04d}"
+        connection = create_connection(self._database_path)
+
+        try:
+            rows = connection.execute(
+                query,
+                (year_text,),
+            ).fetchall()
+
+            return {
+                row["month"]: row["completed_count"]
+                for row in rows
+            }
         finally:
             connection.close()
 
