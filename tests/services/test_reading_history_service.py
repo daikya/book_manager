@@ -3,12 +3,17 @@
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
 from book_manager.database.initializer import initialize_database
 from book_manager.models.book_item import BookItem
 from book_manager.models.reading_history import ReadingHistory
+from book_manager.models.reading_statistics import (
+    MonthlyReadingCount,
+    ReadingStatisticsSummary,
+)
 from book_manager.repositories.book_repository import BookRepository
 from book_manager.repositories.reading_history_repository import (
     ReadingHistoryRepository,
@@ -418,3 +423,183 @@ def test_history_operations_do_not_change_book_reading_fields(
     assert restored_book is not None
     assert restored_book.reading_status == "completed"
     assert restored_book.completion_month == "2026-08"
+
+
+def create_statistics_service(
+    repository: Mock,
+) -> ReadingHistoryService:
+    """集計テスト用のServiceを生成する。"""
+    return ReadingHistoryService(
+        repository,
+        Mock(spec=BookRepository),
+    )
+
+
+def test_get_statistics_summary_returns_repository_result() -> None:
+    """Repositoryの全体集計を返す。"""
+    repository = Mock(spec=ReadingHistoryRepository)
+    summary = ReadingStatisticsSummary(12, 8, 10, 3)
+    repository.get_statistics_summary.return_value = summary
+    service = create_statistics_service(repository)
+
+    assert service.get_statistics_summary() == summary
+    repository.get_statistics_summary.assert_called_once_with()
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        ReadingStatisticsSummary(-1, 0, 0, 0),
+        ReadingStatisticsSummary(0, -1, 0, 0),
+        ReadingStatisticsSummary(0, 0, -1, 0),
+        ReadingStatisticsSummary(0, 0, 0, -1),
+        ReadingStatisticsSummary(True, 0, 0, 0),
+    ],
+)
+def test_get_statistics_summary_rejects_invalid_counts(
+    summary: ReadingStatisticsSummary,
+) -> None:
+    """負数またはboolを含む全体集計を拒否する。"""
+    repository = Mock(spec=ReadingHistoryRepository)
+    repository.get_statistics_summary.return_value = summary
+    service = create_statistics_service(repository)
+
+    with pytest.raises(
+        ValueError,
+        match="読書履歴の集計結果が不正です。",
+    ):
+        service.get_statistics_summary()
+
+
+def test_get_completed_years_returns_repository_result() -> None:
+    """Repositoryの対象年一覧を返す。"""
+    repository = Mock(spec=ReadingHistoryRepository)
+    repository.get_completed_years.return_value = [2026, 2025, 2024]
+    service = create_statistics_service(repository)
+
+    assert service.get_completed_years() == [2026, 2025, 2024]
+    repository.get_completed_years.assert_called_once_with()
+
+
+def test_get_completed_years_accepts_empty_list() -> None:
+    """読了記録がない場合は空の対象年一覧を返す。"""
+    repository = Mock(spec=ReadingHistoryRepository)
+    repository.get_completed_years.return_value = []
+    service = create_statistics_service(repository)
+
+    assert service.get_completed_years() == []
+
+
+@pytest.mark.parametrize("year", [0, 10000, "2026", True, None])
+def test_get_completed_years_rejects_invalid_repository_years(
+    year: object,
+) -> None:
+    """Repositoryが返した不正な対象年を拒否する。"""
+    repository = Mock(spec=ReadingHistoryRepository)
+    repository.get_completed_years.return_value = [year]
+    service = create_statistics_service(repository)
+
+    with pytest.raises(
+        ValueError,
+        match="集計対象年は1から9999までの整数",
+    ):
+        service.get_completed_years()
+
+
+def test_get_monthly_reading_counts_fills_all_months() -> None:
+    """記録がない月を0件で補完して12か月分を返す。"""
+    repository = Mock(spec=ReadingHistoryRepository)
+    repository.get_monthly_completed_counts.return_value = {
+        1: 2,
+        3: 1,
+        12: 4,
+    }
+    service = create_statistics_service(repository)
+
+    result = service.get_monthly_reading_counts(2026)
+
+    assert result == [
+        MonthlyReadingCount(
+            year=2026,
+            month=month,
+            completed_count={1: 2, 3: 1, 12: 4}.get(
+                month,
+                0,
+            ),
+        )
+        for month in range(1, 13)
+    ]
+    repository.get_monthly_completed_counts.assert_called_once_with(
+        2026
+    )
+
+
+def test_get_monthly_reading_counts_returns_zero_for_missing_year(
+) -> None:
+    """記録がない年は12か月すべて0件で返す。"""
+    repository = Mock(spec=ReadingHistoryRepository)
+    repository.get_monthly_completed_counts.return_value = {}
+    service = create_statistics_service(repository)
+
+    result = service.get_monthly_reading_counts(2026)
+
+    assert len(result) == 12
+    assert [item.month for item in result] == list(range(1, 13))
+    assert all(item.completed_count == 0 for item in result)
+
+
+@pytest.mark.parametrize("year", [1, 9999])
+def test_get_monthly_reading_counts_accepts_year_limits(
+    year: int,
+) -> None:
+    """1年と9999年を集計対象として許可する。"""
+    repository = Mock(spec=ReadingHistoryRepository)
+    repository.get_monthly_completed_counts.return_value = {}
+    service = create_statistics_service(repository)
+
+    result = service.get_monthly_reading_counts(year)
+
+    assert len(result) == 12
+    assert all(item.year == year for item in result)
+
+
+@pytest.mark.parametrize("year", [0, 10000, "2026", True, None])
+def test_get_monthly_reading_counts_rejects_invalid_year(
+    year: object,
+) -> None:
+    """範囲外の値と整数以外を集計対象年として拒否する。"""
+    repository = Mock(spec=ReadingHistoryRepository)
+    service = create_statistics_service(repository)
+
+    with pytest.raises(
+        ValueError,
+        match="集計対象年は1から9999までの整数",
+    ):
+        service.get_monthly_reading_counts(year)  # type: ignore[arg-type]
+
+    repository.get_monthly_completed_counts.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "monthly_counts",
+    [
+        {0: 1},
+        {13: 1},
+        {True: 1},
+        {1: -1},
+        {1: True},
+    ],
+)
+def test_get_monthly_reading_counts_rejects_invalid_results(
+    monthly_counts: dict[int, int],
+) -> None:
+    """不正な月または件数を含むRepository結果を拒否する。"""
+    repository = Mock(spec=ReadingHistoryRepository)
+    repository.get_monthly_completed_counts.return_value = monthly_counts
+    service = create_statistics_service(repository)
+
+    with pytest.raises(
+        ValueError,
+        match="月別読了数の集計結果が不正です。",
+    ):
+        service.get_monthly_reading_counts(2026)
