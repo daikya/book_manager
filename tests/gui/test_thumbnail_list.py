@@ -20,6 +20,14 @@ def create_application() -> BookManagerApplication:
     application._thumbnail_photos = {}
     application._book_tree = Mock()
     application._count_status_var = Mock()
+    application._service = Mock()
+    application._service.resolve_cover_image_path.side_effect = (
+        lambda stored_path: (
+            Path(stored_path)
+            if stored_path is not None
+            else None
+        )
+    )
 
     return application
 
@@ -46,6 +54,85 @@ def test_create_thumbnail_photo_returns_none_for_missing_file(
     )
 
     assert result is None
+
+
+def test_create_thumbnail_photo_uses_resolved_path(
+    tmp_path: Path,
+) -> None:
+    """保存パスをServiceで解決してサムネイルを生成する。"""
+    application = create_application()
+    image_path = tmp_path / "cover.jpg"
+    Image.new("RGB", (40, 55)).save(image_path)
+    application._service.resolve_cover_image_path.return_value = (
+        image_path
+    )
+    application._service.resolve_cover_image_path.side_effect = None
+
+    with patch(
+        "book_manager.gui.book_manager_application.ImageTk.PhotoImage",
+        return_value=Mock(),
+    ):
+        result = application._create_thumbnail_photo(
+            "cache/covers/cover.jpg",
+        )
+
+    assert result is not None
+    application._service.resolve_cover_image_path.assert_called_once_with(
+        "cache/covers/cover.jpg",
+    )
+
+
+def test_create_thumbnail_photo_returns_none_for_rejected_path() -> None:
+    """許可範囲外として拒否されたパスは表示しない。"""
+    application = create_application()
+    application._service.resolve_cover_image_path.return_value = None
+    application._service.resolve_cover_image_path.side_effect = None
+
+    result = application._create_thumbnail_photo(
+        "../outside.jpg",
+    )
+
+    assert result is None
+
+
+def test_display_saved_cover_image_uses_resolved_path(
+    tmp_path: Path,
+) -> None:
+    """詳細表示でもServiceで解決した画像パスを使用する。"""
+    application = create_application()
+    image_path = tmp_path / "cover.jpg"
+    image_path.write_bytes(b"image")
+    application._service.resolve_cover_image_path.return_value = (
+        image_path
+    )
+    application._service.resolve_cover_image_path.side_effect = None
+    application._display_cover_image = Mock()
+    application._clear_cover_image = Mock()
+
+    application._display_saved_cover_image(
+        "cache/covers/cover.jpg",
+    )
+
+    application._display_cover_image.assert_called_once_with(
+        str(image_path),
+    )
+    application._clear_cover_image.assert_not_called()
+
+
+def test_display_saved_cover_image_clears_rejected_path() -> None:
+    """拒否された保存パスでは画像表示を初期化する。"""
+    application = create_application()
+    application._service.resolve_cover_image_path.return_value = None
+    application._service.resolve_cover_image_path.side_effect = None
+    application._display_cover_image = Mock()
+    application._clear_cover_image = Mock()
+
+    application._display_saved_cover_image(
+        "../outside.jpg",
+    )
+
+    application._display_cover_image.assert_not_called()
+    application._clear_cover_image.assert_called_once_with()
 
 
 def test_create_thumbnail_photo_creates_thumbnail(

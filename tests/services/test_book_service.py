@@ -67,6 +67,8 @@ class FakeCoverImageService:
     ) -> None:
         self._result = result
         self.calls: list[str] = []
+        self.stored_path_calls: list[Path] = []
+        self.resolve_path_calls: list[str | None] = []
 
     def fetch(
         self,
@@ -75,6 +77,22 @@ class FakeCoverImageService:
         """呼び出しURLを記録して固定パスを返す。"""
         self.calls.append(image_url)
 
+        return self._result
+
+    def create_stored_path(
+        self,
+        image_path: Path,
+    ) -> str:
+        """保存用パス変換の呼び出しを記録する。"""
+        self.stored_path_calls.append(image_path)
+        return "cache/covers/cover.jpg"
+
+    def resolve_stored_path(
+        self,
+        stored_path: str | None,
+    ) -> Path | None:
+        """表示用パス解決の呼び出しを記録する。"""
+        self.resolve_path_calls.append(stored_path)
         return self._result
 
 @pytest.fixture
@@ -1460,6 +1478,69 @@ def test_fetch_cover_image_requires_cover_image_service(
         service.fetch_cover_image(
             "https://example.com/cover.jpg",
         )
+
+
+def test_create_stored_cover_image_path_delegates_to_service(
+    repository: BookRepository,
+    tmp_path: Path,
+) -> None:
+    """DB保存用パス変換を表紙Serviceへ委譲する。"""
+    image_path = tmp_path / "cover.jpg"
+    cover_image_service = FakeCoverImageService(image_path)
+    service = BookService(
+        repository,
+        cover_image_service=cover_image_service,  # type: ignore[arg-type]
+    )
+
+    result = service.create_stored_cover_image_path(image_path)
+
+    assert result == "cache/covers/cover.jpg"
+    assert cover_image_service.stored_path_calls == [image_path]
+
+
+def test_resolve_cover_image_path_delegates_to_service(
+    repository: BookRepository,
+    tmp_path: Path,
+) -> None:
+    """表示用パス解決を表紙Serviceへ委譲する。"""
+    expected_path = tmp_path / "cover.jpg"
+    cover_image_service = FakeCoverImageService(expected_path)
+    service = BookService(
+        repository,
+        cover_image_service=cover_image_service,  # type: ignore[arg-type]
+    )
+
+    result = service.resolve_cover_image_path(
+        "cache/covers/cover.jpg",
+    )
+
+    assert result == expected_path
+    assert cover_image_service.resolve_path_calls == [
+        "cache/covers/cover.jpg",
+    ]
+
+
+@pytest.mark.parametrize(
+    "method_name",
+    [
+        "create_stored_cover_image_path",
+        "resolve_cover_image_path",
+    ],
+)
+def test_cover_path_methods_require_cover_image_service(
+    repository: BookRepository,
+    tmp_path: Path,
+    method_name: str,
+) -> None:
+    """表紙パス処理でも表紙Serviceの設定を必須とする。"""
+    service = BookService(repository)
+    method = getattr(service, method_name)
+
+    with pytest.raises(
+        BookMetadataConfigurationError,
+        match="表紙画像取得Serviceが設定されていません。",
+    ):
+        method(tmp_path / "cover.jpg")
 
 def test_get_sorted_books_returns_title_ascending(
     service: BookService,

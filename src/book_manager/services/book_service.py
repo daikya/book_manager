@@ -941,3 +941,41 @@ class BookService:
         return self._cover_image_service.fetch(
             image_url,
         )
+
+    def create_stored_cover_image_path(
+        self,
+        image_path: Path,
+    ) -> str:
+        """表紙画像パスをDB保存用の文字列へ変換する。"""
+        cover_image_service = (
+            self._require_cover_image_service()
+        )
+
+        return cover_image_service.create_stored_path(
+            image_path,
+        )
+
+    def resolve_cover_image_path(
+        self,
+        stored_path: str | None,
+    ) -> Path | None:
+        """DBの表紙画像パスを表示用のPathへ解決する。"""
+        cover_image_service = (
+            self._require_cover_image_service()
+        )
+
+        return cover_image_service.resolve_stored_path(
+            stored_path,
+        )
+
+    def _require_cover_image_service(
+        self,
+    ) -> CoverImageService:
+        """設定済みの表紙画像取得Serviceを返す。"""
+        if self._cover_image_service is None:
+            raise BookMetadataConfigurationError(
+                "表紙画像取得Serviceが"
+                "設定されていません。"
+            )
+
+        return self._cover_image_service

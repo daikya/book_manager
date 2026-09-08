@@ -18,6 +18,7 @@ class CoverImageService:
         *,
         session: Session,
         cache_directory: Path,
+        root_directory: Path | None = None,
         timeout: tuple[int, int] = (5, 10),
     ) -> None:
         """Serviceを初期化する。
@@ -27,11 +28,33 @@ class CoverImageService:
                 HTTP通信に使用するSession。
             cache_directory:
                 表紙画像の保存先。
+            root_directory:
+                DBへ保存する相対パスの基準となる
+                利用者データルート。
             timeout:
                 接続・読み込みtimeout。
         """
         self._session = session
-        self._cache_directory = cache_directory
+        self._cache_directory = Path(
+            cache_directory,
+        ).resolve(strict=False)
+        self._root_directory = (
+            Path(root_directory).resolve(strict=False)
+            if root_directory is not None
+            else None
+        )
+
+        if self._root_directory is not None:
+            try:
+                self._cache_directory.relative_to(
+                    self._root_directory,
+                )
+            except ValueError as error:
+                raise ValueError(
+                    "表紙キャッシュは利用者データルート内を"
+                    "指定してください。"
+                ) from error
+
         self._timeout = timeout
 
     def fetch(
@@ -126,6 +149,96 @@ class CoverImageService:
         return self._cache_directory / (
             f"{digest}{suffix}"
         )
+
+    def create_stored_path(
+        self,
+        image_path: Path,
+    ) -> str:
+        """画像パスをDBへ保存する文字列へ変換する。
+
+        利用者データルートが設定されている場合は、
+        そのルートからの相対POSIXパスを返す。
+
+        Args:
+            image_path:
+                キャッシュ済み表紙画像のパス。
+
+        Returns:
+            DBへ保存する表紙画像パス。
+
+        Raises:
+            ValueError:
+                画像が表紙キャッシュ外にある場合。
+        """
+        resolved_image_path = Path(
+            image_path,
+        ).resolve(strict=False)
+
+        if self._root_directory is None:
+            return Path(image_path).as_posix()
+
+        self._require_cover_cache_path(
+            resolved_image_path,
+        )
+
+        return resolved_image_path.relative_to(
+            self._root_directory,
+        ).as_posix()
+
+    def resolve_stored_path(
+        self,
+        stored_path: str | None,
+    ) -> Path | None:
+        """DBの表紙画像パスを表示用のPathへ解決する。
+
+        既存データの絶対パスは互換目的でそのまま扱う。
+        相対パスは利用者データルートを基準に解決し、
+        表紙キャッシュ外を参照する場合はNoneを返す。
+        """
+        if stored_path is None:
+            return None
+
+        normalized_path = stored_path.strip()
+
+        if not normalized_path:
+            return None
+
+        image_path = Path(normalized_path)
+
+        if image_path.is_absolute():
+            return image_path.resolve(strict=False)
+
+        if self._root_directory is None:
+            return image_path
+
+        resolved_image_path = (
+            self._root_directory
+            / image_path
+        ).resolve(strict=False)
+
+        try:
+            self._require_cover_cache_path(
+                resolved_image_path,
+            )
+        except ValueError:
+            return None
+
+        return resolved_image_path
+
+    def _require_cover_cache_path(
+        self,
+        image_path: Path,
+    ) -> None:
+        """指定パスが表紙キャッシュ配下であることを確認する。"""
+        try:
+            image_path.relative_to(
+                self._cache_directory,
+            )
+        except ValueError as error:
+            raise ValueError(
+                "表紙画像パスは表紙キャッシュ内を"
+                "指定してください。"
+            ) from error
 
     @staticmethod
     def _extract_suffix(

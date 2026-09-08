@@ -248,3 +248,160 @@ def test_fetch_uses_expected_file_suffix(
     )
 
     assert result.suffix == expected_suffix
+
+
+def test_create_stored_path_returns_root_relative_posix_path(
+    tmp_path: Path,
+) -> None:
+    """表紙画像を利用者データルートからの相対パスにする。"""
+    root_directory = tmp_path / "application"
+    cache_directory = root_directory / "cache" / "covers"
+    service = CoverImageService(
+        session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+        cache_directory=cache_directory,
+        root_directory=root_directory,
+    )
+    image_path = cache_directory / "cover.jpg"
+
+    result = service.create_stored_path(image_path)
+
+    assert result == "cache/covers/cover.jpg"
+
+
+def test_create_stored_path_rejects_path_outside_cover_cache(
+    tmp_path: Path,
+) -> None:
+    """表紙キャッシュ外の画像パスを保存しない。"""
+    root_directory = tmp_path / "application"
+    service = CoverImageService(
+        session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+        cache_directory=root_directory / "cache" / "covers",
+        root_directory=root_directory,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="表紙キャッシュ内を指定してください。",
+    ):
+        service.create_stored_path(
+            tmp_path / "outside.jpg",
+        )
+
+
+def test_constructor_rejects_cache_outside_root(
+    tmp_path: Path,
+) -> None:
+    """利用者データルート外のキャッシュ設定を拒否する。"""
+    with pytest.raises(
+        ValueError,
+        match="利用者データルート内を指定してください。",
+    ):
+        CoverImageService(
+            session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+            cache_directory=tmp_path / "outside",
+            root_directory=tmp_path / "application",
+        )
+
+
+def test_resolve_stored_path_resolves_relative_path(
+    tmp_path: Path,
+) -> None:
+    """相対保存パスを利用者データルート基準で解決する。"""
+    root_directory = tmp_path / "application"
+    cache_directory = root_directory / "cache" / "covers"
+    service = CoverImageService(
+        session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+        cache_directory=cache_directory,
+        root_directory=root_directory,
+    )
+
+    result = service.resolve_stored_path(
+        "cache/covers/cover.jpg",
+    )
+
+    assert result == cache_directory / "cover.jpg"
+
+
+@pytest.mark.parametrize(
+    "stored_path",
+    [
+        None,
+        "",
+        "   ",
+    ],
+)
+def test_resolve_stored_path_returns_none_for_empty_path(
+    tmp_path: Path,
+    stored_path: str | None,
+) -> None:
+    """空の保存パスをNoneとして扱う。"""
+    root_directory = tmp_path / "application"
+    service = CoverImageService(
+        session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+        cache_directory=root_directory / "cache" / "covers",
+        root_directory=root_directory,
+    )
+
+    assert service.resolve_stored_path(stored_path) is None
+
+
+def test_resolve_stored_path_keeps_existing_absolute_path(
+    tmp_path: Path,
+) -> None:
+    """既存DBの絶対パスを互換目的で解決する。"""
+    root_directory = tmp_path / "application"
+    service = CoverImageService(
+        session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+        cache_directory=root_directory / "cache" / "covers",
+        root_directory=root_directory,
+    )
+    absolute_path = tmp_path / "legacy" / "cover.jpg"
+
+    result = service.resolve_stored_path(
+        str(absolute_path),
+    )
+
+    assert result == absolute_path
+
+
+@pytest.mark.parametrize(
+    "stored_path",
+    [
+        "../outside.jpg",
+        "cache/covers/../../../outside.jpg",
+        "cache/other/image.jpg",
+    ],
+)
+def test_resolve_stored_path_rejects_path_outside_cover_cache(
+    tmp_path: Path,
+    stored_path: str,
+) -> None:
+    """表紙キャッシュ外を参照する相対パスを拒否する。"""
+    root_directory = tmp_path / "application"
+    service = CoverImageService(
+        session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+        cache_directory=root_directory / "cache" / "covers",
+        root_directory=root_directory,
+    )
+
+    assert service.resolve_stored_path(stored_path) is None
+
+
+def test_path_conversion_preserves_previous_behavior_without_root(
+    tmp_path: Path,
+) -> None:
+    """ルート未設定時は既存呼び出しとの互換性を維持する。"""
+    service = CoverImageService(
+        session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+        cache_directory=tmp_path,
+    )
+    relative_path = Path("cache/covers/cover.jpg")
+
+    assert (
+        service.create_stored_path(relative_path)
+        == relative_path.as_posix()
+    )
+    assert (
+        service.resolve_stored_path(relative_path.as_posix())
+        == relative_path
+    )

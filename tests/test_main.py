@@ -353,6 +353,7 @@ def test_run_application_injects_new_paths(
     cover_class.assert_called_once_with(
         session=session,
         cache_directory=paths.cover_cache_directory,
+        root_directory=paths.root_directory,
     )
     root.mainloop.assert_called_once_with()
     session.close.assert_called_once_with()

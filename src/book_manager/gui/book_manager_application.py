@@ -1793,11 +1793,11 @@ class BookManagerApplication:
         if not cover_image_path:
             return None
 
-        image_path = Path(
+        image_path = self._service.resolve_cover_image_path(
             cover_image_path,
         )
 
-        if not image_path.is_file():
+        if image_path is None or not image_path.is_file():
             return None
 
         try:
@@ -2095,11 +2095,11 @@ class BookManagerApplication:
             self._clear_cover_image()
             return
 
-        image_path = Path(
+        image_path = self._service.resolve_cover_image_path(
             cover_image_path,
         )
 
-        if not image_path.is_file():
+        if image_path is None or not image_path.is_file():
             self._clear_cover_image()
             return
 
@@ -4424,7 +4424,10 @@ class BookManagerApplication:
                     )
 
                     self._current_cover_image_path = (
-                        cover_path.as_posix()
+                        self._service
+                        .create_stored_cover_image_path(
+                            cover_path,
+                        )
                     )
 
                     self._display_cover_image(

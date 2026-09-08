@@ -145,6 +145,9 @@ def _run_application(
             cache_directory=(
                 application_paths.cover_cache_directory
             ),
+            root_directory=(
+                application_paths.root_directory
+            ),
         )
         book_service = BookService(
             repository,
