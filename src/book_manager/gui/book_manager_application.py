@@ -14,6 +14,10 @@ import sys
 
 from book_manager.models.book_item import BookItem
 from book_manager.models.reading_history import ReadingHistory
+from book_manager.models.reading_statistics import (
+    MonthlyReadingCount,
+    ReadingStatisticsSummary,
+)
 from book_manager.models.fetched_book_data import (
     FetchedBookData,
 )
@@ -1567,7 +1571,7 @@ class BookManagerApplication:
         )
 
         button_frame.columnconfigure(
-            11,
+            12,
             weight=1,
         )
 
@@ -1693,6 +1697,17 @@ class BookManagerApplication:
             padx=(0, 6),
         )
 
+        self._reading_statistics_button = ttk.Button(
+            button_frame,
+            text="読書集計",
+            command=self._on_show_reading_statistics,
+        )
+        self._reading_statistics_button.grid(
+            row=0,
+            column=11,
+            padx=(0, 6),
+        )
+
         self._exit_button = ttk.Button(
             button_frame,
             text="終了",
@@ -1700,7 +1715,7 @@ class BookManagerApplication:
         )
         self._exit_button.grid(
             row=0,
-            column=11,
+            column=12,
             sticky="e",
         )
 
@@ -3279,6 +3294,409 @@ class BookManagerApplication:
 
         if selections:
             self._reading_history_tree.selection_remove(*selections)
+
+    def _on_show_reading_statistics(self) -> None:
+        """読書集計ダイアログを表示する。"""
+        self._open_reading_statistics_dialog()
+
+    def _open_reading_statistics_dialog(self) -> None:
+        """読書集計ダイアログを構築する。"""
+        dialog = tk.Toplevel(self._root)
+        dialog.title("読書集計")
+        dialog.geometry("900x650")
+        dialog.minsize(760, 540)
+        dialog.transient(self._root)
+        dialog.grab_set()
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(2, weight=1)
+
+        self._reading_statistics_dialog = dialog
+        self._reading_statistics_year_var = tk.StringVar(
+            master=dialog,
+        )
+        self._reading_statistics_summary_vars = {
+            "total_history_count": tk.StringVar(master=dialog),
+            "books_with_history_count": tk.StringVar(master=dialog),
+            "completed_history_count": tk.StringVar(master=dialog),
+            "reread_book_count": tk.StringVar(master=dialog),
+        }
+        self._reading_statistics_month_vars = [
+            tk.StringVar(master=dialog)
+            for _ in range(12)
+        ]
+        self._monthly_reading_counts: list[
+            MonthlyReadingCount
+        ] = []
+
+        ttk.Label(
+            dialog,
+            text="読書集計",
+            font=("TkDefaultFont", 14, "bold"),
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w",
+            padx=12,
+            pady=(12, 8),
+        )
+
+        summary_frame = ttk.LabelFrame(
+            dialog,
+            text="全体集計",
+            padding=10,
+        )
+        summary_frame.grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            padx=12,
+            pady=(0, 8),
+        )
+
+        summary_items = (
+            ("履歴総数", "total_history_count"),
+            ("履歴のある書籍", "books_with_history_count"),
+            ("読了記録", "completed_history_count"),
+            ("再読書籍", "reread_book_count"),
+        )
+
+        for column, (label_text, key) in enumerate(summary_items):
+            summary_frame.columnconfigure(column, weight=1)
+            item_frame = ttk.Frame(summary_frame, padding=6)
+            item_frame.grid(row=0, column=column, sticky="ew")
+            ttk.Label(
+                item_frame,
+                text=label_text,
+                anchor="center",
+            ).grid(row=0, column=0, sticky="ew")
+            ttk.Label(
+                item_frame,
+                textvariable=(
+                    self._reading_statistics_summary_vars[key]
+                ),
+                anchor="center",
+                font=("TkDefaultFont", 13, "bold"),
+            ).grid(row=1, column=0, sticky="ew", pady=(4, 0))
+            item_frame.columnconfigure(0, weight=1)
+
+        chart_frame = ttk.LabelFrame(
+            dialog,
+            text="月別読了数",
+            padding=10,
+        )
+        chart_frame.grid(
+            row=2,
+            column=0,
+            sticky="nsew",
+            padx=12,
+            pady=(0, 8),
+        )
+        chart_frame.columnconfigure(0, weight=1)
+        chart_frame.rowconfigure(1, weight=1)
+
+        year_frame = ttk.Frame(chart_frame)
+        year_frame.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+            pady=(0, 8),
+        )
+        ttk.Label(year_frame, text="対象年").grid(
+            row=0,
+            column=0,
+            padx=(0, 8),
+        )
+        self._reading_statistics_year_combobox = ttk.Combobox(
+            year_frame,
+            textvariable=self._reading_statistics_year_var,
+            width=10,
+            state="readonly",
+        )
+        self._reading_statistics_year_combobox.grid(
+            row=0,
+            column=1,
+            sticky="w",
+        )
+        self._reading_statistics_year_combobox.bind(
+            "<<ComboboxSelected>>",
+            self._on_reading_statistics_year_changed,
+        )
+
+        self._reading_statistics_canvas = tk.Canvas(
+            chart_frame,
+            background="white",
+            highlightthickness=1,
+            highlightbackground="#b0b0b0",
+        )
+        self._reading_statistics_canvas.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+        )
+        self._reading_statistics_canvas.bind(
+            "<Configure>",
+            self._on_reading_statistics_canvas_configure,
+        )
+
+        month_frame = ttk.Frame(chart_frame)
+        month_frame.grid(
+            row=2,
+            column=0,
+            sticky="ew",
+            pady=(8, 0),
+        )
+
+        for index, month_var in enumerate(
+            self._reading_statistics_month_vars
+        ):
+            column = index % 6
+            row = index // 6
+            month_frame.columnconfigure(column, weight=1)
+            ttk.Label(
+                month_frame,
+                textvariable=month_var,
+                anchor="center",
+            ).grid(
+                row=row,
+                column=column,
+                sticky="ew",
+                pady=2,
+            )
+
+        button_frame = ttk.Frame(dialog)
+        button_frame.grid(
+            row=3,
+            column=0,
+            sticky="ew",
+            padx=12,
+            pady=(0, 12),
+        )
+        button_frame.columnconfigure(0, weight=1)
+        ttk.Button(
+            button_frame,
+            text="閉じる",
+            command=dialog.destroy,
+        ).grid(row=0, column=1)
+
+        try:
+            self._load_reading_statistics()
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "読書集計エラー",
+                "読書集計を表示できませんでした。",
+                parent=dialog,
+            )
+            dialog.destroy()
+            return
+
+        dialog.wait_window()
+
+    def _load_reading_statistics(self) -> None:
+        """全体集計と対象年一覧を読み込む。"""
+        summary = (
+            self._reading_history_service.get_statistics_summary()
+        )
+        self._set_reading_statistics_summary(summary)
+        years = self._reading_history_service.get_completed_years()
+        year_values = tuple(str(year) for year in years)
+        self._reading_statistics_year_combobox.configure(
+            values=year_values,
+        )
+
+        if not years:
+            self._reading_statistics_year_var.set("")
+            self._reading_statistics_year_combobox.configure(
+                state="disabled",
+            )
+            self._set_monthly_reading_counts([])
+            return
+
+        self._reading_statistics_year_combobox.configure(
+            state="readonly",
+        )
+        self._reading_statistics_year_var.set(str(years[0]))
+        self._refresh_monthly_reading_statistics(years[0])
+
+    def _set_reading_statistics_summary(
+        self,
+        summary: ReadingStatisticsSummary,
+    ) -> None:
+        """全体集計値を画面表示へ反映する。"""
+        values = {
+            "total_history_count": (
+                f"{summary.total_history_count}回"
+            ),
+            "books_with_history_count": (
+                f"{summary.books_with_history_count}冊"
+            ),
+            "completed_history_count": (
+                f"{summary.completed_history_count}回"
+            ),
+            "reread_book_count": f"{summary.reread_book_count}冊",
+        }
+
+        for key, value in values.items():
+            self._reading_statistics_summary_vars[key].set(value)
+
+    def _on_reading_statistics_year_changed(
+        self,
+        _event: tk.Event[tk.Misc] | None = None,
+    ) -> None:
+        """選択年に応じて月別読了数を更新する。"""
+        year_text = self._reading_statistics_year_var.get()
+
+        if year_text == "":
+            self._set_monthly_reading_counts([])
+            return
+
+        try:
+            self._refresh_monthly_reading_statistics(int(year_text))
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror(
+                "読書集計エラー",
+                "読書集計を表示できませんでした。",
+                parent=self._reading_statistics_dialog,
+            )
+
+    def _refresh_monthly_reading_statistics(
+        self,
+        year: int,
+    ) -> None:
+        """指定年の月別集計を取得して表示する。"""
+        monthly_counts = (
+            self._reading_history_service.get_monthly_reading_counts(
+                year
+            )
+        )
+        self._set_monthly_reading_counts(monthly_counts)
+
+    def _set_monthly_reading_counts(
+        self,
+        monthly_counts: list[MonthlyReadingCount],
+    ) -> None:
+        """月別数値と棒グラフへ集計結果を反映する。"""
+        count_by_month = {
+            item.month: item.completed_count
+            for item in monthly_counts
+        }
+
+        for month, month_var in enumerate(
+            self._reading_statistics_month_vars,
+            start=1,
+        ):
+            month_var.set(
+                f"{month}月 {count_by_month.get(month, 0)}件"
+            )
+
+        self._monthly_reading_counts = list(monthly_counts)
+        self._draw_monthly_reading_chart(
+            self._reading_statistics_canvas,
+            self._monthly_reading_counts,
+        )
+
+    def _on_reading_statistics_canvas_configure(
+        self,
+        _event: tk.Event[tk.Misc] | None = None,
+    ) -> None:
+        """Canvasの現在サイズに合わせてグラフを再描画する。"""
+        self._draw_monthly_reading_chart(
+            self._reading_statistics_canvas,
+            self._monthly_reading_counts,
+        )
+
+    @staticmethod
+    def _draw_monthly_reading_chart(
+        canvas: tk.Canvas,
+        monthly_counts: list[MonthlyReadingCount],
+    ) -> None:
+        """月別読了数をCanvasへ棒グラフとして描画する。"""
+        canvas.delete("all")
+        canvas.update_idletasks()
+        width = max(canvas.winfo_width(), 1)
+        height = max(canvas.winfo_height(), 1)
+        counts = {
+            item.month: item.completed_count
+            for item in monthly_counts
+        }
+        maximum_count = max(counts.values(), default=0)
+
+        if maximum_count == 0:
+            canvas.create_text(
+                width / 2,
+                height / 2,
+                text="読了記録がありません。",
+                fill="#555555",
+            )
+            return
+
+        left_margin = 40
+        right_margin = 20
+        top_margin = 30
+        bottom_margin = 40
+        drawable_width = max(
+            width - left_margin - right_margin,
+            1,
+        )
+        drawable_height = max(
+            height - top_margin - bottom_margin,
+            1,
+        )
+        slot_width = drawable_width / 12
+        bar_width = max(slot_width * 0.62, 1)
+        baseline = top_margin + drawable_height
+
+        canvas.create_line(
+            left_margin,
+            top_margin,
+            left_margin,
+            baseline,
+            fill="#777777",
+        )
+        canvas.create_line(
+            left_margin,
+            baseline,
+            width - right_margin,
+            baseline,
+            fill="#777777",
+        )
+
+        for month in range(1, 13):
+            count = counts.get(month, 0)
+            center_x = (
+                left_margin
+                + slot_width * (month - 1)
+                + slot_width / 2
+            )
+            bar_height = (
+                drawable_height * count / maximum_count
+            )
+            top_y = baseline - bar_height
+
+            if count > 0:
+                canvas.create_rectangle(
+                    center_x - bar_width / 2,
+                    top_y,
+                    center_x + bar_width / 2,
+                    baseline,
+                    fill="#4f81bd",
+                    outline="#3a6491",
+                )
+
+            count_y = max(top_y - 10, 10)
+            canvas.create_text(
+                center_x,
+                count_y,
+                text=str(count),
+                fill="#333333",
+            )
+            canvas.create_text(
+                center_x,
+                baseline + 18,
+                text=f"{month}月",
+                fill="#333333",
+            )
 
 # ここからイベントハンドラ
 
