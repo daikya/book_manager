@@ -11,6 +11,7 @@ from book_manager.config.paths import (
     APPLICATION_DIRECTORY_NAME,
     APPLICATION_HOME_ENVIRONMENT_VARIABLE,
     DATABASE_FILE_NAME,
+    LOG_FILE_NAME,
     LOCAL_APP_DATA_ENVIRONMENT_VARIABLE,
     ApplicationPaths,
     create_application_paths,
@@ -191,6 +192,15 @@ def test_create_application_paths_returns_expected_paths(
             / "cache"
             / "covers"
         ),
+        log_directory=(
+            root_directory
+            / "logs"
+        ),
+        log_path=(
+            root_directory
+            / "logs"
+            / LOG_FILE_NAME
+        ),
     )
 
 
@@ -211,6 +221,8 @@ def test_create_application_paths_returns_absolute_paths(
             paths.backup_directory,
             paths.cache_directory,
             paths.cover_cache_directory,
+            paths.log_directory,
+            paths.log_path,
         )
     )
 
@@ -278,7 +290,9 @@ def test_ensure_application_directories_creates_all_directories(
     assert paths.backup_directory.is_dir()
     assert paths.cache_directory.is_dir()
     assert paths.cover_cache_directory.is_dir()
+    assert paths.log_directory.is_dir()
     assert not paths.database_path.exists()
+    assert not paths.log_path.exists()
 
 
 def test_ensure_application_directories_can_run_multiple_times(
@@ -293,6 +307,7 @@ def test_ensure_application_directories_can_run_multiple_times(
     ensure_application_directories(paths)
 
     assert paths.cover_cache_directory.is_dir()
+    assert paths.log_directory.is_dir()
 
 
 def test_ensure_application_directories_raises_for_conflicting_file(

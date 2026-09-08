@@ -161,6 +161,45 @@ def test_show_fatal_startup_error_uses_hidden_root() -> None:
     root.destroy.assert_called_once_with()
 
 
+def test_show_fatal_startup_error_shows_log_path(
+    tmp_path: Path,
+) -> None:
+    """利用可能な場合はログファイルの場所を案内する。"""
+    root = Mock()
+    log_path = tmp_path / "logs" / "book_manager.log"
+
+    with (
+        patch.object(
+            main_module.tk,
+            "Tk",
+            return_value=root,
+        ),
+        patch.object(
+            main_module.messagebox,
+            "showerror",
+        ) as showerror,
+    ):
+        main_module._show_fatal_startup_error(log_path)
+
+    message = showerror.call_args.args[1]
+    assert str(log_path) in message
+    assert showerror.call_args.kwargs["parent"] is root
+
+
+def test_get_log_path_returns_none_without_paths() -> None:
+    """保存先未決定時はログパスがないことを返す。"""
+    assert main_module._get_log_path(None) is None
+
+
+def test_get_log_path_returns_application_log_path(
+    tmp_path: Path,
+) -> None:
+    """保存先決定後はアプリケーションのログパスを返す。"""
+    paths = create_paths(tmp_path)
+
+    assert main_module._get_log_path(paths) == paths.log_path
+
+
 def test_main_stops_when_path_creation_fails() -> None:
     """保存先を決定できない場合は通常起動しない。"""
     with (
@@ -178,15 +217,54 @@ def test_main_stops_when_path_creation_fails() -> None:
             "_run_application",
         ) as run_application,
         patch.object(
+            main_module.logger,
+            "exception",
+        ) as log_exception,
+        patch.object(
             main_module.traceback,
             "print_exc",
         ) as print_exc,
     ):
         main_module.main()
 
-    show_error.assert_called_once_with()
+    show_error.assert_called_once_with(None)
     run_application.assert_not_called()
     print_exc.assert_called_once_with()
+    log_exception.assert_called_once()
+
+
+def test_main_stops_when_logging_configuration_fails(
+    tmp_path: Path,
+) -> None:
+    """ログ初期化失敗時は通常起動しない。"""
+    paths = create_paths(tmp_path)
+
+    with (
+        patch.object(
+            main_module,
+            "create_application_paths",
+            return_value=paths,
+        ),
+        patch.object(
+            main_module,
+            "configure_file_logging",
+            side_effect=OSError("logging failed"),
+        ),
+        patch.object(
+            main_module,
+            "_show_fatal_startup_error",
+        ) as show_error,
+        patch.object(
+            main_module,
+            "_run_application",
+        ) as run_application,
+        patch.object(main_module.traceback, "print_exc"),
+        patch.object(main_module.logger, "exception"),
+    ):
+        main_module.main()
+
+    show_error.assert_called_once_with(paths.log_path)
+    run_application.assert_not_called()
 
 
 def test_main_stops_when_migration_fails(
@@ -208,6 +286,7 @@ def test_main_stops_when_migration_fails(
             "try_migrate_data",
             return_value=(None, migration_error),
         ),
+        patch.object(main_module, "configure_file_logging"),
         patch.object(
             main_module,
             "_show_fatal_startup_error",
@@ -216,12 +295,17 @@ def test_main_stops_when_migration_fails(
             main_module,
             "_run_application",
         ) as run_application,
+        patch.object(
+            main_module.logger,
+            "error",
+        ) as log_error,
     ):
         main_module.main()
 
-    show_error.assert_called_once_with()
+    show_error.assert_called_once_with(paths.log_path)
     run_application.assert_not_called()
     assert not paths.database_path.exists()
+    log_error.assert_called_once()
 
 
 def test_main_passes_migration_result_to_application(
@@ -256,6 +340,8 @@ def test_main_passes_migration_result_to_application(
             main_module,
             "_run_application",
         ) as run_application,
+        patch.object(main_module, "configure_file_logging"),
+        patch.object(main_module.logger, "info"),
     ):
         main_module.main()
 
@@ -267,6 +353,82 @@ def test_main_passes_migration_result_to_application(
     )
     migrate.assert_called_once_with(migration_service)
     run_application.assert_called_once_with(paths, result)
+
+
+def test_main_configures_logging_before_migration(
+    tmp_path: Path,
+) -> None:
+    """データ移行前にファイルログを設定する。"""
+    paths = create_paths(tmp_path)
+    call_order: list[str] = []
+
+    with (
+        patch.object(
+            main_module,
+            "create_application_paths",
+            return_value=paths,
+        ),
+        patch.object(
+            main_module,
+            "configure_file_logging",
+            side_effect=lambda path: call_order.append("logging"),
+        ) as configure_logging,
+        patch.object(main_module, "DataMigrationService"),
+        patch.object(
+            main_module,
+            "try_migrate_data",
+            side_effect=lambda service: (
+                call_order.append("migration") or (None, None)
+            ),
+        ),
+        patch.object(main_module, "_run_application"),
+        patch.object(main_module.logger, "info"),
+    ):
+        main_module.main()
+
+    configure_logging.assert_called_once_with(paths.log_path)
+    assert call_order == ["logging", "migration"]
+
+
+def test_main_logs_application_failure_and_stops(
+    tmp_path: Path,
+) -> None:
+    """通常起動処理の致命的例外を記録して終了する。"""
+    paths = create_paths(tmp_path)
+
+    with (
+        patch.object(
+            main_module,
+            "create_application_paths",
+            return_value=paths,
+        ),
+        patch.object(main_module, "configure_file_logging"),
+        patch.object(main_module, "DataMigrationService"),
+        patch.object(
+            main_module,
+            "try_migrate_data",
+            return_value=(None, None),
+        ),
+        patch.object(
+            main_module,
+            "_run_application",
+            side_effect=RuntimeError("application failed"),
+        ),
+        patch.object(
+            main_module,
+            "_show_fatal_startup_error",
+        ) as show_error,
+        patch.object(main_module.traceback, "print_exc"),
+        patch.object(
+            main_module.logger,
+            "exception",
+        ) as log_exception,
+        patch.object(main_module.logger, "info"),
+    ):
+        main_module.main()
+
+    log_exception.assert_called_once()
+    show_error.assert_called_once_with(paths.log_path)
 
 
 def test_run_application_injects_new_paths(

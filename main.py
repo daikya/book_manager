@@ -10,6 +10,10 @@ from tkinter import messagebox
 
 import requests
 
+from book_manager.config.logging_config import (
+    configure_file_logging,
+    get_application_logger,
+)
 from book_manager.config.paths import (
     ApplicationPaths,
     create_application_paths,
@@ -66,19 +70,31 @@ from book_manager.startup import (
 )
 
 
+logger = get_application_logger()
+
+
 def main() -> None:
     """book_manager を起動する。"""
+    application_paths: ApplicationPaths | None = None
+
     try:
         application_paths = create_application_paths()
+        configure_file_logging(application_paths.log_path)
+        logger.info("Book Managerを起動します。")
         migration_service = DataMigrationService(
             application_paths=application_paths,
             legacy_root_directory=(
                 _get_legacy_root_directory()
             ),
         )
-    except Exception as error:
+    except Exception:
         traceback.print_exc()
-        _show_fatal_startup_error()
+        logger.exception(
+            "アプリケーションの起動準備に失敗しました。"
+        )
+        _show_fatal_startup_error(
+            _get_log_path(application_paths),
+        )
         return
 
     migration_result, migration_error = try_migrate_data(
@@ -86,8 +102,24 @@ def main() -> None:
     )
 
     if migration_error is not None:
-        _show_fatal_startup_error()
+        logger.error(
+            "利用者データの移行に失敗しました。",
+            exc_info=(
+                type(migration_error),
+                migration_error,
+                migration_error.__traceback__,
+            ),
+        )
+        _show_fatal_startup_error(
+            application_paths.log_path,
+        )
         return
+
+    if migration_result is not None:
+        logger.info(
+            "利用者データ移行判定: %s",
+            migration_result.status.value,
+        )
 
     try:
         _run_application(
@@ -96,7 +128,14 @@ def main() -> None:
         )
     except Exception:
         traceback.print_exc()
-        raise
+        logger.exception(
+            "アプリケーションの実行中に"
+            "致命的なエラーが発生しました。"
+        )
+        _show_fatal_startup_error(
+            application_paths.log_path,
+        )
+        return
 
 
 def _run_application(
@@ -117,6 +156,16 @@ def _run_application(
     backup_error = try_create_backup(
         backup_service,
     )
+
+    if backup_error is not None:
+        logger.error(
+            "データベースの自動バックアップに失敗しました。",
+            exc_info=(
+                type(backup_error),
+                backup_error,
+                backup_error.__traceback__,
+            ),
+        )
 
     repository = BookRepository(database_path)
     reading_history_repository = ReadingHistoryRepository(
@@ -191,6 +240,7 @@ def _run_application(
         root.mainloop()
     finally:
         session.close()
+        logger.info("Book Managerを終了します。")
 
 
 def _get_legacy_root_directory() -> Path:
@@ -232,19 +282,38 @@ def _show_migration_result(
         )
 
 
-def _show_fatal_startup_error() -> None:
-    """利用者データを準備できない場合のエラーを表示する。"""
+def _get_log_path(
+    application_paths: ApplicationPaths | None,
+) -> Path | None:
+    """利用できる場合だけログファイルパスを返す。"""
+    if application_paths is None:
+        return None
+
+    return application_paths.log_path
+
+
+def _show_fatal_startup_error(
+    log_path: Path | None = None,
+) -> None:
+    """起動を継続できない場合のエラーを表示する。"""
     root = tk.Tk()
     root.withdraw()
+
+    message = (
+        "アプリケーションを起動できませんでした。\n\n"
+        "利用者データは削除していません。"
+    )
+
+    if log_path is not None:
+        message += (
+            "\n\n詳細は次のログファイルを確認してください。"
+            f"\n{log_path}"
+        )
 
     try:
         messagebox.showerror(
             "起動エラー",
-            (
-                "既存データを安全に移行できなかったため、\n"
-                "アプリケーションの起動を中止しました。\n\n"
-                "移行前のデータは変更していません。"
-            ),
+            message,
             parent=root,
         )
     finally:

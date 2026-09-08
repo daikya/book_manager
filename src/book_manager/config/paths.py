@@ -11,6 +11,7 @@ APPLICATION_DIRECTORY_NAME = "book_manager"
 APPLICATION_HOME_ENVIRONMENT_VARIABLE = "BOOK_MANAGER_HOME"
 LOCAL_APP_DATA_ENVIRONMENT_VARIABLE = "LOCALAPPDATA"
 DATABASE_FILE_NAME = "books.db"
+LOG_FILE_NAME = "book_manager.log"
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +24,8 @@ class ApplicationPaths:
     backup_directory: Path
     cache_directory: Path
     cover_cache_directory: Path
+    log_directory: Path
+    log_path: Path
 
 
 def create_application_paths(
@@ -51,6 +54,7 @@ def create_application_paths(
     )
     data_directory = resolved_root_directory / "data"
     cache_directory = resolved_root_directory / "cache"
+    log_directory = resolved_root_directory / "logs"
 
     return ApplicationPaths(
         root_directory=resolved_root_directory,
@@ -67,6 +71,11 @@ def create_application_paths(
         cover_cache_directory=(
             cache_directory
             / "covers"
+        ),
+        log_directory=log_directory,
+        log_path=(
+            log_directory
+            / LOG_FILE_NAME
         ),
     )
 
@@ -86,6 +95,7 @@ def ensure_application_directories(
         paths.backup_directory,
         paths.cache_directory,
         paths.cover_cache_directory,
+        paths.log_directory,
     )
 
     for directory in directories:
