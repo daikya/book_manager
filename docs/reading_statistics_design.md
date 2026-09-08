@@ -702,7 +702,7 @@ tests/services/test_reading_history_service.py
 ### 15.4 GUIテスト
 
 ```text
-tests/gui/test_reading_statistics.py
+tests/gui/test_reading_statistics_gui.py
 ```
 
 既存の`tests/gui/test_reading_history_gui.py`と異なるファイル名にし、pytestのモジュール名衝突を防ぐ。
@@ -759,7 +759,7 @@ pytest .\tests\services\test_reading_history_service.py -q
 GUIテスト：
 
 ```powershell
-pytest .\tests\gui\test_reading_statistics.py -q
+pytest .\tests\gui\test_reading_statistics_gui.py -q
 ```
 
 最終確認：
@@ -777,7 +777,7 @@ pytest -q
 ```text
 src/book_manager/models/reading_statistics.py
 tests/models/test_reading_statistics.py
-tests/gui/test_reading_statistics.py
+tests/gui/test_reading_statistics_gui.py
 docs/reading_statistics_design.md
 ```
 
