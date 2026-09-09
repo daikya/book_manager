@@ -40,6 +40,7 @@ docs/documentation_guide.md
 docs/
 ├── backup_restore_design.md
 ├── csv_import_design.md
+├── data_path_migration_design.md
 ├── documentation_guide.md
 ├── book_manager_roadmap.md
 ├── development_guidelines.md
@@ -52,6 +53,7 @@ docs/
 ├── reading_information_sort_design.md
 ├── search_filter_design.md
 ├── tag_category_design.md
+├── windows_distribution_design.md
 │
 ├── adr/
 │   └── ADR-0001-sqlite-selection.md
@@ -151,6 +153,18 @@ book_manager全体の開発方針および運用ルールを定義する。
 - Raw Data
 - 取得元情報
 - 外部サービス障害時の処理
+
+### `data_path_migration_design.md`
+
+Version 2.0で実装した利用者データ保存先の一元化と、Version 1.9以前の既存データ移行を定義する。
+
+`ApplicationPaths`、`BOOK_MANAGER_HOME`、SQLite Backup APIによる複製、上書き防止、再実行、バックアップ・表紙画像の移行および起動時通知を管理する。
+
+### `windows_distribution_design.md`
+
+Version 2.0のWindows実行ファイル作成を定義する。
+
+PyInstallerの`onedir`構成、静的資源、専用アイコン、Version情報、ファイルログ、ビルドスクリプト、検証用ZIP、チェックサムおよび実環境確認を管理する。
 
 ---
 
@@ -619,6 +633,12 @@ Version 1.9では、読書記録の集計と可視化として次の機能を実
 - Windows実環境での主要な集計値とグラフ表示確認
 
 Version 1.9.0は、読書記録集計・可視化機能の実装、970件の自動テスト全件成功およびWindows実環境での10項目の主要操作確認を経て、2026-09-08に正式リリースした。
+
+Version 2.0は、Windows向け配布・導入の正式対応として開発中である。
+
+利用者データ保存先の`%LOCALAPPDATA%\book_manager`への一元化、Version 1.9以前の既存データ移行、ローテーション付きファイルログ、PyInstallerによる`onedir`ビルド、専用アイコン、検証用ZIPおよびSHA-256チェックサムの作成まで完了した。
+
+全1092件の自動テストと、プロジェクト外へ展開したポータブル版のWindows実環境確認が成功している。WindowsインストーラーとPython未導入環境での最終確認は未完了であり、Version 2.0はまだ正式リリースしていない。
 
 今後の開発内容は、
 

@@ -231,6 +231,10 @@ CSVファイルはUTF-8 BOM付きで保存され、Windows版Excelで日本語�
 | データベース | SQLite     |
 | 文字コード  | UTF-8      |
 
+Version 2.0の開発中ビルドでは、PyInstallerで作成したWindows向け`onedir`実行ファイルを、プロジェクト外へ展開した状態でも確認しています。
+
+WindowsインストーラーとPython未導入環境での最終確認は、Version 2.0の後続工程で行います。
+
 ### 主な利用ライブラリ
 
 * requests
@@ -242,6 +246,10 @@ CSVファイルはUTF-8 BOM付きで保存され、Windows版Excelで日本語�
 ---
 
 ## インストール
+
+Version 2.0のWindowsインストーラーは現在開発中です。
+
+以下は、ソースコードから起動する開発者向けの手順です。
 
 以下の手順はWindows PowerShellを使用します。
 
@@ -452,22 +460,28 @@ ISBNまたは雑誌コードが既存データと重複する書籍はスキッ�
 
 `book_manager`では、書籍情報と表紙画像をローカル環境へ保存します。
 
+ソース版とWindows配布版は、既定で次の利用者データフォルダーを共通して使用します。
+
+```text
+%LOCALAPPDATA%\book_manager
+```
+
 ### SQLiteデータベース
 
 書籍情報は次のSQLiteデータベースへ保存されます。
 
 ```text
-data/books.db
+%LOCALAPPDATA%\book_manager\data\books.db
 ```
 
-`data/books.db`には登録した書籍情報が保存されます。
+`books.db`には登録した書籍情報、タグおよび読書履歴が保存されます。
 
 ### 表紙画像キャッシュ
 
 取得した表紙画像は次のディレクトリへキャッシュされます。
 
 ```text
-cache/covers/
+%LOCALAPPDATA%\book_manager\cache\covers\
 ```
 
 キャッシュ済みの画像が存在する場合は、その画像を再利用します。
@@ -477,7 +491,7 @@ cache/covers/
 自動バックアップされたSQLiteデータベースは次のディレクトリへ保存されます。
 
 ```text
-backups/
+%LOCALAPPDATA%\book_manager\backups\
 ```
 
 バックアップはアプリケーション起動時に必要性を判定して作成され、古いバックアップは設定された保存世代数に従って自動的に整理されます。
@@ -485,6 +499,22 @@ backups/
 自動バックアップで作成されたデータベースは、「バックアップ復元」から復元元として選択できます。
 
 復元を実行する場合は、選択したバックアップで現在のデータベースを置き換える前に、現在のデータベースが新しいバックアップとして保存されます。
+
+### ログ
+
+起動、終了およびエラーのログは次のファイルへ記録されます。
+
+```text
+%LOCALAPPDATA%\book_manager\logs\book_manager.log
+```
+
+ログは一定サイズでローテーションされます。APIキーなどの秘密情報は記録しません。
+
+### Version 1.9以前からのデータ移行
+
+新しい保存先にデータベースがなく、プロジェクト内の従来の`data\books.db`が存在する場合は、初回起動時に既存データを新しい保存先へ複製します。
+
+移行元のデータは削除せず、新しい保存先にデータベースが存在する場合は上書きしません。移行完了後の起動では、移行メッセージを繰り返し表示しません。
 
 ---
 
@@ -502,7 +532,7 @@ backups/
 pytest
 ```
 
-Version 1.9.0リリース時点では、970件の自動テストがすべて成功しています。
+Version 1.9.0リリース時点では970件、Version 2.0開発中のWindows実行ファイル作成工程完了時点では1092件の自動テストがすべて成功しています。
 
 ---
 
@@ -510,6 +540,11 @@ Version 1.9.0リリース時点では、970件の自動テストがすべて成�
 
 ```text
 book_manager/
+├── assets/
+│   └── windows/
+├── packaging/
+│   └── pyinstaller/
+├── scripts/
 ├── src/
 │   └── book_manager/
 │       ├── config/
@@ -528,6 +563,7 @@ book_manager/
 ├── main.py
 ├── pyproject.toml
 ├── requirements.txt
+├── requirements-build.txt
 ├── CHANGELOG.md
 ├── LICENSE
 └── README.md
@@ -639,6 +675,18 @@ Version 1.3では、蔵書の状態管理と日常利用の改善として、読
 * TkinterのCanvasによる月別棒グラフ
 * 読了記録がない場合の空状態表示
 * スキーマVersion 7と既存CSV形式の維持
+
+### Version 2.0（開発中）
+
+**テーマ：Windows向け配布・導入の正式対応**
+
+* 利用者データ保存先の`%LOCALAPPDATA%\book_manager`への一元化
+* Version 1.9以前の既存データを保護した移行処理
+* ソース版と配布版で共通するデータ・バックアップ・表紙画像の利用
+* ローテーション付きファイルログ
+* PyInstallerによる再現可能なWindows向け`onedir`ビルド
+* 専用アイコン、Version情報、検証用ZIPおよびSHA-256チェックサム
+* Windowsインストーラーの作成と導入検証は後続工程で実施
 
 ---
 
