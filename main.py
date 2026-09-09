@@ -18,6 +18,10 @@ from book_manager.config.paths import (
     ApplicationPaths,
     create_application_paths,
 )
+from book_manager.config.resource_paths import (
+    get_application_icon_path,
+    get_application_icon_png_path,
+)
 from book_manager.database.initializer import (
     initialize_database,
 )
@@ -237,6 +241,8 @@ def _run_application(
             backup_service,
             reading_history_service,
         )
+        _apply_window_icon(root)
+        root.update_idletasks()
         root.mainloop()
     finally:
         session.close()
@@ -246,6 +252,29 @@ def _run_application(
 def _get_legacy_root_directory() -> Path:
     """Version 1.9以前の保存先を含むルートを返す。"""
     return Path(__file__).resolve().parent
+
+
+def _apply_window_icon(root: tk.Tk) -> None:
+    """メインウィンドウへアイコンを設定する。"""
+    icon_path = get_application_icon_path()
+    icon_png_path = get_application_icon_png_path()
+
+    try:
+        root.iconbitmap(
+            default=str(icon_path),
+        )
+        root.iconbitmap(str(icon_path))
+        icon_photo = tk.PhotoImage(
+            master=root,
+            file=str(icon_png_path),
+        )
+        root.iconphoto(True, icon_photo)
+        root._book_manager_icon_photo = icon_photo
+    except (OSError, tk.TclError):
+        logger.warning(
+            "アプリケーションアイコンを読み込めませんでした。",
+            exc_info=True,
+        )
 
 
 def _show_migration_result(

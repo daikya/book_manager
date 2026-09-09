@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from book_manager.config.paths import (
     ApplicationPaths,
@@ -43,6 +43,66 @@ def test_get_legacy_root_directory_uses_main_file() -> None:
     """旧保存先をmain.pyが存在するルートから決定する。"""
     assert main_module._get_legacy_root_directory() == (
         Path(main_module.__file__).resolve().parent
+    )
+
+
+def test_apply_window_icon_uses_application_icon() -> None:
+    """メインウィンドウへICOとPNGを設定する。"""
+    root = Mock()
+    icon_path = Path("C:/application/book_manager.ico")
+    icon_png_path = Path("C:/application/book_manager.png")
+    icon_photo = Mock()
+
+    with (
+        patch.object(
+            main_module,
+            "get_application_icon_path",
+            return_value=icon_path,
+        ),
+        patch.object(
+            main_module,
+            "get_application_icon_png_path",
+            return_value=icon_png_path,
+        ),
+        patch.object(
+            main_module.tk,
+            "PhotoImage",
+            return_value=icon_photo,
+        ) as photo_image,
+    ):
+        main_module._apply_window_icon(root)
+
+    assert root.iconbitmap.call_args_list == [
+        call(default=str(icon_path)),
+        call(str(icon_path)),
+    ]
+    photo_image.assert_called_once_with(
+        master=root,
+        file=str(icon_png_path),
+    )
+    root.iconphoto.assert_called_once_with(True, icon_photo)
+    assert root._book_manager_icon_photo is icon_photo
+
+
+def test_apply_window_icon_logs_warning_when_loading_fails() -> None:
+    """アイコン読込失敗時も例外を送出せず警告を記録する。"""
+    root = Mock()
+    root.iconbitmap.side_effect = main_module.tk.TclError(
+        "icon failed"
+    )
+
+    with (
+        patch.object(main_module, "get_application_icon_path"),
+        patch.object(
+            main_module.logger,
+            "warning",
+        ) as warning,
+    ):
+        main_module._apply_window_icon(root)
+
+    warning.assert_called_once_with(
+        "アプリケーションアイコンを読み込めませんでした。",
+        exc_info=True,
     )
 
 
@@ -518,6 +578,7 @@ def test_run_application_injects_new_paths(
         root_directory=paths.root_directory,
     )
     root.mainloop.assert_called_once_with()
+    root.update_idletasks.assert_called_once_with()
     session.close.assert_called_once_with()
 
 
