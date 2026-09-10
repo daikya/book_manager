@@ -554,7 +554,7 @@ docs/development_guidelines.md
 
 ## 18. 現在の状態
 
-book_managerはVersion 1.9.0まで正式リリース済みであり、Version 2.0.0のリリース前検証を完了している。
+book_managerはVersion 2.0.0まで正式リリース済みである。
 
 Version 1.7.0は、タグ・カテゴリ機能の実装、812件の自動テスト全件成功およびWindows実環境での主要操作確認を経て、2026-09-04に正式リリースした。
 
@@ -644,7 +644,7 @@ Version 2.0は、Windows向け配布・導入の正式対応として実装と�
 
 利用者データ保存先の`%LOCALAPPDATA%\book_manager`への一元化、Version 1.9以前の既存データ移行、ローテーション付きファイルログ、PyInstallerによる`onedir`ビルド、専用アイコン、Inno SetupによるWindowsインストーラーおよびSHA-256チェックサムの作成を完了した。
 
-全1110件の自動テスト、Version 1.9.0から2.0.0への上書き更新、アンインストール後の利用者データ保持、再インストールおよびPython未導入の別Windows 11 Pro機での確認が成功している。Version 2.0はリリース記録、タグ作成およびGitHub Release公開を残す状態である。
+全1110件の自動テスト、Version 1.9.0から2.0.0への上書き更新、アンインストール後の利用者データ保持、再インストールおよびPython未導入の別Windows 11 Pro機での確認を経て、Version 2.0.0を2026-09-10に正式リリースした。
 
 今後の開発内容は、
 

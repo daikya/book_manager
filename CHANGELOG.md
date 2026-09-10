@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-10
+
 ### Added
 
 - Windowsの利用者データ保存先を`%LOCALAPPDATA%\book_manager`へ一元化するパス設定
