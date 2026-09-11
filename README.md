@@ -233,7 +233,7 @@ CSVファイルはUTF-8 BOM付きで保存され、Windows版Excelで日本語�
 | データベース | SQLite     |
 | 文字コード  | UTF-8      |
 
-Version 2.0では、PyInstallerで作成したWindows向け`onedir`実行ファイルとInno Setupによるインストーラーを使用します。
+Version 2.0以降では、PyInstallerで作成したWindows向け`onedir`実行ファイルとInno Setupによるインストーラーを使用します。
 
 Python未導入の別Windows 11 Pro機で、インストール、起動、主要機能、データ保持、アンインストールおよび再インストールを確認しています。
 
@@ -249,10 +249,10 @@ Python未導入の別Windows 11 Pro機で、インストール、起動、主要
 
 ## インストール
 
-Version 2.0では、GitHub Releaseから次のWindowsインストーラーをダウンロードして実行します。
+Version 2.1.0では、GitHub Releaseから次のWindowsインストーラーをダウンロードして実行します。
 
 ```text
-BookManager-2.0.0-windows-x64-setup.exe
+BookManager-2.1.0-windows-x64-setup.exe
 ```
 
 インストーラーは利用者単位で動作し、既定では次へ本体を配置します。
@@ -748,7 +748,7 @@ Version 1.3では、蔵書の状態管理と日常利用の改善として、読
 * Python未導入の別Windows 11 Pro機での導入・主要機能・削除・再導入確認
 * 全1110件の自動テスト成功
 
-### Version 2.1（開発中）
+### Version 2.1.0（2026-09-11リリース）
 
 **テーマ：設定画面とウィンドウ操作性の改善**
 
