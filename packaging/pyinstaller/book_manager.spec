@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from PyInstaller.utils.hooks import copy_metadata
+
 
 project_root = Path(SPECPATH).resolve().parents[1]
 source_root = project_root / "src"
@@ -38,11 +40,13 @@ application_assets = [
     ),
 ]
 
+application_metadata = copy_metadata("book-manager")
+
 analysis = Analysis(
     [str(project_root / "main.py")],
     pathex=[str(source_root)],
     binaries=[],
-    datas=application_assets,
+    datas=application_assets + application_metadata,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

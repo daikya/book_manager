@@ -72,6 +72,32 @@ try {
         throw "アプリケーションVersionを取得できませんでした。"
     }
 
+    python -m pip install `
+        --disable-pip-version-check `
+        --no-deps `
+        --editable `
+        $projectRoot
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "プロジェクトのパッケージメタデータを準備できませんでした。"
+    }
+
+    $metadataVersion = python -c `
+        "from importlib.metadata import version; print(version('book-manager'))"
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "インストール済みパッケージのVersionを取得できませんでした。"
+    }
+
+    $metadataVersion = $metadataVersion.Trim()
+
+    if ($metadataVersion -ne $version) {
+        throw (
+            "pyproject.tomlとパッケージメタデータのVersionが一致しません。" +
+            " pyproject.toml=$version, metadata=$metadataVersion"
+        )
+    }
+
     python -m PyInstaller `
         --noconfirm `
         --clean `
