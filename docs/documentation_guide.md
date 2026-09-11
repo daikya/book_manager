@@ -52,6 +52,7 @@ docs/
 ├── reading_status_design.md
 ├── reading_information_sort_design.md
 ├── search_filter_design.md
+├── settings_and_window_layout_design.md
 ├── tag_category_design.md
 ├── windows_distribution_design.md
 │
@@ -219,6 +220,12 @@ Version 1.4で追加したバックアップからの復元機能を定義する
 ### `search_filter_design.md`
 
 Version 1.5で追加した読書情報による検索・絞り込み、検索GUIおよび起動時ウィンドウ表示の改善を定義する。
+
+### `settings_and_window_layout_design.md`
+
+Version 2.1で追加したアプリケーション設定画面とサブウィンドウ配置を定義する。
+
+Google Books APIキーの利用者環境への保存、設定状態表示、利用者データ関連パス、Version表示、フォルダーを開く操作、起動中クライアントへの反映および親画面を基準とする中央配置を管理する。
 
 ---
 
@@ -645,6 +652,12 @@ Version 2.0は、Windows向け配布・導入の正式対応として実装と�
 利用者データ保存先の`%LOCALAPPDATA%\book_manager`への一元化、Version 1.9以前の既存データ移行、ローテーション付きファイルログ、PyInstallerによる`onedir`ビルド、専用アイコン、Inno SetupによるWindowsインストーラーおよびSHA-256チェックサムの作成を完了した。
 
 全1110件の自動テスト、Version 1.9.0から2.0.0への上書き更新、アンインストール後の利用者データ保持、再インストールおよびPython未導入の別Windows 11 Pro機での確認を経て、Version 2.0.0を2026-09-10に正式リリースした。
+
+Version 2.1は、設定画面とウィンドウ操作性の改善について、ソース版の実装と検証を完了した。
+
+Google Books APIキーの設定状態確認・登録・変更・削除、起動中クライアントへの即時反映、利用者データ関連パスとVersionの表示、フォルダーを開く操作、および設定画面と主要サブウィンドウの親画面中央表示を実装した。
+
+関連するfocused pytestと全1187件の自動テストが成功し、Windowsソース版で設定画面の9項目と既存サブウィンドウ中央表示の6項目を確認した。Version 2.1.0の配布物作成、上書き更新および配布版実画面確認は、Version更新後に実施する。
 
 今後の開発内容は、
 
