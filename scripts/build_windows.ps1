@@ -72,6 +72,53 @@ try {
         throw "アプリケーションVersionを取得できませんでした。"
     }
 
+    $sitePackages = python -c `
+        "import sysconfig; print(sysconfig.get_path('purelib'))"
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "仮想環境のsite-packagesを取得できませんでした。"
+    }
+
+    $sitePackages = $sitePackages.Trim()
+    $virtualEnvironmentRoot = [IO.Path]::GetFullPath(
+        $env:VIRTUAL_ENV
+    ).TrimEnd(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar
+    )
+    $sitePackagesPath = [IO.Path]::GetFullPath($sitePackages)
+    $virtualEnvironmentPrefix = (
+        $virtualEnvironmentRoot +
+        [IO.Path]::DirectorySeparatorChar
+    )
+
+    if (-not $sitePackagesPath.StartsWith(
+        $virtualEnvironmentPrefix,
+        [StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw "取得したsite-packagesが仮想環境の外にあります。"
+    }
+
+    $expectedMetadataDirectoryName = (
+        "book_manager-$version.dist-info"
+    )
+    $staleMetadataDirectories = Get-ChildItem `
+        -LiteralPath $sitePackagesPath `
+        -Directory `
+        -Filter "book_manager-*.dist-info" |
+        Where-Object {
+            $_.Name -ne $expectedMetadataDirectoryName
+        }
+
+    foreach ($staleMetadataDirectory in $staleMetadataDirectories) {
+        Write-Host "古いパッケージメタデータを削除します。"
+        Write-Host $staleMetadataDirectory.FullName
+        Remove-Item `
+            -LiteralPath $staleMetadataDirectory.FullName `
+            -Recurse `
+            -Force
+    }
+
     python -m pip install `
         --disable-pip-version-check `
         --no-deps `

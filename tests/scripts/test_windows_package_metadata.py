@@ -49,6 +49,26 @@ def test_build_script_installs_project_metadata() -> None:
     assert "$projectRoot" in content
 
 
+def test_build_script_limits_cleanup_to_virtual_environment() -> None:
+    """仮想環境外のsite-packagesを整理対象にしない。"""
+    content = read_text(BUILD_SCRIPT_PATH)
+
+    assert "sysconfig.get_path('purelib')" in content
+    assert "$virtualEnvironmentPrefix" in content
+    assert "[StringComparison]::OrdinalIgnoreCase" in content
+    assert "site-packagesが仮想環境の外にあります。" in content
+
+
+def test_build_script_removes_only_stale_project_metadata() -> None:
+    """book-managerの古いdist-infoだけを整理する。"""
+    content = read_text(BUILD_SCRIPT_PATH)
+
+    assert '"book_manager-$version.dist-info"' in content
+    assert '-Filter "book_manager-*.dist-info"' in content
+    assert "-ne $expectedMetadataDirectoryName" in content
+    assert "-LiteralPath $staleMetadataDirectory.FullName" in content
+
+
 def test_build_script_reads_installed_metadata_version() -> None:
     """インストールしたメタデータからVersionを取得する。"""
     content = read_text(BUILD_SCRIPT_PATH)
