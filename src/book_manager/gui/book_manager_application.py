@@ -21,6 +21,9 @@ from book_manager.models.reading_statistics import (
 from book_manager.models.fetched_book_data import (
     FetchedBookData,
 )
+from book_manager.gui.window_positioning import (
+    center_window_on_parent,
+)
 
 from book_manager.metadata.exceptions import (
     BookMetadataConfigurationError,
@@ -2515,7 +2518,7 @@ class BookManagerApplication:
             text="キャンセル",
             command=dialog.destroy,
         ).grid(row=1, column=1, padx=10, pady=(0, 10))
-        dialog.wait_window()
+        self._wait_for_dialog(dialog)
 
     def _on_manage_tags(self) -> None:
         """タグの名称変更と削除を行うダイアログを表示する。"""
@@ -2578,7 +2581,7 @@ class BookManagerApplication:
         ).grid(row=1, column=2, padx=10, pady=(0, 10))
 
         self._populate_tag_management_tree(tag_tree)
-        dialog.wait_window()
+        self._wait_for_dialog(dialog)
 
     def _populate_tag_management_tree(
         self,
@@ -3018,7 +3021,7 @@ class BookManagerApplication:
             dialog.destroy()
             return
 
-        dialog.wait_window()
+        self._wait_for_dialog(dialog)
 
     def _populate_reading_history_tree(
         self,
@@ -3490,6 +3493,17 @@ class BookManagerApplication:
             dialog.destroy()
             return
 
+        self._wait_for_dialog(dialog)
+
+    def _wait_for_dialog(
+        self,
+        dialog: tk.Toplevel,
+    ) -> None:
+        """サブウィンドウを親画面中央へ表示して待機する。"""
+        center_window_on_parent(
+            dialog,
+            self._root,
+        )
         dialog.wait_window()
 
     def _load_reading_statistics(self) -> None:
