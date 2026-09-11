@@ -127,6 +127,75 @@ def test_build_params_with_api_key() -> None:
     }
 
 
+def test_set_api_key_adds_key_to_later_request_params() -> None:
+    """起動後に設定したAPIキーを以後の検索へ使用する。"""
+    client = GoogleBooksClient(
+        session=FakeSession(),  # type: ignore[arg-type]
+    )
+
+    client.set_api_key("NEW_TEST_KEY")
+
+    assert client._build_params("9784163917733") == {
+        "q": "isbn:9784163917733",
+        "maxResults": 10,
+        "key": "NEW_TEST_KEY",
+    }
+
+
+def test_set_api_key_replaces_existing_key() -> None:
+    """設定済みのAPIキーを新しい値へ変更する。"""
+    client = GoogleBooksClient(
+        session=FakeSession(),  # type: ignore[arg-type]
+        api_key="OLD_TEST_KEY",
+    )
+
+    client.set_api_key("NEW_TEST_KEY")
+
+    assert client._build_params("9784163917733")["key"] == (
+        "NEW_TEST_KEY"
+    )
+
+
+def test_set_api_key_with_none_removes_key_from_params() -> None:
+    """APIキー削除後は検索パラメータへキーを含めない。"""
+    client = GoogleBooksClient(
+        session=FakeSession(),  # type: ignore[arg-type]
+        api_key="TEST_KEY",
+    )
+
+    client.set_api_key(None)
+
+    assert client._build_params("9784163917733") == {
+        "q": "isbn:9784163917733",
+        "maxResults": 10,
+    }
+
+
+def test_fetch_by_isbn_uses_updated_api_key() -> None:
+    """APIキー変更後の通信に新しい値を使用する。"""
+    session = FakeSession(
+        response=FakeResponse(
+            payload={
+                "totalItems": 0,
+            },
+        ),
+    )
+    client = GoogleBooksClient(
+        session=session,  # type: ignore[arg-type]
+        api_key="OLD_TEST_KEY",
+    )
+
+    client.set_api_key("NEW_TEST_KEY")
+    result = client.fetch_by_isbn("9784163917733")
+
+    assert result is None
+    assert session.calls[0]["params"] == {
+        "q": "isbn:9784163917733",
+        "maxResults": 10,
+        "key": "NEW_TEST_KEY",
+    }
+
+
 def test_fetch_by_isbn_uses_expected_request_values() -> None:
     """URL、パラメータ、timeoutを確認する。"""
     session = FakeSession(

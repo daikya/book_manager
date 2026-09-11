@@ -40,6 +40,10 @@ class GoogleBooksClient:
         self._api_key = api_key
         self._timeout = timeout
 
+    def set_api_key(self, api_key: str | None) -> None:
+        """以後の通信に使用するAPIキーを変更する。"""
+        self._api_key = api_key
+
     @property
     def source_name(self) -> str:
         """取得元名を返す。"""
