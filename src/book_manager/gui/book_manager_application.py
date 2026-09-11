@@ -24,6 +24,10 @@ from book_manager.models.fetched_book_data import (
 from book_manager.gui.window_positioning import (
     center_window_on_parent,
 )
+from book_manager.services.application_settings_service import (
+    ApplicationSettingsError,
+    DirectoryOpenError,
+)
 
 from book_manager.metadata.exceptions import (
     BookMetadataConfigurationError,
@@ -35,6 +39,9 @@ from book_manager.metadata.exceptions import (
 
 if TYPE_CHECKING:
     from book_manager.services.backup_service import BackupService
+    from book_manager.services.application_settings_service import (
+        ApplicationSettingsService,
+    )
     from book_manager.services.book_service import BookService
     from book_manager.services.csv_export_service import (
         CsvExportService,
@@ -45,6 +52,7 @@ if TYPE_CHECKING:
     from book_manager.services.reading_history_service import (
         ReadingHistoryService,
     )
+    from collections.abc import Callable
 
 
 class BookManagerApplication:
@@ -210,6 +218,11 @@ class BookManagerApplication:
         csv_import_service: CsvImportService,
         backup_service: BackupService,
         reading_history_service: ReadingHistoryService,
+        application_settings_service: ApplicationSettingsService,
+        on_google_books_api_key_changed: Callable[
+            [str | None],
+            None,
+        ],
     ) -> None:
         """GUIを初期化する。
 
@@ -219,6 +232,12 @@ class BookManagerApplication:
             backup_service:
                 データベースのバックアップ・復元処理を提供する
                 BackupService。
+            reading_history_service:
+                ReadingHistoryService。
+            application_settings_service:
+                アプリケーション設定の参照・更新処理。
+            on_google_books_api_key_changed:
+                Google Books APIキー変更時に呼び出す処理。
         """
         self._root = root
         self._service = service
@@ -226,6 +245,12 @@ class BookManagerApplication:
         self._csv_import_service = csv_import_service
         self._backup_service = backup_service
         self._reading_history_service = reading_history_service
+        self._application_settings_service = (
+            application_settings_service
+        )
+        self._on_google_books_api_key_changed = (
+            on_google_books_api_key_changed
+        )
         self._selected_book_id: int | None = None
         self._cover_photo: tk.PhotoImage | None = None
         self._current_cover_image_url: str | None = None
@@ -1574,7 +1599,7 @@ class BookManagerApplication:
         )
 
         button_frame.columnconfigure(
-            12,
+            13,
             weight=1,
         )
 
@@ -1711,6 +1736,17 @@ class BookManagerApplication:
             padx=(0, 6),
         )
 
+        self._settings_button = ttk.Button(
+            button_frame,
+            text="設定",
+            command=self._on_open_settings,
+        )
+        self._settings_button.grid(
+            row=0,
+            column=12,
+            padx=(0, 6),
+        )
+
         self._exit_button = ttk.Button(
             button_frame,
             text="終了",
@@ -1718,7 +1754,7 @@ class BookManagerApplication:
         )
         self._exit_button.grid(
             row=0,
-            column=12,
+            column=13,
             sticky="e",
         )
 
@@ -3499,12 +3535,420 @@ class BookManagerApplication:
         self,
         dialog: tk.Toplevel,
     ) -> None:
-        """サブウィンドウを親画面中央へ表示して待機する。"""
+        """親画面中央へ表示して待機する。"""
         center_window_on_parent(
             dialog,
             self._root,
         )
         dialog.wait_window()
+
+    def _on_open_settings(self) -> None:
+        """アプリケーション設定画面を表示する。"""
+        try:
+            snapshot = (
+                self._application_settings_service.get_snapshot()
+            )
+        except ApplicationSettingsError as error:
+            messagebox.showerror(
+                "設定エラー",
+                str(error),
+                parent=self._root,
+            )
+            return
+
+        dialog = tk.Toplevel(self._root)
+        dialog.title("設定")
+        dialog.transient(self._root)
+        dialog.grab_set()
+        dialog.resizable(True, False)
+        dialog.columnconfigure(0, weight=1)
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+
+        api_key_variable = tk.StringVar(master=dialog)
+        api_key_status_variable = tk.StringVar(
+            master=dialog,
+            value=(
+                "設定済み"
+                if snapshot.google_books_api_key_is_configured
+                else "未設定"
+            ),
+        )
+
+        external_service_frame = ttk.LabelFrame(
+            dialog,
+            text="外部サービス",
+            padding=10,
+        )
+        external_service_frame.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+            padx=12,
+            pady=(12, 6),
+        )
+        external_service_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(
+            external_service_frame,
+            text="Google Books APIキー",
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w",
+            padx=(0, 8),
+        )
+        api_key_entry = ttk.Entry(
+            external_service_frame,
+            textvariable=api_key_variable,
+            show="*",
+            width=56,
+        )
+        api_key_entry.grid(
+            row=0,
+            column=1,
+            sticky="ew",
+            padx=(0, 8),
+        )
+        ttk.Label(
+            external_service_frame,
+            textvariable=api_key_status_variable,
+            width=8,
+        ).grid(
+            row=0,
+            column=2,
+            sticky="w",
+        )
+
+        api_key_button_frame = ttk.Frame(
+            external_service_frame,
+        )
+        api_key_button_frame.grid(
+            row=1,
+            column=0,
+            columnspan=3,
+            sticky="e",
+            pady=(8, 0),
+        )
+        ttk.Button(
+            api_key_button_frame,
+            text="保存",
+            command=lambda: self._save_google_books_api_key(
+                api_key_variable,
+                api_key_status_variable,
+                dialog,
+            ),
+        ).grid(row=0, column=0, padx=(0, 6))
+        ttk.Button(
+            api_key_button_frame,
+            text="削除",
+            command=lambda: self._delete_google_books_api_key(
+                api_key_variable,
+                api_key_status_variable,
+                dialog,
+            ),
+        ).grid(row=0, column=1)
+
+        ttk.Label(
+            external_service_frame,
+            text=(
+                "APIキーは現在のWindows利用者の環境変数へ"
+                "保存されます。保存済みの値は画面へ"
+                "表示しません。"
+            ),
+            wraplength=650,
+        ).grid(
+            row=2,
+            column=0,
+            columnspan=3,
+            sticky="w",
+            pady=(8, 0),
+        )
+
+        data_frame = ttk.LabelFrame(
+            dialog,
+            text="利用者データ",
+            padding=10,
+        )
+        data_frame.grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            padx=12,
+            pady=6,
+        )
+        data_frame.columnconfigure(1, weight=1)
+
+        path_rows = (
+            (
+                "データベース",
+                snapshot.database_path,
+                snapshot.database_path.parent,
+            ),
+            (
+                "バックアップ",
+                snapshot.backup_directory,
+                snapshot.backup_directory,
+            ),
+            (
+                "表紙画像",
+                snapshot.cover_cache_directory,
+                snapshot.cover_cache_directory,
+            ),
+            (
+                "ログ",
+                snapshot.log_path,
+                snapshot.log_path.parent,
+            ),
+        )
+
+        for row, (label, path, directory) in enumerate(path_rows):
+            self._create_settings_path_row(
+                data_frame,
+                row=row,
+                label=label,
+                path=path,
+                directory=directory,
+                dialog=dialog,
+            )
+
+        information_frame = ttk.LabelFrame(
+            dialog,
+            text="アプリケーション情報",
+            padding=10,
+        )
+        information_frame.grid(
+            row=2,
+            column=0,
+            sticky="ew",
+            padx=12,
+            pady=6,
+        )
+        information_frame.columnconfigure(1, weight=1)
+
+        information_rows = (
+            ("アプリケーション名", snapshot.application_name),
+            ("Version", snapshot.application_version),
+            ("利用者データ", str(snapshot.root_directory)),
+        )
+
+        for row, (label, value) in enumerate(information_rows):
+            ttk.Label(
+                information_frame,
+                text=label,
+            ).grid(
+                row=row,
+                column=0,
+                sticky="w",
+                padx=(0, 8),
+                pady=3,
+            )
+            ttk.Label(
+                information_frame,
+                text=value,
+            ).grid(
+                row=row,
+                column=1,
+                sticky="w",
+                pady=3,
+            )
+
+        button_frame = ttk.Frame(dialog)
+        button_frame.grid(
+            row=3,
+            column=0,
+            sticky="e",
+            padx=12,
+            pady=(6, 12),
+        )
+        ttk.Button(
+            button_frame,
+            text="閉じる",
+            command=dialog.destroy,
+        ).grid(row=0, column=0)
+
+        api_key_entry.focus_set()
+        self._wait_for_dialog(dialog)
+
+    def _create_settings_path_row(
+        self,
+        parent: ttk.LabelFrame,
+        *,
+        row: int,
+        label: str,
+        path: Path,
+        directory: Path,
+        dialog: tk.Toplevel,
+    ) -> None:
+        """設定画面へ利用者データのパス行を追加する。"""
+        ttk.Label(
+            parent,
+            text=label,
+        ).grid(
+            row=row,
+            column=0,
+            sticky="w",
+            padx=(0, 8),
+            pady=3,
+        )
+        path_entry = ttk.Entry(parent, width=72)
+        path_entry.insert(0, str(path))
+        path_entry.configure(state="readonly")
+        path_entry.grid(
+            row=row,
+            column=1,
+            sticky="ew",
+            padx=(0, 8),
+            pady=3,
+        )
+        ttk.Button(
+            parent,
+            text="フォルダーを開く",
+            command=lambda: self._open_settings_directory(
+                directory,
+                dialog,
+            ),
+        ).grid(
+            row=row,
+            column=2,
+            pady=3,
+        )
+
+    def _save_google_books_api_key(
+        self,
+        api_key_variable: tk.StringVar,
+        status_variable: tk.StringVar,
+        dialog: tk.Toplevel,
+    ) -> None:
+        """入力されたGoogle Books APIキーを保存する。"""
+        try:
+            api_key = (
+                self._application_settings_service
+                .save_google_books_api_key(
+                    api_key_variable.get()
+                )
+            )
+        except ApplicationSettingsError as error:
+            messagebox.showerror(
+                "設定エラー",
+                str(error),
+                parent=dialog,
+            )
+            return
+
+        api_key_variable.set("")
+        status_variable.set("設定済み")
+
+        try:
+            self._on_google_books_api_key_changed(api_key)
+        except Exception:
+            traceback.print_exc()
+            messagebox.showwarning(
+                "設定反映の確認",
+                (
+                    "APIキーは保存されましたが、現在の画面へ"
+                    "反映できませんでした。アプリケーションを"
+                    "再起動してください。"
+                ),
+                parent=dialog,
+            )
+            return
+
+        messagebox.showinfo(
+            "設定",
+            "Google Books APIキーを保存しました。",
+            parent=dialog,
+        )
+
+    def _delete_google_books_api_key(
+        self,
+        api_key_variable: tk.StringVar,
+        status_variable: tk.StringVar,
+        dialog: tk.Toplevel,
+    ) -> None:
+        """Google Books APIキーを確認後に削除する。"""
+        try:
+            snapshot = (
+                self._application_settings_service.get_snapshot()
+            )
+        except ApplicationSettingsError as error:
+            messagebox.showerror(
+                "設定エラー",
+                str(error),
+                parent=dialog,
+            )
+            return
+
+        if not snapshot.google_books_api_key_is_configured:
+            messagebox.showinfo(
+                "設定",
+                "Google Books APIキーは設定されていません。",
+                parent=dialog,
+            )
+            return
+
+        should_delete = messagebox.askyesno(
+            "APIキー削除",
+            "Google Books APIキーを削除しますか？",
+            parent=dialog,
+        )
+
+        if not should_delete:
+            return
+
+        try:
+            (
+                self._application_settings_service
+                .delete_google_books_api_key()
+            )
+        except ApplicationSettingsError as error:
+            messagebox.showerror(
+                "設定エラー",
+                str(error),
+                parent=dialog,
+            )
+            return
+
+        api_key_variable.set("")
+        status_variable.set("未設定")
+
+        try:
+            self._on_google_books_api_key_changed(None)
+        except Exception:
+            traceback.print_exc()
+            messagebox.showwarning(
+                "設定反映の確認",
+                (
+                    "APIキーは削除されましたが、現在の画面へ"
+                    "反映できませんでした。アプリケーションを"
+                    "再起動してください。"
+                ),
+                parent=dialog,
+            )
+            return
+
+        messagebox.showinfo(
+            "設定",
+            "Google Books APIキーを削除しました。",
+            parent=dialog,
+        )
+
+    def _open_settings_directory(
+        self,
+        directory: Path,
+        dialog: tk.Toplevel,
+    ) -> None:
+        """設定画面で選択したフォルダーを開く。"""
+        try:
+            self._application_settings_service.open_directory(
+                directory
+            )
+        except DirectoryOpenError as error:
+            messagebox.showerror(
+                "フォルダーエラー",
+                str(error),
+                parent=dialog,
+            )
 
     def _load_reading_statistics(self) -> None:
         """全体集計と対象年一覧を読み込む。"""

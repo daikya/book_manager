@@ -503,6 +503,9 @@ def test_run_application_injects_new_paths(
     backup_service = Mock()
     cover_service = Mock()
     book_service = Mock()
+    google_books_client = Mock()
+    user_environment_store = Mock()
+    application_settings_service = Mock()
 
     with (
         patch.object(
@@ -534,7 +537,11 @@ def test_run_application_injects_new_paths(
             "Session",
             return_value=session,
         ),
-        patch.object(main_module, "GoogleBooksClient"),
+        patch.object(
+            main_module,
+            "GoogleBooksClient",
+            return_value=google_books_client,
+        ),
         patch.object(main_module, "OpenBdClient"),
         patch.object(main_module, "BookMetadataService"),
         patch.object(
@@ -551,11 +558,29 @@ def test_run_application_injects_new_paths(
         patch.object(main_module, "CsvImportService"),
         patch.object(main_module, "ReadingHistoryService"),
         patch.object(
+            main_module,
+            "WindowsUserEnvironmentStore",
+            return_value=user_environment_store,
+        ),
+        patch.object(
+            main_module,
+            "get_application_version",
+            return_value="2.1.0",
+        ),
+        patch.object(
+            main_module,
+            "ApplicationSettingsService",
+            return_value=application_settings_service,
+        ) as settings_service_class,
+        patch.object(
             main_module.tk,
             "Tk",
             return_value=root,
         ),
-        patch.object(main_module, "BookManagerApplication"),
+        patch.object(
+            main_module,
+            "BookManagerApplication",
+        ) as application_class,
     ):
         main_module._run_application(paths, None)
 
@@ -576,6 +601,16 @@ def test_run_application_injects_new_paths(
         session=session,
         cache_directory=paths.cover_cache_directory,
         root_directory=paths.root_directory,
+    )
+    settings_service_class.assert_called_once_with(
+        application_paths=paths,
+        application_name="Book Manager",
+        application_version="2.1.0",
+        user_environment_store=user_environment_store,
+    )
+    assert application_class.call_args.args[-2:] == (
+        application_settings_service,
+        google_books_client.set_api_key,
     )
     root.mainloop.assert_called_once_with()
     root.update_idletasks.assert_called_once_with()

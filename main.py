@@ -22,6 +22,12 @@ from book_manager.config.resource_paths import (
     get_application_icon_path,
     get_application_icon_png_path,
 )
+from book_manager.config.user_environment import (
+    WindowsUserEnvironmentStore,
+)
+from book_manager.config.version import (
+    get_application_version,
+)
 from book_manager.database.initializer import (
     initialize_database,
 )
@@ -49,6 +55,9 @@ from book_manager.repositories.reading_history_repository import (
 )
 from book_manager.services.backup_service import (
     BackupService,
+)
+from book_manager.services.application_settings_service import (
+    ApplicationSettingsService,
 )
 from book_manager.services.book_service import (
     BookService,
@@ -215,6 +224,16 @@ def _run_application(
             reading_history_repository,
             repository,
         )
+        application_settings_service = (
+            ApplicationSettingsService(
+                application_paths=application_paths,
+                application_name="Book Manager",
+                application_version=get_application_version(),
+                user_environment_store=(
+                    WindowsUserEnvironmentStore()
+                ),
+            )
+        )
         root = tk.Tk()
 
         _show_migration_result(
@@ -240,6 +259,8 @@ def _run_application(
             csv_import_service,
             backup_service,
             reading_history_service,
+            application_settings_service,
+            google_books_client.set_api_key,
         )
         _apply_window_icon(root)
         root.update_idletasks()
