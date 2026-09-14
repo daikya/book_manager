@@ -13,6 +13,7 @@ import ctypes
 import sys
 
 from book_manager.models.book_item import BookItem
+from book_manager.models.application_settings import BackupSettingsSnapshot
 from book_manager.models.reading_history import ReadingHistory
 from book_manager.models.reading_statistics import (
     MonthlyReadingCount,
@@ -3548,6 +3549,10 @@ class BookManagerApplication:
             snapshot = (
                 self._application_settings_service.get_snapshot()
             )
+            backup_snapshot = (
+                self._application_settings_service
+                .get_backup_settings_snapshot()
+            )
         except ApplicationSettingsError as error:
             messagebox.showerror(
                 "設定エラー",
@@ -3712,13 +3717,15 @@ class BookManagerApplication:
                 dialog=dialog,
             )
 
+        self._create_backup_settings_frame(dialog, backup_snapshot)
+
         information_frame = ttk.LabelFrame(
             dialog,
             text="アプリケーション情報",
             padding=10,
         )
         information_frame.grid(
-            row=2,
+            row=3,
             column=0,
             sticky="ew",
             padx=12,
@@ -3755,7 +3762,7 @@ class BookManagerApplication:
 
         button_frame = ttk.Frame(dialog)
         button_frame.grid(
-            row=3,
+            row=4,
             column=0,
             sticky="e",
             padx=12,
@@ -3769,6 +3776,179 @@ class BookManagerApplication:
 
         api_key_entry.focus_set()
         self._wait_for_dialog(dialog)
+
+    def _create_backup_settings_frame(
+        self,
+        dialog: tk.Toplevel,
+        snapshot: BackupSettingsSnapshot,
+    ) -> None:
+        """バックアップ状態、設定と手動作成ボタンを表示する。"""
+        frame = ttk.LabelFrame(dialog, text="バックアップ", padding=10)
+        frame.grid(row=2, column=0, sticky="ew", padx=12, pady=6)
+        frame.columnconfigure(1, weight=1)
+
+        interval = tk.StringVar(
+            master=dialog,
+            value=str(snapshot.saved_settings.backup_interval_hours),
+        )
+        generations = tk.StringVar(
+            master=dialog,
+            value=str(snapshot.saved_settings.max_backups),
+        )
+        last_backup = tk.StringVar(master=dialog)
+        count = tk.StringVar(master=dialog)
+        active = tk.StringVar(master=dialog)
+        self._set_backup_settings_view(snapshot, last_backup, count, active)
+
+        ttk.Label(frame, text="最後のバックアップ").grid(
+            row=0, column=0, sticky="w", pady=3,
+        )
+        ttk.Label(frame, textvariable=last_backup).grid(
+            row=0, column=1, sticky="w", pady=3,
+        )
+        ttk.Label(frame, text="バックアップ件数").grid(
+            row=1, column=0, sticky="w", pady=3,
+        )
+        ttk.Label(frame, textvariable=count).grid(
+            row=1, column=1, sticky="w", pady=3,
+        )
+        ttk.Label(frame, text="現在有効な設定").grid(
+            row=2, column=0, sticky="w", pady=3,
+        )
+        ttk.Label(frame, textvariable=active).grid(
+            row=2, column=1, sticky="w", pady=3,
+        )
+        ttk.Label(frame, text="自動バックアップ間隔（時間）").grid(
+            row=3, column=0, sticky="w", pady=3,
+        )
+        ttk.Entry(frame, textvariable=interval, width=8).grid(
+            row=3, column=1, sticky="w", pady=3,
+        )
+        ttk.Label(frame, text="保持世代数（件）").grid(
+            row=4, column=0, sticky="w", pady=3,
+        )
+        ttk.Entry(frame, textvariable=generations, width=8).grid(
+            row=4, column=1, sticky="w", pady=3,
+        )
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=5, column=0, columnspan=2, sticky="e", pady=6)
+        ttk.Button(
+            buttons,
+            text="設定を保存",
+            command=lambda: self._save_backup_settings(
+                interval, generations, last_backup, count, active, dialog,
+            ),
+        ).grid(row=0, column=0, padx=(0, 6))
+        backup_button = ttk.Button(buttons, text="今すぐバックアップ")
+        backup_button.configure(
+            command=lambda: self._create_backup_from_settings(
+                backup_button, last_backup, count, active, dialog,
+            ),
+        )
+        backup_button.grid(row=0, column=1)
+        ttk.Label(
+            frame,
+            text=(
+                "保存した設定は次回起動から適用されます。"
+                "自動バックアップは起動時に判定します。"
+                "表示はファイルの存在を示し、復元可能性の保証ではありません。"
+            ),
+            wraplength=650,
+        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(2, 0))
+
+    @staticmethod
+    def _set_backup_settings_view(
+        snapshot: BackupSettingsSnapshot,
+        last_backup: tk.StringVar,
+        count: tk.StringVar,
+        active: tk.StringVar,
+    ) -> None:
+        """取得済み状態を画面へ反映する。"""
+        if snapshot.latest_backup_datetime is None:
+            last_backup.set("バックアップなし")
+        else:
+            timestamp = snapshot.latest_backup_datetime.strftime(
+                "%Y/%m/%d %H:%M:%S"
+            )
+            last_backup.set(f"{timestamp}  {snapshot.latest_backup_path}")
+        count.set(f"{snapshot.backup_count}件")
+        settings = snapshot.active_settings
+        suffix = "（変更は次回起動時に反映）" if snapshot.changes_pending_restart else ""
+        active.set(
+            f"{settings.backup_interval_hours}時間・"
+            f"{settings.max_backups}件{suffix}"
+        )
+
+    def _refresh_backup_settings_view(
+        self,
+        last_backup: tk.StringVar,
+        count: tk.StringVar,
+        active: tk.StringVar,
+        dialog: tk.Toplevel,
+    ) -> bool:
+        try:
+            snapshot = (
+                self._application_settings_service
+                .get_backup_settings_snapshot()
+            )
+        except ApplicationSettingsError as error:
+            messagebox.showerror("バックアップエラー", str(error), parent=dialog)
+            return False
+        self._set_backup_settings_view(snapshot, last_backup, count, active)
+        return True
+
+    def _save_backup_settings(
+        self,
+        interval: tk.StringVar,
+        generations: tk.StringVar,
+        last_backup: tk.StringVar,
+        count: tk.StringVar,
+        active: tk.StringVar,
+        dialog: tk.Toplevel,
+    ) -> None:
+        try:
+            self._application_settings_service.save_backup_settings(
+                interval.get(), generations.get(),
+            )
+        except ApplicationSettingsError as error:
+            messagebox.showerror("設定エラー", str(error), parent=dialog)
+            return
+        if self._refresh_backup_settings_view(
+            last_backup, count, active, dialog,
+        ):
+            messagebox.showinfo(
+                "設定", "バックアップ設定を保存しました。次回起動から適用します。",
+                parent=dialog,
+            )
+
+    def _create_backup_from_settings(
+        self,
+        button: ttk.Button,
+        last_backup: tk.StringVar,
+        count: tk.StringVar,
+        active: tk.StringVar,
+        dialog: tk.Toplevel,
+    ) -> None:
+        """二重クリックを防ぎながら手動バックアップを実行する。"""
+        button.configure(state="disabled")
+        try:
+            result = self._application_settings_service.create_backup_now()
+        except ApplicationSettingsError as error:
+            messagebox.showerror("バックアップエラー", str(error), parent=dialog)
+            return
+        finally:
+            button.configure(state="normal")
+        if result is None:
+            messagebox.showwarning(
+                "バックアップ", "バックアップ元のデータベースがありません。",
+                parent=dialog,
+            )
+            return
+        self._refresh_backup_settings_view(last_backup, count, active, dialog)
+        messagebox.showinfo(
+            "バックアップ", f"バックアップを作成しました。\n{result}",
+            parent=dialog,
+        )
 
     def _create_settings_path_row(
         self,

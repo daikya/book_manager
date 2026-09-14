@@ -241,6 +241,8 @@ def _run_application(
                 user_environment_store=(
                     WindowsUserEnvironmentStore()
                 ),
+                backup_service=backup_service,
+                active_backup_settings=backup_settings,
             )
         )
         root = tk.Tk()

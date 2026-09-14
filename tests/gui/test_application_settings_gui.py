@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, call, patch
 
@@ -10,7 +11,9 @@ from book_manager.gui.book_manager_application import (
 )
 from book_manager.models.application_settings import (
     ApplicationSettingsSnapshot,
+    BackupSettingsSnapshot,
 )
+from book_manager.models.backup_settings import BackupSettings
 from book_manager.services.application_settings_service import (
     ApplicationSettingsError,
     DirectoryOpenError,
@@ -43,6 +46,28 @@ def create_snapshot(
             root_directory
             / "logs"
             / "book_manager.log"
+        ),
+    )
+
+
+def create_backup_snapshot(
+    tmp_path: Path,
+    *,
+    latest: bool = False,
+    pending: bool = False,
+) -> BackupSettingsSnapshot:
+    """設定画面用のバックアップ表示値。"""
+    directory = tmp_path / "backups"
+    return BackupSettingsSnapshot(
+        active_settings=BackupSettings(),
+        saved_settings=(BackupSettings(48, 3) if pending else BackupSettings()),
+        backup_directory=directory,
+        backup_count=1 if latest else 0,
+        latest_backup_path=(
+            directory / "books_20260914_090000.db" if latest else None
+        ),
+        latest_backup_datetime=(
+            datetime(2026, 9, 14, 9) if latest else None
         ),
     )
 
@@ -117,13 +142,19 @@ def test_open_settings_displays_snapshot_and_centers_dialog(
     application._application_settings_service.get_snapshot.return_value = (
         snapshot
     )
+    application._application_settings_service.get_backup_settings_snapshot.return_value = (
+        create_backup_snapshot(tmp_path)
+    )
     application._create_settings_path_row = Mock()
     application._wait_for_dialog = Mock()
     dialog = Mock()
     api_key_variable = Mock()
     status_variable = Mock()
     string_variable = MagicMock(
-        side_effect=(api_key_variable, status_variable),
+        side_effect=(
+            api_key_variable, status_variable,
+            Mock(), Mock(), Mock(), Mock(), Mock(),
+        ),
     )
 
     with (
@@ -193,6 +224,32 @@ def test_open_settings_shows_snapshot_error() -> None:
         "設定エラー",
         "設定状態を取得できません。",
         parent=application._root,
+    )
+
+
+def test_open_settings_shows_backup_snapshot_error(tmp_path: Path) -> None:
+    """バックアップ状態を取得できなければ設定画面を開かない。"""
+    app = create_application()
+    app._application_settings_service.get_snapshot.return_value = (
+        create_snapshot(tmp_path)
+    )
+    app._application_settings_service.get_backup_settings_snapshot.side_effect = (
+        ApplicationSettingsError("backup read failed")
+    )
+
+    with (
+        patch(
+            "book_manager.gui.book_manager_application.tk.Toplevel"
+        ) as toplevel,
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.showerror"
+        ) as showerror,
+    ):
+        app._on_open_settings()
+
+    toplevel.assert_not_called()
+    showerror.assert_called_once_with(
+        "設定エラー", "backup read failed", parent=app._root,
     )
 
 
@@ -474,3 +531,136 @@ def test_open_settings_directory_shows_error(
         "フォルダーを開けません。",
         parent=dialog,
     )
+
+
+def test_backup_status_displays_empty_and_pending_values(tmp_path: Path) -> None:
+    """空状態と次回起動待ちの設定を区別して表示する。"""
+    last, count, active = Mock(), Mock(), Mock()
+
+    BookManagerApplication._set_backup_settings_view(
+        create_backup_snapshot(tmp_path, pending=True), last, count, active,
+    )
+
+    last.set.assert_called_once_with("バックアップなし")
+    count.set.assert_called_once_with("0件")
+    assert "次回起動" in active.set.call_args.args[0]
+
+
+def test_backup_status_displays_latest_file(tmp_path: Path) -> None:
+    """日時とファイル名を画面へ反映する。"""
+    last, count, active = Mock(), Mock(), Mock()
+
+    BookManagerApplication._set_backup_settings_view(
+        create_backup_snapshot(tmp_path, latest=True), last, count, active,
+    )
+
+    assert "2026/09/14 09:00:00" in last.set.call_args.args[0]
+    assert "books_20260914_090000.db" in last.set.call_args.args[0]
+    count.set.assert_called_once_with("1件")
+
+
+def test_save_backup_settings_refreshes_view(tmp_path: Path) -> None:
+    """保存後の情報をServiceから再取得して表示する。"""
+    app = create_application()
+    interval, generations = Mock(), Mock()
+    interval.get.return_value = "48"
+    generations.get.return_value = "3"
+    app._refresh_backup_settings_view = Mock(return_value=True)
+    last, count, active, dialog = Mock(), Mock(), Mock(), Mock()
+
+    with patch(
+        "book_manager.gui.book_manager_application.messagebox.showinfo"
+    ) as showinfo:
+        app._save_backup_settings(
+            interval, generations, last, count, active, dialog,
+        )
+
+    app._application_settings_service.save_backup_settings.assert_called_once_with(
+        "48", "3"
+    )
+    app._refresh_backup_settings_view.assert_called_once_with(
+        last, count, active, dialog,
+    )
+    assert "次回起動" in showinfo.call_args.args[1]
+
+
+def test_save_backup_settings_keeps_input_on_failure() -> None:
+    app = create_application()
+    app._application_settings_service.save_backup_settings.side_effect = (
+        ApplicationSettingsError("invalid value")
+    )
+    app._refresh_backup_settings_view = Mock()
+    interval, generations = Mock(), Mock()
+    interval.get.return_value = "0"
+    generations.get.return_value = "10"
+
+    with patch(
+        "book_manager.gui.book_manager_application.messagebox.showerror"
+    ) as showerror:
+        app._save_backup_settings(
+            interval, generations, Mock(), Mock(), Mock(), Mock(),
+        )
+
+    showerror.assert_called_once()
+    app._refresh_backup_settings_view.assert_not_called()
+    interval.set.assert_not_called()
+
+
+def test_manual_backup_disables_button_and_refreshes(tmp_path: Path) -> None:
+    app = create_application()
+    app._refresh_backup_settings_view = Mock(return_value=True)
+    target = tmp_path / "books.db"
+    button = Mock()
+    app._application_settings_service.create_backup_now.return_value = target
+    last, count, active, dialog = Mock(), Mock(), Mock(), Mock()
+
+    with patch(
+        "book_manager.gui.book_manager_application.messagebox.showinfo"
+    ) as showinfo:
+        app._create_backup_from_settings(
+            button, last, count, active, dialog,
+        )
+
+    assert button.configure.call_args_list == [
+        call(state="disabled"), call(state="normal"),
+    ]
+    app._refresh_backup_settings_view.assert_called_once_with(
+        last, count, active, dialog,
+    )
+    assert str(target) in showinfo.call_args.args[1]
+
+
+def test_manual_backup_reports_missing_database() -> None:
+    app = create_application()
+    button = Mock()
+    app._application_settings_service.create_backup_now.return_value = None
+    app._refresh_backup_settings_view = Mock()
+
+    with patch(
+        "book_manager.gui.book_manager_application.messagebox.showwarning"
+    ) as showwarning:
+        app._create_backup_from_settings(
+            button, Mock(), Mock(), Mock(), Mock(),
+        )
+
+    showwarning.assert_called_once()
+    button.configure.assert_any_call(state="normal")
+    app._refresh_backup_settings_view.assert_not_called()
+
+
+def test_manual_backup_failure_reenables_button() -> None:
+    app = create_application()
+    button = Mock()
+    app._application_settings_service.create_backup_now.side_effect = (
+        ApplicationSettingsError("backup failed")
+    )
+
+    with patch(
+        "book_manager.gui.book_manager_application.messagebox.showerror"
+    ) as showerror:
+        app._create_backup_from_settings(
+            button, Mock(), Mock(), Mock(), Mock(),
+        )
+
+    showerror.assert_called_once()
+    assert button.configure.call_args_list[-1] == call(state="normal")
