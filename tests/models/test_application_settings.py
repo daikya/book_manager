@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, fields
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from book_manager.models.application_settings import (
     ApplicationSettingsSnapshot,
+    BackupSettingsSnapshot,
 )
+from book_manager.models.backup_settings import BackupSettings
 
 
 def create_snapshot(
@@ -143,3 +146,34 @@ def test_application_settings_snapshot_does_not_hold_api_key(
         "cover_cache_directory",
         "log_path",
     }
+
+
+def test_backup_snapshot_distinguishes_active_from_saved(tmp_path: Path) -> None:
+    """保存値の再起動待ちを表示できる。"""
+    snapshot = BackupSettingsSnapshot(
+        active_settings=BackupSettings(),
+        saved_settings=BackupSettings(48, 2),
+        backup_directory=tmp_path,
+        backup_count=1,
+        latest_backup_path=tmp_path / "books_20260914_090000.db",
+        latest_backup_datetime=datetime(2026, 9, 14, 9, 0, 0),
+    )
+
+    assert snapshot.changes_pending_restart is True
+    assert snapshot.backup_count == 1
+    assert snapshot.latest_backup_datetime == datetime(2026, 9, 14, 9)
+
+
+def test_backup_snapshot_empty_and_no_pending_change(tmp_path: Path) -> None:
+    """バックアップなしの状態も保持できる。"""
+    snapshot = BackupSettingsSnapshot(
+        active_settings=BackupSettings(),
+        saved_settings=BackupSettings(),
+        backup_directory=tmp_path,
+        backup_count=0,
+        latest_backup_path=None,
+        latest_backup_datetime=None,
+    )
+
+    assert snapshot.changes_pending_restart is False
+    assert snapshot.latest_backup_path is None

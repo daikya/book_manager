@@ -6,6 +6,10 @@ import os
 from collections.abc import Callable, MutableMapping
 from pathlib import Path
 
+from book_manager.config.backup_settings_store import (
+    BackupSettingsStore,
+    BackupSettingsStoreError,
+)
 from book_manager.config.paths import ApplicationPaths
 from book_manager.config.user_environment import (
     UserEnvironmentStore,
@@ -13,7 +17,10 @@ from book_manager.config.user_environment import (
 )
 from book_manager.models.application_settings import (
     ApplicationSettingsSnapshot,
+    BackupSettingsSnapshot,
 )
+from book_manager.models.backup_settings import BackupSettings
+from book_manager.services.backup_service import BackupService
 
 
 GOOGLE_BOOKS_API_KEY_ENVIRONMENT_VARIABLE = (
@@ -41,6 +48,10 @@ class DirectoryOpenError(ApplicationSettingsError):
     """
 
 
+class BackupSettingsError(ApplicationSettingsError):
+    """バックアップ設定・作成処理が失敗した場合。"""
+
+
 class ApplicationSettingsService:
     """設定画面で使用する設定処理を提供する。"""
 
@@ -52,6 +63,9 @@ class ApplicationSettingsService:
         user_environment_store: UserEnvironmentStore,
         environment: MutableMapping[str, str] | None = None,
         directory_opener: Callable[[Path], None] | None = None,
+        backup_service: BackupService | None = None,
+        backup_settings_store: BackupSettingsStore | None = None,
+        active_backup_settings: BackupSettings | None = None,
     ) -> None:
         """設定表示値と外部操作を受け取る。"""
         self._application_paths = application_paths
@@ -67,6 +81,85 @@ class ApplicationSettingsService:
             directory_opener
             or _open_directory_with_default_application
         )
+        self._backup_service = backup_service
+        self._backup_settings_store = (
+            backup_settings_store
+            if backup_settings_store is not None
+            else BackupSettingsStore(application_paths.backup_settings_path)
+        )
+        self._active_backup_settings = active_backup_settings
+
+    def get_backup_settings_snapshot(self) -> BackupSettingsSnapshot:
+        """保存値・起動時有効値と管理対象バックアップの存在情報を返す。"""
+        backup_service = self._require_backup_service()
+        try:
+            saved_settings = self._backup_settings_store.load()
+            status = backup_service.get_backup_status()
+        except (BackupSettingsStoreError, OSError) as error:
+            raise BackupSettingsError(
+                "バックアップ設定またはバックアップの状態を確認できません。"
+            ) from error
+
+        if self._active_backup_settings is None:
+            raise BackupSettingsError("有効なバックアップ設定を取得できません。")
+
+        return BackupSettingsSnapshot(
+            active_settings=self._active_backup_settings,
+            saved_settings=saved_settings,
+            backup_directory=status.backup_directory,
+            backup_count=status.backup_count,
+            latest_backup_path=status.latest_backup_path,
+            latest_backup_datetime=status.latest_backup_datetime,
+        )
+
+    def save_backup_settings(
+        self,
+        interval_hours: str,
+        max_backups: str,
+    ) -> BackupSettings:
+        """値を保存する。起動中のBackupServiceは変更しない。"""
+        hours = self._parse_integer(interval_hours, "自動バックアップ間隔")
+        generations = self._parse_integer(max_backups, "保持世代数")
+        try:
+            settings = BackupSettings(
+                backup_interval_hours=hours,
+                max_backups=generations,
+            )
+        except ValueError as error:
+            raise ApplicationSettingsValidationError(str(error)) from error
+
+        try:
+            self._backup_settings_store.save(settings)
+        except BackupSettingsStoreError as error:
+            raise BackupSettingsError("バックアップ設定を保存できません。") from error
+        return settings
+
+    def create_backup_now(self) -> Path | None:
+        """起動中の設定で、間隔に関係なくバックアップを作成する。"""
+        try:
+            return self._require_backup_service().create_backup()
+        except (OSError, ValueError, RuntimeError) as error:
+            raise BackupSettingsError(
+                "バックアップを作成または整理できませんでした。"
+            ) from error
+
+    def _require_backup_service(self) -> BackupService:
+        if self._backup_service is None:
+            raise BackupSettingsError("バックアップ処理を利用できません。")
+        return self._backup_service
+
+    @staticmethod
+    def _parse_integer(value: str, field_name: str) -> int:
+        if not isinstance(value, str):
+            raise ApplicationSettingsValidationError(
+                f"{field_name}は整数で入力してください。"
+            )
+        stripped = value.strip()
+        if not stripped or not stripped.isascii() or not stripped.isdecimal():
+            raise ApplicationSettingsValidationError(
+                f"{field_name}は整数で入力してください。"
+            )
+        return int(stripped)
 
     def get_snapshot(self) -> ApplicationSettingsSnapshot:
         """設定画面へ表示する現在の設定内容を返す。"""

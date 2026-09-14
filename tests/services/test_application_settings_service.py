@@ -2,22 +2,30 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
+from book_manager.config.backup_settings_store import (
+    BackupSettingsStore,
+    BackupSettingsStoreError,
+)
 from book_manager.config.paths import ApplicationPaths
 from book_manager.config.user_environment import (
     UserEnvironmentStoreError,
 )
+from book_manager.models.backup_settings import BackupSettings
 from book_manager.services.application_settings_service import (
     GOOGLE_BOOKS_API_KEY_ENVIRONMENT_VARIABLE,
     ApplicationSettingsService,
     ApplicationSettingsValidationError,
+    BackupSettingsError,
     DirectoryOpenError,
     UserEnvironmentUpdateError,
 )
+from book_manager.services.backup_service import BackupStatus
 
 
 def create_application_paths(tmp_path: Path) -> ApplicationPaths:
@@ -402,3 +410,136 @@ def test_open_directory_wraps_opener_error(
         match="フォルダーを開けません",
     ):
         service.open_directory(directory)
+
+
+def create_backup_settings_service(
+    tmp_path: Path,
+) -> tuple[ApplicationSettingsService, MagicMock, BackupSettingsStore]:
+    """バックアップ設定のテスト用Service。"""
+    paths = create_application_paths(tmp_path)
+    store = BackupSettingsStore(paths.backup_settings_path)
+    backup_service = MagicMock()
+    backup_service.get_backup_status.return_value = BackupStatus(
+        backup_directory=paths.backup_directory,
+        backup_count=0,
+        latest_backup_path=None,
+        latest_backup_datetime=None,
+    )
+    service = ApplicationSettingsService(
+        application_paths=paths,
+        application_name="Book Manager",
+        application_version="2.1.0",
+        user_environment_store=MagicMock(),
+        environment={},
+        backup_service=backup_service,
+        backup_settings_store=store,
+        active_backup_settings=BackupSettings(),
+    )
+    return service, backup_service, store
+
+
+def test_get_backup_settings_snapshot_with_no_backups(tmp_path: Path) -> None:
+    service, _, _ = create_backup_settings_service(tmp_path)
+
+    snapshot = service.get_backup_settings_snapshot()
+
+    assert snapshot.active_settings == BackupSettings()
+    assert snapshot.saved_settings == BackupSettings()
+    assert snapshot.backup_count == 0
+    assert snapshot.latest_backup_path is None
+
+
+def test_backup_settings_are_saved_but_not_applied_until_restart(
+    tmp_path: Path,
+) -> None:
+    service, backup_service, store = create_backup_settings_service(tmp_path)
+
+    result = service.save_backup_settings(" 48 ", " 3 ")
+    snapshot = service.get_backup_settings_snapshot()
+
+    assert result == BackupSettings(48, 3)
+    assert store.load() == result
+    assert snapshot.saved_settings == result
+    assert snapshot.active_settings == BackupSettings()
+    assert snapshot.changes_pending_restart is True
+    backup_service.create_backup.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("hours", "count"),
+    [
+        ("0", "10"),
+        ("169", "10"),
+        ("24", "1"),
+        ("24", "101"),
+        ("24.0", "10"),
+        ("+24", "10"),
+        ("１２", "10"),
+        ("", "10"),
+    ],
+)
+def test_rejects_invalid_backup_settings_without_writing(
+    tmp_path: Path, hours: str, count: str,
+) -> None:
+    service, _, store = create_backup_settings_service(tmp_path)
+
+    with pytest.raises(ApplicationSettingsValidationError):
+        service.save_backup_settings(hours, count)
+
+    assert store.load() == BackupSettings()
+    assert not create_application_paths(tmp_path).backup_settings_path.exists()
+
+
+def test_save_backup_settings_wraps_write_failure(tmp_path: Path) -> None:
+    paths = create_application_paths(tmp_path)
+    store = MagicMock()
+    store.save.side_effect = BackupSettingsStoreError("denied")
+    service, backup_service, _ = create_backup_settings_service(tmp_path)
+    service._backup_settings_store = store
+
+    with pytest.raises(BackupSettingsError, match="保存できません"):
+        service.save_backup_settings("24", "10")
+
+    backup_service.create_backup.assert_not_called()
+    assert not paths.backup_settings_path.exists()
+
+
+def test_get_backup_settings_snapshot_reports_latest(tmp_path: Path) -> None:
+    service, backup_service, _ = create_backup_settings_service(tmp_path)
+    directory = create_application_paths(tmp_path).backup_directory
+    latest = directory / "books_20260914_090000.db"
+    backup_service.get_backup_status.return_value = BackupStatus(
+        backup_directory=directory,
+        backup_count=2,
+        latest_backup_path=latest,
+        latest_backup_datetime=datetime(2026, 9, 14, 9),
+    )
+
+    snapshot = service.get_backup_settings_snapshot()
+
+    assert snapshot.backup_count == 2
+    assert snapshot.latest_backup_path == latest
+
+
+def test_create_backup_now_does_not_check_interval(tmp_path: Path) -> None:
+    service, backup_service, _ = create_backup_settings_service(tmp_path)
+    new_file = tmp_path / "books.db"
+    backup_service.create_backup.return_value = new_file
+
+    assert service.create_backup_now() == new_file
+    backup_service.create_backup.assert_called_once_with()
+
+
+def test_create_backup_now_propagates_no_database(tmp_path: Path) -> None:
+    service, backup_service, _ = create_backup_settings_service(tmp_path)
+    backup_service.create_backup.return_value = None
+
+    assert service.create_backup_now() is None
+
+
+def test_create_backup_now_wraps_failure(tmp_path: Path) -> None:
+    service, backup_service, _ = create_backup_settings_service(tmp_path)
+    backup_service.create_backup.side_effect = OSError("disk full")
+
+    with pytest.raises(BackupSettingsError):
+        service.create_backup_now()
