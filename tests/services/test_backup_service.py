@@ -13,6 +13,7 @@ from book_manager.services.backup_service import BackupService
 
 def _create_test_database(database_path: Path) -> None:
     """テスト用SQLiteデータベースを作成する。"""
+    initialize_database(database_path)
     connection = sqlite3.connect(database_path)
 
     try:
@@ -765,6 +766,125 @@ def test_failed_backup_removes_incomplete_backup_file(
     assert not expected_backup_path.exists()
 
 
+def test_invalid_new_backup_does_not_prune_existing_generations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """コピーが戻っても新規ファイルが不正なら旧世代を残す。"""
+    database_path = tmp_path / "books.db"
+    backup_directory = tmp_path / "backups"
+    _create_test_database(database_path)
+    backup_directory.mkdir()
+    old_paths = [
+        backup_directory / "books_20260912_090000.db",
+        backup_directory / "books_20260913_090000.db",
+    ]
+    for path in old_paths:
+        path.write_bytes(b"previous backup")
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=backup_directory,
+        now_provider=lambda: datetime(2026, 9, 14, 9, 0, 0),
+        max_backups=2,
+    )
+
+    def create_invalid_file(path: Path) -> None:
+        path.write_bytes(b"not sqlite")
+
+    monkeypatch.setattr(service, "_create_backup", create_invalid_file)
+
+    with pytest.raises(ValueError):
+        service.create_backup()
+
+    assert [path.read_bytes() for path in old_paths] == [
+        b"previous backup",
+        b"previous backup",
+    ]
+    assert not (backup_directory / "books_20260914_090000.db").exists()
+
+
+def test_successful_new_backup_prunes_only_after_validation(
+    tmp_path: Path,
+) -> None:
+    """検証済みの新しいバックアップを残して古い一世代を整理する。"""
+    database_path = tmp_path / "books.db"
+    backup_directory = tmp_path / "backups"
+    _create_test_database(database_path)
+    backup_directory.mkdir()
+    oldest = backup_directory / "books_20260912_090000.db"
+    newer = backup_directory / "books_20260913_090000.db"
+    oldest.touch()
+    newer.touch()
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=backup_directory,
+        now_provider=lambda: datetime(2026, 9, 14, 9, 0, 0),
+        max_backups=2,
+    )
+
+    created = service.create_backup()
+
+    assert created is not None and created.is_file()
+    service._validate_restore_source(created)
+    assert not oldest.exists()
+    assert newer.exists()
+
+
+def test_cleanup_failure_keeps_new_verified_backup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """世代整理に失敗しても作成済みのバックアップを消さない。"""
+    database_path = tmp_path / "books.db"
+    _create_test_database(database_path)
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=tmp_path / "backups",
+        now_provider=lambda: datetime(2026, 9, 14, 9, 0, 0),
+    )
+
+    def fail_cleanup(*, protected_paths: set[Path] | None = None) -> None:
+        raise PermissionError("cleanup denied")
+
+    monkeypatch.setattr(service, "_remove_old_backups", fail_cleanup)
+
+    with pytest.raises(PermissionError, match="cleanup denied"):
+        service.create_backup()
+
+    created = tmp_path / "backups" / "books_20260914_090000.db"
+    assert created.is_file()
+    service._validate_restore_source(created)
+
+
+def test_restore_preserves_source_and_safety_backup_at_limit(
+    tmp_path: Path,
+) -> None:
+    """復元元と今回作成した安全バックアップは整理対象から外す。"""
+    database_path = tmp_path / "books.db"
+    backup_directory = tmp_path / "backups"
+    _create_initialized_book_manager_database(
+        database_path, marker="before"
+    )
+    backup_directory.mkdir()
+    source = backup_directory / "books_20260912_090000.db"
+    _create_initialized_book_manager_database(source, marker="restore")
+    middle = backup_directory / "books_20260913_090000.db"
+    _create_initialized_book_manager_database(middle, marker="middle")
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=backup_directory,
+        now_provider=lambda: datetime(2026, 9, 14, 9, 0, 0),
+        max_backups=2,
+    )
+
+    service.restore_backup(source)
+
+    safety = backup_directory / "books_20260914_090000.db"
+    assert source.is_file()
+    assert safety.is_file()
+    assert not middle.exists()
+
+
 def test_validate_restore_source_accepts_valid_database(
     tmp_path: Path,
 ) -> None:
@@ -834,9 +954,14 @@ def test_validate_restore_source_rejects_non_book_manager_database(
     """book_itemsテーブルがないDBを拒否する。"""
     backup_path = tmp_path / "backup.db"
 
-    _create_test_database(
-        backup_path,
-    )
+    # 共通ヘルパーは正式スキーマを作るため、この拒否テストでは
+    # book_itemsを含まないSQLiteデータベースを個別に用意する。
+    connection = sqlite3.connect(backup_path)
+    try:
+        connection.execute("CREATE TABLE unrelated (id INTEGER)")
+        connection.commit()
+    finally:
+        connection.close()
 
     service = BackupService(
         database_path=tmp_path / "books.db",

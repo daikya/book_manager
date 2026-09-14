@@ -105,6 +105,8 @@ class BackupService:
             self._create_backup(
                 backup_path,
             )
+            # 検証前に古い世代を削除しない。
+            self._validate_restore_source(backup_path)
         except Exception:
             if backup_path.exists():
                 backup_path.unlink()
@@ -112,7 +114,7 @@ class BackupService:
             raise
 
         self._remove_old_backups(
-            protected_paths=protected_paths,
+            protected_paths=(protected_paths or set()) | {backup_path},
         )
 
         return backup_path
