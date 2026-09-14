@@ -10,6 +10,9 @@ from tkinter import messagebox
 
 import requests
 
+from book_manager.config.backup_settings_store import (
+    BackupSettingsStore,
+)
 from book_manager.config.logging_config import (
     configure_file_logging,
     get_application_logger,
@@ -43,6 +46,7 @@ from book_manager.metadata.google_books_client import (
 from book_manager.metadata.openbd_client import (
     OpenBdClient,
 )
+from book_manager.models.backup_settings import BackupSettings
 from book_manager.models.data_migration_result import (
     DataMigrationResult,
     DataMigrationStatus,
@@ -158,6 +162,9 @@ def _run_application(
     """依存関係を生成し、GUIのメインループを開始する。"""
     database_path = application_paths.database_path
 
+    # 読込失敗時は自動バックアップと世代整理を始めない。
+    backup_settings = _load_backup_settings(application_paths)
+
     initialize_database(database_path)
 
     backup_service = BackupService(
@@ -165,6 +172,8 @@ def _run_application(
         backup_directory=(
             application_paths.backup_directory
         ),
+        backup_interval=backup_settings.backup_interval,
+        max_backups=backup_settings.max_backups,
     )
     backup_error = try_create_backup(
         backup_service,
@@ -268,6 +277,15 @@ def _run_application(
     finally:
         session.close()
         logger.info("Book Managerを終了します。")
+
+
+def _load_backup_settings(
+    application_paths: ApplicationPaths,
+) -> BackupSettings:
+    """保存済みの設定を起動時に読み込み、未設定なら既定値を返す。"""
+    return BackupSettingsStore(
+        application_paths.backup_settings_path,
+    ).load()
 
 
 def _get_legacy_root_directory() -> Path:

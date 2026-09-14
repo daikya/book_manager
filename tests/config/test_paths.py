@@ -226,6 +226,20 @@ def test_create_application_paths_returns_absolute_paths(
         )
     )
 
+    assert paths.backup_settings_path.is_absolute()
+
+
+def test_backup_settings_path_uses_user_data_root(
+    tmp_path: Path,
+) -> None:
+    """設定はインストール先でなく利用者データ領域に置く。"""
+    paths = create_application_paths(tmp_path / "application")
+
+    assert paths.backup_settings_path == (
+        tmp_path / "application" / "backup_settings.json"
+    )
+    assert not paths.backup_settings_path.exists()
+
 
 def test_create_application_paths_does_not_create_directories(
     tmp_path: Path,

@@ -12,6 +12,7 @@ APPLICATION_HOME_ENVIRONMENT_VARIABLE = "BOOK_MANAGER_HOME"
 LOCAL_APP_DATA_ENVIRONMENT_VARIABLE = "LOCALAPPDATA"
 DATABASE_FILE_NAME = "books.db"
 LOG_FILE_NAME = "book_manager.log"
+BACKUP_SETTINGS_FILE_NAME = "backup_settings.json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +27,11 @@ class ApplicationPaths:
     cover_cache_directory: Path
     log_directory: Path
     log_path: Path
+
+    @property
+    def backup_settings_path(self) -> Path:
+        """利用者データ領域に保存するバックアップ設定ファイル。"""
+        return self.root_directory / BACKUP_SETTINGS_FILE_NAME
 
 
 def create_application_paths(

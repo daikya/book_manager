@@ -7,10 +7,17 @@ import sys
 from pathlib import Path
 from unittest.mock import Mock, call, patch
 
+import pytest
+
+from book_manager.config.backup_settings_store import (
+    BackupSettingsStore,
+    BackupSettingsStoreError,
+)
 from book_manager.config.paths import (
     ApplicationPaths,
     create_application_paths,
 )
+from book_manager.models.backup_settings import BackupSettings
 from book_manager.models.data_migration_result import (
     DataMigrationResult,
     DataMigrationStatus,
@@ -590,6 +597,8 @@ def test_run_application_injects_new_paths(
     backup_class.assert_called_once_with(
         database_path=paths.database_path,
         backup_directory=paths.backup_directory,
+        backup_interval=BackupSettings().backup_interval,
+        max_backups=BackupSettings().max_backups,
     )
     repository_class.assert_called_once_with(
         paths.database_path
@@ -615,6 +624,65 @@ def test_run_application_injects_new_paths(
     root.mainloop.assert_called_once_with()
     root.update_idletasks.assert_called_once_with()
     session.close.assert_called_once_with()
+
+
+def test_load_backup_settings_uses_saved_values(tmp_path: Path) -> None:
+    """起動時に利用者データ領域の保存値を読み込む。"""
+    paths = create_paths(tmp_path)
+    settings = BackupSettings(backup_interval_hours=48, max_backups=3)
+    BackupSettingsStore(paths.backup_settings_path).save(settings)
+
+    assert main_module._load_backup_settings(paths) == settings
+
+
+def test_run_application_passes_saved_values_to_backup_service(
+    tmp_path: Path,
+) -> None:
+    """保存済み設定を起動時のBackupServiceへ渡す。"""
+    paths = create_paths(tmp_path)
+    BackupSettingsStore(paths.backup_settings_path).save(
+        BackupSettings(backup_interval_hours=48, max_backups=3),
+    )
+
+    # 保存値の読み込みまでは実物を使い、以降の起動処理を止める。
+    with (
+        patch.object(main_module, "initialize_database"),
+        patch.object(main_module, "BackupService") as backup_class,
+        patch.object(
+            main_module,
+            "try_create_backup",
+            side_effect=RuntimeError("stop after construction"),
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="stop after construction"):
+            main_module._run_application(paths, None)
+
+    backup_class.assert_called_once_with(
+        database_path=paths.database_path,
+        backup_directory=paths.backup_directory,
+        backup_interval=BackupSettings(48, 3).backup_interval,
+        max_backups=3,
+    )
+
+
+def test_invalid_settings_stop_before_database_or_backup(
+    tmp_path: Path,
+) -> None:
+    """不正ファイルを既定値で上書きせず、DB操作前に停止する。"""
+    paths = create_paths(tmp_path)
+    paths.root_directory.mkdir(parents=True)
+    paths.backup_settings_path.write_text("{", encoding="utf-8")
+
+    with (
+        patch.object(main_module, "initialize_database") as initialize,
+        patch.object(main_module, "BackupService") as backup_class,
+        pytest.raises(BackupSettingsStoreError),
+    ):
+        main_module._run_application(paths, None)
+
+    initialize.assert_not_called()
+    backup_class.assert_not_called()
+    assert paths.backup_settings_path.read_text(encoding="utf-8") == "{"
 
 
 def test_run_application_closes_session_when_mainloop_fails(
