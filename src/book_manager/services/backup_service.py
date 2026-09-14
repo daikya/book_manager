@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import re
 import sqlite3
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -12,12 +15,23 @@ from book_manager.database.initializer import initialize_database
 from book_manager.database.schema import SCHEMA_VERSION
 
 
+@dataclass(frozen=True)
+class BackupStatus:
+    """管理対象ファイルの存在情報。DBの整合性は保証しない。"""
+
+    backup_directory: Path
+    backup_count: int
+    latest_backup_path: Path | None
+    latest_backup_datetime: datetime | None
+
+
 class BackupService:
     """SQLiteデータベースの自動バックアップを管理する。"""
 
     BACKUP_FILE_PREFIX = "books_"
     BACKUP_FILE_SUFFIX = ".db"
     BACKUP_DATETIME_FORMAT = "%Y%m%d_%H%M%S"
+    MAX_SAME_SECOND_SEQUENCE = 999
 
     def __init__(
         self,
@@ -117,6 +131,21 @@ class BackupService:
             return None
 
         return self.create_backup()
+
+    def get_backup_status(self) -> BackupStatus:
+        """バックアップの件数と最新ファイルを読み取り専用で返す。"""
+        backup_files = self._get_backup_files()
+        latest = backup_files[-1] if backup_files else None
+        return BackupStatus(
+            backup_directory=self._backup_directory,
+            backup_count=len(backup_files),
+            latest_backup_path=latest,
+            latest_backup_datetime=(
+                self._get_backup_datetime(latest)
+                if latest is not None
+                else None
+            ),
+        )
 
     def restore_backup(
         self,
@@ -335,25 +364,39 @@ class BackupService:
 
         return sorted(
             backup_files,
-            key=lambda path: (
-                self._get_backup_datetime(path)
-                or datetime.min
-            ),
+            key=self._get_backup_sort_key,
         )
 
     def _create_backup_path(self) -> Path:
-        """新しいバックアップファイルのPathを生成する。"""
+        """既存ファイルを上書きせず今回の保存先を排他的に確保する。"""
         timestamp = self._now_provider().strftime(
             self.BACKUP_DATETIME_FORMAT,
         )
 
-        filename = (
+        stem = (
             f"{self.BACKUP_FILE_PREFIX}"
             f"{timestamp}"
-            f"{self.BACKUP_FILE_SUFFIX}"
         )
 
-        return self._backup_directory / filename
+        for sequence in range(self.MAX_SAME_SECOND_SEQUENCE + 1):
+            suffix = "" if sequence == 0 else f"_{sequence:03d}"
+            backup_path = self._backup_directory / (
+                f"{stem}{suffix}{self.BACKUP_FILE_SUFFIX}"
+            )
+            try:
+                descriptor = os.open(
+                    backup_path,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                    0o600,
+                )
+            except FileExistsError:
+                continue
+            os.close(descriptor)
+            return backup_path
+
+        raise RuntimeError(
+            "同じ秒のバックアップファイル名をこれ以上確保できません。"
+        )
 
     def _create_backup(
         self,
@@ -438,10 +481,36 @@ class BackupService:
             -len(cls.BACKUP_FILE_SUFFIX)
         ]
 
+        match = re.fullmatch(
+            r"(\d{8}_\d{6})(?:_(\d{3}))?",
+            datetime_text,
+        )
+        if match is None or match.group(2) == "000":
+            return None
+
         try:
-            return datetime.strptime(
-                datetime_text,
+            backup_datetime = datetime.strptime(
+                match.group(1),
                 cls.BACKUP_DATETIME_FORMAT,
             )
         except ValueError:
             return None
+
+        if (
+            backup_datetime.strftime(cls.BACKUP_DATETIME_FORMAT)
+            != match.group(1)
+        ):
+            return None
+        return backup_datetime
+
+    @classmethod
+    def _get_backup_sort_key(cls, path: Path) -> tuple[datetime, int]:
+        """日時が同じ場合は後から確保した連番を新しいものとする。"""
+        backup_datetime = cls._get_backup_datetime(path)
+        if backup_datetime is None:
+            raise ValueError("管理対象外のバックアップです。")
+        stem = path.name[
+            len(cls.BACKUP_FILE_PREFIX):-len(cls.BACKUP_FILE_SUFFIX)
+        ]
+        sequence = int(stem[-3:]) if len(stem) > 15 else 0
+        return backup_datetime, sequence

@@ -219,6 +219,89 @@ def test_create_backup_returns_none_when_database_missing(
     assert not backup_directory.exists()
 
 
+def test_get_backup_status_reports_empty_directory(tmp_path: Path) -> None:
+    """バックアップが存在しない場合の表示値を返す。"""
+    directory = tmp_path / "backups"
+    service = BackupService(
+        database_path=tmp_path / "books.db",
+        backup_directory=directory,
+    )
+
+    status = service.get_backup_status()
+
+    assert status.backup_directory == directory
+    assert status.backup_count == 0
+    assert status.latest_backup_path is None
+    assert status.latest_backup_datetime is None
+    assert not directory.exists()
+
+
+def test_consecutive_backups_same_second_preserve_both(tmp_path: Path) -> None:
+    """同一秒の手動作成でも最初のバックアップを上書きしない。"""
+    database_path = tmp_path / "books.db"
+    _create_test_database(database_path)
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=tmp_path / "backups",
+        now_provider=lambda: datetime(2026, 9, 14, 10, 30, 0),
+    )
+
+    first = service.create_backup()
+    assert first is not None
+    first_contents = first.read_bytes()
+    second = service.create_backup()
+
+    assert second is not None
+    assert first.name == "books_20260914_103000.db"
+    assert second.name == "books_20260914_103000_001.db"
+    assert first.read_bytes() == first_contents
+    assert second.is_file()
+    status = service.get_backup_status()
+    assert status.backup_count == 2
+    assert status.latest_backup_path == second
+    assert status.latest_backup_datetime == datetime(2026, 9, 14, 10, 30, 0)
+
+
+def test_get_backup_status_excludes_unrecognized_files(tmp_path: Path) -> None:
+    """状態表示は管理対象のファイル名だけ数える。"""
+    directory = tmp_path / "backups"
+    directory.mkdir()
+    valid = directory / "books_20260914_103000.db"
+    valid.touch()
+    (directory / "books_20260914_103000_000.db").touch()
+    (directory / "books_20260914_103000_foo.db").touch()
+    (directory / "books_20260230_103000.db").touch()
+    service = BackupService(
+        database_path=tmp_path / "books.db",
+        backup_directory=directory,
+    )
+
+    status = service.get_backup_status()
+
+    assert status.backup_count == 1
+    assert status.latest_backup_path == valid
+
+
+def test_backup_skips_existing_same_second_file(tmp_path: Path) -> None:
+    """既存バックアップの内容は保持し、次の連番に書く。"""
+    database_path = tmp_path / "books.db"
+    _create_test_database(database_path)
+    directory = tmp_path / "backups"
+    directory.mkdir()
+    original = directory / "books_20260914_103000.db"
+    original.write_bytes(b"existing backup")
+    service = BackupService(
+        database_path=database_path,
+        backup_directory=directory,
+        now_provider=lambda: datetime(2026, 9, 14, 10, 30, 0),
+    )
+
+    created = service.create_backup()
+
+    assert created == directory / "books_20260914_103000_001.db"
+    assert original.read_bytes() == b"existing backup"
+
+
 def test_create_backup_removes_incomplete_file_on_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
