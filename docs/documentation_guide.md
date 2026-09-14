@@ -38,6 +38,7 @@ docs/documentation_guide.md
 
 ```text
 docs/
+├── backup_settings_design.md
 ├── backup_restore_design.md
 ├── csv_import_design.md
 ├── data_path_migration_design.md
@@ -55,6 +56,7 @@ docs/
 ├── settings_and_window_layout_design.md
 ├── tag_category_design.md
 ├── windows_distribution_design.md
+├── windows_installer_design.md
 │
 ├── adr/
 │   └── ADR-0001-sqlite-selection.md
@@ -224,6 +226,10 @@ Version 1.5で追加した読書情報による検索・絞り込み、検索GUI
 ### `settings_and_window_layout_design.md`
 
 Version 2.1で追加したアプリケーション設定画面とサブウィンドウ配置を定義する。
+
+### `backup_settings_design.md`
+
+Version 2.2で追加するバックアップ状態表示、手動作成、間隔・世代数の保存、同時刻の上書き防止および検証後の世代整理を定義する。ソース版の実装と自動テストは完了しているが、Windows配布版の検証は未完了である。
 
 Google Books APIキーの利用者環境への保存、設定状態表示、利用者データ関連パス、Version表示、フォルダーを開く操作、起動中クライアントへの反映および親画面を基準とする中央配置を管理する。
 
