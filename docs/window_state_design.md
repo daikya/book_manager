@@ -27,12 +27,12 @@ Book Manager Version 2.3では、メインウィンドウの位置、サイズ�
 
 ## 3. 現在の実装との関係
 
-現在のメインウィンドウは、起動時に次の値を使用して中央配置される。
+保存状態がない場合、メインウィンドウは起動時に次の値を基本として中央配置される。
 
 - 標準サイズ: `1350 x 800`
 - 最小サイズ: `1150 x 650`
 
-終了時は `BookManagerApplication._on_exit()` からルートウィンドウを破棄している。Version 2.3では、この起動処理と終了処理へ状態の復元・保存を追加する。
+`BookManagerApplication._on_exit()`では、通常矩形と最大化状態を保存してからルートウィンドウを破棄する。移動・サイズ変更中はメモリ上の通常矩形だけを更新する。
 
 既存の `window_positioning.py` はサブウィンドウの親画面中央配置に使用されている。メインウィンドウの復元では負の座標と複数モニターの作業領域を扱う必要があるため、用途を分けた処理を追加する。
 
@@ -363,7 +363,7 @@ Windows APIを利用できない環境やテストでは、Tkinterから取得�
 3. 書籍データとバックアップ設定に影響がない
 4. ログに原因を確認できる
 
-## 18. 実装候補ファイル
+## 18. 実装ファイル
 
 ```text
 main.py
@@ -376,7 +376,8 @@ tests/config/test_paths.py
 tests/config/test_window_state_store.py
 tests/models/test_window_state.py
 tests/gui/test_window_positioning.py
-tests/gui/test_window_state_gui.py
+tests/gui/test_main_window_positioning.py
+tests/gui/test_main_window_state_gui.py
 tests/test_main.py
 ```
 
@@ -389,3 +390,21 @@ tests/test_main.py
 - 状態ファイルの破損でアプリケーション起動が妨げられない
 - 設定画面から状態をリセットでき、同じ終了処理で再作成されない
 - 自動テストとWindows実機確認が完了する
+
+## 20. 実装・検証結果
+
+2026年9月15日時点で、設計対象のソース版実装と基本実機検証を完了した。
+
+- `WindowState`で座標・サイズ・最大化状態・スキーマVersionを検証する
+- `WindowStateStore`でJSONの読み込み、原子的保存、削除を行う
+- `ApplicationPaths.window_state_path`で利用者データ領域直下の保存先を提供する
+- Windowsの全モニター作業領域を取得し、交差面積に基づいて復元先を選ぶ
+- 負の座標を維持し、画面外・過大・過小な矩形を操作可能な範囲へ補正する
+- 通常矩形を復元した後に最大化状態を適用する
+- `<Configure>`ではファイルへ書き込まず、通常表示時の矩形だけをメモリへ保持する
+- 終了時に状態を一度だけ保存し、保存失敗時も終了を継続する
+- 設定画面から状態を初期化し、同じセッションでは終了保存を抑止する
+
+全1362件の自動テストが成功した。Windowsソース版では、通常位置・サイズ・最大化状態の保存と復元、通常表示への復帰、完全に画面外の座標と壊れたJSONからの安全な起動、設定画面からの初期化、終了時の再作成防止、および次回起動後の保存再開を確認した。
+
+Version 2.3.0のVersion更新、Windows実行ファイル・ZIP・インストーラーの作成、チェックサム確認、更新・再インストール後の保持確認は今後実施する。
