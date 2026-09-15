@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import ctypes
+import os
 import tkinter as tk
+from ctypes import wintypes
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +26,150 @@ class ScreenSize:
 
     width: int
     height: int
+
+
+@dataclass(frozen=True, slots=True)
+class ScreenWorkArea:
+    """タスクバーなどを除いたモニターの作業領域。"""
+
+    left: int
+    top: int
+    right: int
+    bottom: int
+    primary: bool = False
+
+    @property
+    def width(self) -> int:
+        """作業領域の幅を返す。"""
+        return self.right - self.left
+
+    @property
+    def height(self) -> int:
+        """作業領域の高さを返す。"""
+        return self.bottom - self.top
+
+
+def get_screen_work_areas(root: tk.Misc) -> tuple[ScreenWorkArea, ...]:
+    """利用可能なモニターの作業領域を返す。
+
+    Windows APIを利用できない場合は、Tkinterが返す画面サイズを
+    単一の主モニター作業領域として使用する。
+    """
+    if os.name == "nt":
+        try:
+            work_areas = _get_windows_screen_work_areas()
+            if work_areas:
+                return work_areas
+        except (
+            AttributeError,
+            OSError,
+            TypeError,
+            ValueError,
+            ctypes.ArgumentError,
+        ):
+            pass
+
+    return (
+        ScreenWorkArea(
+            left=0,
+            top=0,
+            right=root.winfo_screenwidth(),
+            bottom=root.winfo_screenheight(),
+            primary=True,
+        ),
+    )
+
+
+def calculate_intersection_area(
+    rectangle: WindowRectangle,
+    work_area: ScreenWorkArea,
+) -> int:
+    """ウィンドウ矩形と作業領域が重なる面積を返す。"""
+    intersection_width = max(
+        0,
+        min(rectangle.x + rectangle.width, work_area.right)
+        - max(rectangle.x, work_area.left),
+    )
+    intersection_height = max(
+        0,
+        min(rectangle.y + rectangle.height, work_area.bottom)
+        - max(rectangle.y, work_area.top),
+    )
+    return intersection_width * intersection_height
+
+
+def select_work_area(
+    rectangle: WindowRectangle,
+    work_areas: tuple[ScreenWorkArea, ...],
+) -> ScreenWorkArea:
+    """交差面積が最大の作業領域を選択する。
+
+    交差面積が同じ場合と、すべて交差しない場合は主モニターを
+    優先する。
+    """
+    _validate_work_areas(work_areas)
+    return max(
+        work_areas,
+        key=lambda area: (
+            calculate_intersection_area(rectangle, area),
+            area.primary,
+        ),
+    )
+
+
+def calculate_safe_window_rectangle(
+    saved_rectangle: WindowRectangle,
+    work_areas: tuple[ScreenWorkArea, ...],
+    *,
+    default_width: int,
+    default_height: int,
+    minimum_width: int,
+    minimum_height: int,
+) -> WindowRectangle:
+    """保存矩形を現在のモニターで操作可能な範囲へ補正する。"""
+    _validate_main_window_dimensions(
+        saved_rectangle,
+        default_width,
+        default_height,
+        minimum_width,
+        minimum_height,
+    )
+    selected_area = select_work_area(saved_rectangle, work_areas)
+    intersects_screen = (
+        calculate_intersection_area(saved_rectangle, selected_area) > 0
+    )
+
+    source_width = (
+        saved_rectangle.width if intersects_screen else default_width
+    )
+    source_height = (
+        saved_rectangle.height if intersects_screen else default_height
+    )
+    effective_minimum_width = min(minimum_width, selected_area.width)
+    effective_minimum_height = min(minimum_height, selected_area.height)
+    width = min(
+        selected_area.width,
+        max(effective_minimum_width, source_width),
+    )
+    height = min(
+        selected_area.height,
+        max(effective_minimum_height, source_height),
+    )
+
+    if intersects_screen:
+        x = min(
+            max(saved_rectangle.x, selected_area.left),
+            selected_area.right - width,
+        )
+        y = min(
+            max(saved_rectangle.y, selected_area.top),
+            selected_area.bottom - height,
+        )
+    else:
+        x = selected_area.left + (selected_area.width - width) // 2
+        y = selected_area.top + (selected_area.height - height) // 2
+
+    return WindowRectangle(x=x, y=y, width=width, height=height)
 
 
 def calculate_centered_position(
@@ -177,3 +325,91 @@ def _validate_dimensions(
             "画面端の余白が画面サイズに対して"
             "大きすぎます。"
         )
+
+
+def _validate_work_areas(
+    work_areas: tuple[ScreenWorkArea, ...],
+) -> None:
+    """作業領域が1件以上あり、正の大きさを持つことを検証する。"""
+    if not work_areas:
+        raise ValueError("モニターの作業領域が必要です。")
+    if any(area.width <= 0 or area.height <= 0 for area in work_areas):
+        raise ValueError("モニターの作業領域が不正です。")
+
+
+def _validate_main_window_dimensions(
+    rectangle: WindowRectangle,
+    default_width: int,
+    default_height: int,
+    minimum_width: int,
+    minimum_height: int,
+) -> None:
+    """メインウィンドウの補正に使用するサイズを検証する。"""
+    dimensions = (
+        rectangle.width,
+        rectangle.height,
+        default_width,
+        default_height,
+        minimum_width,
+        minimum_height,
+    )
+    if any(value <= 0 for value in dimensions):
+        raise ValueError("ウィンドウの幅と高さは1以上である必要があります。")
+
+
+def _get_windows_screen_work_areas() -> tuple[ScreenWorkArea, ...]:
+    """Windows APIで全モニターの作業領域を取得する。"""
+    class Rectangle(ctypes.Structure):
+        _fields_ = (
+            ("left", wintypes.LONG),
+            ("top", wintypes.LONG),
+            ("right", wintypes.LONG),
+            ("bottom", wintypes.LONG),
+        )
+
+    class MonitorInfo(ctypes.Structure):
+        _fields_ = (
+            ("cbSize", wintypes.DWORD),
+            ("rcMonitor", Rectangle),
+            ("rcWork", Rectangle),
+            ("dwFlags", wintypes.DWORD),
+        )
+
+    monitor_callback = ctypes.WINFUNCTYPE(
+        wintypes.BOOL,
+        wintypes.HMONITOR,
+        wintypes.HDC,
+        ctypes.POINTER(Rectangle),
+        wintypes.LPARAM,
+    )
+    user32 = ctypes.windll.user32
+    work_areas: list[ScreenWorkArea] = []
+
+    @monitor_callback
+    def collect_monitor(
+        monitor: Any,
+        device_context: Any,
+        monitor_rectangle: Any,
+        data: Any,
+    ) -> bool:
+        del device_context, monitor_rectangle, data
+        information = MonitorInfo()
+        information.cbSize = ctypes.sizeof(MonitorInfo)
+        if not user32.GetMonitorInfoW(monitor, ctypes.byref(information)):
+            return True
+        work = information.rcWork
+        work_areas.append(
+            ScreenWorkArea(
+                left=work.left,
+                top=work.top,
+                right=work.right,
+                bottom=work.bottom,
+                primary=bool(information.dwFlags & 1),
+            )
+        )
+        return True
+
+    if not user32.EnumDisplayMonitors(None, None, collect_monitor, 0):
+        raise OSError("モニター情報を取得できません。")
+
+    return tuple(work_areas)
