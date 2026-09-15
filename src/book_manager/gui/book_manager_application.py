@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 import traceback
+import logging
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import TYPE_CHECKING
 from PIL import Image, ImageTk
@@ -23,8 +24,18 @@ from book_manager.models.fetched_book_data import (
     FetchedBookData,
 )
 from book_manager.gui.window_positioning import (
+    ScreenWorkArea,
+    WindowRectangle,
+    calculate_safe_window_rectangle,
     center_window_on_parent,
+    get_screen_work_areas,
+    select_work_area,
 )
+from book_manager.config.window_state_store import (
+    WindowStateStore,
+    WindowStateStoreError,
+)
+from book_manager.models.window_state import WindowState
 from book_manager.services.application_settings_service import (
     ApplicationSettingsError,
     DirectoryOpenError,
@@ -54,6 +65,9 @@ if TYPE_CHECKING:
         ReadingHistoryService,
     )
     from collections.abc import Callable
+
+
+logger = logging.getLogger(__name__)
 
 
 class BookManagerApplication:
@@ -224,6 +238,7 @@ class BookManagerApplication:
             [str | None],
             None,
         ],
+        window_state_store: WindowStateStore | None = None,
     ) -> None:
         """GUIを初期化する。
 
@@ -239,6 +254,9 @@ class BookManagerApplication:
                 アプリケーション設定の参照・更新処理。
             on_google_books_api_key_changed:
                 Google Books APIキー変更時に呼び出す処理。
+            window_state_store:
+                メインウィンドウ状態の保存処理。未指定時は従来の
+                中央配置を使用し、状態を保存しない。
         """
         self._root = root
         self._service = service
@@ -252,6 +270,9 @@ class BookManagerApplication:
         self._on_google_books_api_key_changed = (
             on_google_books_api_key_changed
         )
+        self._window_state_store = window_state_store
+        self._last_normal_rectangle: WindowRectangle | None = None
+        self._window_state_save_suppressed = False
         self._selected_book_id: int | None = None
         self._cover_photo: tk.PhotoImage | None = None
         self._current_cover_image_url: str | None = None
@@ -396,6 +417,28 @@ class BookManagerApplication:
         """メインウィンドウを設定する。"""
         self._root.title(self.WINDOW_TITLE)
 
+        if getattr(self, "_window_state_store", None) is None:
+            self._configure_root_without_saved_state()
+        else:
+            self._configure_root_with_saved_state()
+
+        self._root.rowconfigure(
+            0,
+            weight=1,
+        )
+        self._root.columnconfigure(
+            0,
+            weight=1,
+        )
+
+        self._root.protocol(
+            "WM_DELETE_WINDOW",
+            self._on_exit,
+        )
+
+    def _configure_root_without_saved_state(self) -> None:
+        """互換性のため従来どおり主画面中央へ配置する。"""
+
         window_width = 1350
         window_height = 800
 
@@ -422,19 +465,96 @@ class BookManagerApplication:
             self.MINIMUM_HEIGHT,
         )
 
-        self._root.rowconfigure(
-            0,
-            weight=1,
+    def _configure_root_with_saved_state(self) -> None:
+        """保存状態を現在のモニター構成へ安全に復元する。"""
+        work_areas = get_screen_work_areas(self._root)
+        saved_state = self._window_state_store.load()
+        primary_area = self._get_primary_work_area(work_areas)
+
+        if saved_state is None:
+            width = min(1350, primary_area.width)
+            height = min(800, primary_area.height)
+            candidate = WindowRectangle(
+                x=primary_area.right + 1,
+                y=primary_area.bottom + 1,
+                width=width,
+                height=height,
+            )
+        else:
+            candidate = WindowRectangle(
+                x=saved_state.x,
+                y=saved_state.y,
+                width=saved_state.width,
+                height=saved_state.height,
+            )
+
+        rectangle = calculate_safe_window_rectangle(
+            candidate,
+            work_areas,
+            default_width=1350,
+            default_height=800,
+            minimum_width=self.MINIMUM_WIDTH,
+            minimum_height=self.MINIMUM_HEIGHT,
         )
-        self._root.columnconfigure(
-            0,
-            weight=1,
+        selected_area = select_work_area(candidate, work_areas)
+        self._last_normal_rectangle = rectangle
+        self._root.geometry(self._format_geometry(rectangle))
+        self._root.minsize(
+            min(self.MINIMUM_WIDTH, selected_area.width),
+            min(self.MINIMUM_HEIGHT, selected_area.height),
+        )
+        self._root.update_idletasks()
+
+        if saved_state is not None and saved_state.maximized:
+            self._root.state("zoomed")
+
+        self._root.bind(
+            "<Configure>",
+            self._on_root_configure,
+            add="+",
         )
 
-        self._root.protocol(
-            "WM_DELETE_WINDOW",
-            self._on_exit,
+    @staticmethod
+    def _get_primary_work_area(
+        work_areas: tuple[ScreenWorkArea, ...],
+    ) -> ScreenWorkArea:
+        """主モニター、または取得結果の先頭を返す。"""
+        return next(
+            (area for area in work_areas if area.primary),
+            work_areas[0],
         )
+
+    @staticmethod
+    def _format_geometry(rectangle: WindowRectangle) -> str:
+        """負の座標を含めてTkinter用geometry文字列を返す。"""
+        return (
+            f"{rectangle.width}x{rectangle.height}"
+            f"{rectangle.x:+d}{rectangle.y:+d}"
+        )
+
+    def _on_root_configure(self, event: tk.Event[tk.Misc]) -> None:
+        """通常表示時の最新矩形をメモリ上だけに保持する。"""
+        if event.widget is not self._root:
+            return
+        self._capture_normal_rectangle()
+
+    def _capture_normal_rectangle(self) -> None:
+        """通常表示中なら現在の矩形をメモリへ反映する。"""
+        try:
+            if self._root.state() != "normal":
+                return
+            width = self._root.winfo_width()
+            height = self._root.winfo_height()
+            if width <= 1 or height <= 1:
+                return
+            self._last_normal_rectangle = WindowRectangle(
+                x=self._root.winfo_x(),
+                y=self._root.winfo_y(),
+                width=width,
+                height=height,
+            )
+        except tk.TclError:
+            return
 
     def _create_widgets(self) -> None:
         """メインウィンドウ内のウィジェットを作成する。"""
@@ -5013,7 +5133,39 @@ class BookManagerApplication:
 
     def _on_exit(self) -> None:
         """アプリケーションを終了する。"""
+        self._save_window_state_on_exit()
         self._root.destroy()
+
+    def _save_window_state_on_exit(self) -> None:
+        """通常矩形と最大化状態を終了時に一度だけ保存する。"""
+        if (
+            getattr(self, "_window_state_store", None) is None
+            or getattr(self, "_window_state_save_suppressed", False)
+            or getattr(self, "_last_normal_rectangle", None) is None
+        ):
+            return
+
+        try:
+            root_state = self._root.state()
+            if root_state == "normal":
+                self._capture_normal_rectangle()
+            rectangle = self._last_normal_rectangle
+            if rectangle is None:
+                return
+            self._window_state_store.save(
+                WindowState(
+                    x=rectangle.x,
+                    y=rectangle.y,
+                    width=rectangle.width,
+                    height=rectangle.height,
+                    maximized=(root_state == "zoomed"),
+                )
+            )
+        except (WindowStateStoreError, tk.TclError, ValueError, TypeError):
+            logger.warning(
+                "ウィンドウ状態を保存できませんでした。",
+                exc_info=True,
+            )
 
     def _on_fetch_book_metadata(self) -> None:
         """ISBNから外部書誌情報を取得してフォームへ反映する。"""

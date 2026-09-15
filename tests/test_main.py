@@ -513,6 +513,7 @@ def test_run_application_injects_new_paths(
     google_books_client = Mock()
     user_environment_store = Mock()
     application_settings_service = Mock()
+    window_state_store = Mock()
 
     with (
         patch.object(
@@ -580,6 +581,11 @@ def test_run_application_injects_new_paths(
             return_value=application_settings_service,
         ) as settings_service_class,
         patch.object(
+            main_module,
+            "WindowStateStore",
+            return_value=window_state_store,
+        ) as window_state_store_class,
+        patch.object(
             main_module.tk,
             "Tk",
             return_value=root,
@@ -623,6 +629,12 @@ def test_run_application_injects_new_paths(
         application_settings_service,
         google_books_client.set_api_key,
     )
+    window_state_store_class.assert_called_once_with(
+        paths.window_state_path,
+    )
+    assert application_class.call_args.kwargs == {
+        "window_state_store": window_state_store,
+    }
     root.mainloop.assert_called_once_with()
     root.update_idletasks.assert_called_once_with()
     session.close.assert_called_once_with()

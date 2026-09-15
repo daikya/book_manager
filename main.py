@@ -28,6 +28,9 @@ from book_manager.config.resource_paths import (
 from book_manager.config.user_environment import (
     WindowsUserEnvironmentStore,
 )
+from book_manager.config.window_state_store import (
+    WindowStateStore,
+)
 from book_manager.config.version import (
     get_application_version,
 )
@@ -245,6 +248,9 @@ def _run_application(
                 active_backup_settings=backup_settings,
             )
         )
+        window_state_store = WindowStateStore(
+            application_paths.window_state_path,
+        )
         root = tk.Tk()
 
         _show_migration_result(
@@ -272,6 +278,7 @@ def _run_application(
             reading_history_service,
             application_settings_service,
             google_books_client.set_api_key,
+            window_state_store=window_state_store,
         )
         _apply_window_icon(root)
         root.update_idletasks()
