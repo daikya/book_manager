@@ -204,3 +204,87 @@ def test_exit_continues_when_save_fails() -> None:
 
     warning.assert_called_once()
     root.destroy.assert_called_once_with()
+
+
+def test_reset_window_state_does_nothing_when_cancelled() -> None:
+    """確認を取り消した場合は状態ファイルを削除しない。"""
+    application, _, store = _create_application()
+    dialog = Mock()
+
+    with patch(
+        "book_manager.gui.book_manager_application.messagebox.askyesno",
+        return_value=False,
+    ):
+        application._reset_window_state(dialog)
+
+    store.delete.assert_not_called()
+    assert application._window_state_save_suppressed is False
+
+
+def test_reset_window_state_deletes_file_and_suppresses_exit_save() -> None:
+    """削除成功時は同じセッションの終了保存を抑止する。"""
+    application, _, store = _create_application()
+    dialog = Mock()
+
+    with (
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.askyesno",
+            return_value=True,
+        ),
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.showinfo",
+        ) as showinfo,
+    ):
+        application._reset_window_state(dialog)
+
+    store.delete.assert_called_once_with()
+    assert application._window_state_save_suppressed is True
+    showinfo.assert_called_once()
+    assert showinfo.call_args.kwargs["parent"] is dialog
+
+
+def test_reset_window_state_reports_delete_failure_without_suppression() -> None:
+    """削除失敗時はエラーを表示し、終了保存を抑止しない。"""
+    application, _, store = _create_application()
+    dialog = Mock()
+    store.delete.side_effect = WindowStateStoreError("delete failed")
+
+    with (
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.askyesno",
+            return_value=True,
+        ),
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.showerror",
+        ) as showerror,
+        patch(
+            "book_manager.gui.book_manager_application.logger.warning",
+        ) as warning,
+    ):
+        application._reset_window_state(dialog)
+
+    assert application._window_state_save_suppressed is False
+    showerror.assert_called_once()
+    assert showerror.call_args.kwargs["parent"] is dialog
+    warning.assert_called_once()
+
+
+def test_reset_window_state_reports_unavailable_store() -> None:
+    """Storeがない場合はエラーを表示する。"""
+    application, _, _ = _create_application()
+    application._window_state_store = None
+    dialog = Mock()
+
+    with (
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.askyesno",
+            return_value=True,
+        ),
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.showerror",
+        ) as showerror,
+    ):
+        application._reset_window_state(dialog)
+
+    assert application._window_state_save_suppressed is False
+    showerror.assert_called_once()

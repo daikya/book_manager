@@ -3880,6 +3880,27 @@ class BookManagerApplication:
                 pady=3,
             )
 
+        ttk.Label(
+            information_frame,
+            text="ウィンドウ配置",
+        ).grid(
+            row=len(information_rows),
+            column=0,
+            sticky="w",
+            padx=(0, 8),
+            pady=3,
+        )
+        ttk.Button(
+            information_frame,
+            text="初期状態に戻す",
+            command=lambda: self._reset_window_state(dialog),
+        ).grid(
+            row=len(information_rows),
+            column=1,
+            sticky="w",
+            pady=3,
+        )
+
         button_frame = ttk.Frame(dialog)
         button_frame.grid(
             row=4,
@@ -4112,6 +4133,53 @@ class BookManagerApplication:
             row=row,
             column=2,
             pady=3,
+        )
+
+    def _reset_window_state(self, dialog: tk.Toplevel) -> None:
+        """保存済み配置を削除し、このセッションの終了保存を抑止する。"""
+        confirmed = messagebox.askyesno(
+            "ウィンドウ配置の初期化",
+            (
+                "保存されているメインウィンドウの位置とサイズを"
+                "初期状態に戻します。\n\n"
+                "変更は次回起動時から適用されます。続行しますか？"
+            ),
+            parent=dialog,
+        )
+        if not confirmed:
+            return
+
+        store = getattr(self, "_window_state_store", None)
+        if store is None:
+            messagebox.showerror(
+                "ウィンドウ配置の初期化エラー",
+                "ウィンドウ配置の保存処理を利用できません。",
+                parent=dialog,
+            )
+            return
+
+        try:
+            store.delete()
+        except WindowStateStoreError:
+            logger.warning(
+                "ウィンドウ状態を削除できませんでした。",
+                exc_info=True,
+            )
+            messagebox.showerror(
+                "ウィンドウ配置の初期化エラー",
+                "保存されているウィンドウ配置を削除できませんでした。",
+                parent=dialog,
+            )
+            return
+
+        self._window_state_save_suppressed = True
+        messagebox.showinfo(
+            "ウィンドウ配置の初期化",
+            (
+                "ウィンドウ配置を初期状態へ戻しました。\n\n"
+                "次回起動時から適用されます。"
+            ),
+            parent=dialog,
         )
 
     def _save_google_books_api_key(
