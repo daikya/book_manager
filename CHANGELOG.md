@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-09-15
+
 ### Added
 
 - メインウィンドウの通常位置・サイズ・最大化状態を`window_state.json`へ保存するModelとStore
