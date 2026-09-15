@@ -13,6 +13,7 @@ from book_manager.config.paths import (
     DATABASE_FILE_NAME,
     LOG_FILE_NAME,
     LOCAL_APP_DATA_ENVIRONMENT_VARIABLE,
+    WINDOW_STATE_FILE_NAME,
     ApplicationPaths,
     create_application_paths,
     ensure_application_directories,
@@ -227,6 +228,7 @@ def test_create_application_paths_returns_absolute_paths(
     )
 
     assert paths.backup_settings_path.is_absolute()
+    assert paths.window_state_path.is_absolute()
 
 
 def test_backup_settings_path_uses_user_data_root(
@@ -239,6 +241,18 @@ def test_backup_settings_path_uses_user_data_root(
         tmp_path / "application" / "backup_settings.json"
     )
     assert not paths.backup_settings_path.exists()
+
+
+def test_window_state_path_uses_user_data_root(
+    tmp_path: Path,
+) -> None:
+    """状態はインストール先でなく利用者データ領域に置く。"""
+    paths = create_application_paths(tmp_path / "application")
+
+    assert paths.window_state_path == (
+        tmp_path / "application" / WINDOW_STATE_FILE_NAME
+    )
+    assert not paths.window_state_path.exists()
 
 
 def test_create_application_paths_does_not_create_directories(

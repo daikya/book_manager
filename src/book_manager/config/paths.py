@@ -13,6 +13,7 @@ LOCAL_APP_DATA_ENVIRONMENT_VARIABLE = "LOCALAPPDATA"
 DATABASE_FILE_NAME = "books.db"
 LOG_FILE_NAME = "book_manager.log"
 BACKUP_SETTINGS_FILE_NAME = "backup_settings.json"
+WINDOW_STATE_FILE_NAME = "window_state.json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +33,11 @@ class ApplicationPaths:
     def backup_settings_path(self) -> Path:
         """利用者データ領域に保存するバックアップ設定ファイル。"""
         return self.root_directory / BACKUP_SETTINGS_FILE_NAME
+
+    @property
+    def window_state_path(self) -> Path:
+        """利用者データ領域に保存するウィンドウ状態ファイル。"""
+        return self.root_directory / WINDOW_STATE_FILE_NAME
 
 
 def create_application_paths(
