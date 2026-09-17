@@ -14,6 +14,7 @@ DATABASE_FILE_NAME = "books.db"
 LOG_FILE_NAME = "book_manager.log"
 BACKUP_SETTINGS_FILE_NAME = "backup_settings.json"
 WINDOW_STATE_FILE_NAME = "window_state.json"
+LIST_VIEW_STATE_FILE_NAME = "list_view_state.json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +39,11 @@ class ApplicationPaths:
     def window_state_path(self) -> Path:
         """利用者データ領域に保存するウィンドウ状態ファイル。"""
         return self.root_directory / WINDOW_STATE_FILE_NAME
+
+    @property
+    def list_view_state_path(self) -> Path:
+        """利用者データ領域に保存する一覧表示状態ファイル。"""
+        return self.root_directory / LIST_VIEW_STATE_FILE_NAME
 
 
 def create_application_paths(

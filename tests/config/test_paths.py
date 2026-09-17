@@ -11,6 +11,7 @@ from book_manager.config.paths import (
     APPLICATION_DIRECTORY_NAME,
     APPLICATION_HOME_ENVIRONMENT_VARIABLE,
     DATABASE_FILE_NAME,
+    LIST_VIEW_STATE_FILE_NAME,
     LOG_FILE_NAME,
     LOCAL_APP_DATA_ENVIRONMENT_VARIABLE,
     WINDOW_STATE_FILE_NAME,
@@ -229,6 +230,7 @@ def test_create_application_paths_returns_absolute_paths(
 
     assert paths.backup_settings_path.is_absolute()
     assert paths.window_state_path.is_absolute()
+    assert paths.list_view_state_path.is_absolute()
 
 
 def test_backup_settings_path_uses_user_data_root(
@@ -253,6 +255,57 @@ def test_window_state_path_uses_user_data_root(
         tmp_path / "application" / WINDOW_STATE_FILE_NAME
     )
     assert not paths.window_state_path.exists()
+
+
+def test_list_view_state_path_uses_user_data_root(
+    tmp_path: Path,
+) -> None:
+    """一覧表示状態を利用者データ領域に置く。"""
+    paths = create_application_paths(tmp_path / "application")
+
+    assert paths.list_view_state_path == (
+        tmp_path / "application" / LIST_VIEW_STATE_FILE_NAME
+    )
+    assert not paths.list_view_state_path.exists()
+
+
+def test_list_view_state_path_uses_book_manager_home(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """BOOK_MANAGER_HOME直下に一覧表示状態を置く。"""
+    configured_home = tmp_path / "configured"
+    monkeypatch.setenv(
+        APPLICATION_HOME_ENVIRONMENT_VARIABLE,
+        str(configured_home),
+    )
+
+    paths = create_application_paths()
+
+    assert paths.list_view_state_path == (
+        configured_home / LIST_VIEW_STATE_FILE_NAME
+    )
+
+
+def test_list_view_state_path_uses_local_app_data(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """既定の利用者データ領域に一覧表示状態を置く。"""
+    clear_path_environment(monkeypatch)
+    local_app_data = tmp_path / "local"
+    monkeypatch.setenv(
+        LOCAL_APP_DATA_ENVIRONMENT_VARIABLE,
+        str(local_app_data),
+    )
+
+    paths = create_application_paths()
+
+    assert paths.list_view_state_path == (
+        local_app_data
+        / APPLICATION_DIRECTORY_NAME
+        / LIST_VIEW_STATE_FILE_NAME
+    )
 
 
 def test_create_application_paths_does_not_create_directories(
