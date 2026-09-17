@@ -35,6 +35,10 @@ from book_manager.config.window_state_store import (
     WindowStateStore,
     WindowStateStoreError,
 )
+from book_manager.config.list_view_state_store import (
+    ListViewStateStore,
+)
+from book_manager.models.list_view_state import ListViewState
 from book_manager.models.window_state import WindowState
 from book_manager.services.application_settings_service import (
     ApplicationSettingsError,
@@ -91,6 +95,17 @@ class BookManagerApplication:
 
     TREE_SORT_TYPE_MAP = {
         "id": "登録順",
+        "title": "書籍名",
+        "author": "著者名",
+        "publisher": "出版社",
+        "completion_month": "読了年月",
+        "reading_status": "読書状態",
+        "is_favorite": "お気に入り",
+        "rating": "評価",
+    }
+
+    SORT_KEY_TYPE_MAP = {
+        "registered": "登録順",
         "title": "書籍名",
         "author": "著者名",
         "publisher": "出版社",
@@ -239,6 +254,7 @@ class BookManagerApplication:
             None,
         ],
         window_state_store: WindowStateStore | None = None,
+        list_view_state_store: ListViewStateStore | None = None,
     ) -> None:
         """GUIを初期化する。
 
@@ -257,6 +273,9 @@ class BookManagerApplication:
             window_state_store:
                 メインウィンドウ状態の保存処理。未指定時は従来の
                 中央配置を使用し、状態を保存しない。
+            list_view_state_store:
+                一覧表示状態の保存処理。未指定時は既定の列幅と
+                並び順を使用する。
         """
         self._root = root
         self._service = service
@@ -271,6 +290,7 @@ class BookManagerApplication:
             on_google_books_api_key_changed
         )
         self._window_state_store = window_state_store
+        self._list_view_state_store = list_view_state_store
         self._last_normal_rectangle: WindowRectangle | None = None
         self._window_state_save_suppressed = False
         self._selected_book_id: int | None = None
@@ -368,6 +388,7 @@ class BookManagerApplication:
 
         self._configure_root()
         self._create_widgets()
+        self._restore_list_view_state()
         self._refresh_tag_options()
         self._load_all_books()
 
@@ -1253,6 +1274,54 @@ class BookManagerApplication:
                 anchor=definition["anchor"],
                 stretch=definition["stretch"],
             )
+
+    def _restore_list_view_state(self) -> None:
+        """保存された列幅と並び順を一覧へ反映する。"""
+        store = getattr(
+            self,
+            "_list_view_state_store",
+            None,
+        )
+        if store is None:
+            return
+
+        state = store.load()
+        if state is None:
+            return
+
+        for column_id in ("#0", *self.TREE_COLUMNS):
+            saved_width = state.column_widths.get(
+                column_id,
+            )
+            if saved_width is None:
+                continue
+
+            minimum_width = int(
+                self._book_tree.column(
+                    column_id,
+                    "minwidth",
+                )
+            )
+            restored_width = max(
+                minimum_width,
+                min(
+                    saved_width,
+                    ListViewState.MAXIMUM_COLUMN_WIDTH,
+                ),
+            )
+            self._book_tree.column(
+                column_id,
+                width=restored_width,
+            )
+
+        self._sort_type_var.set(
+            self.SORT_KEY_TYPE_MAP[state.sort_by]
+        )
+        self._sort_direction_var.set(
+            "descending"
+            if state.descending
+            else "ascending"
+        )
 
     def _create_form_frame(
         self,
