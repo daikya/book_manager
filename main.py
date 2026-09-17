@@ -17,6 +17,9 @@ from book_manager.config.logging_config import (
     configure_file_logging,
     get_application_logger,
 )
+from book_manager.config.list_view_state_store import (
+    ListViewStateStore,
+)
 from book_manager.config.paths import (
     ApplicationPaths,
     create_application_paths,
@@ -251,6 +254,9 @@ def _run_application(
         window_state_store = WindowStateStore(
             application_paths.window_state_path,
         )
+        list_view_state_store = ListViewStateStore(
+            application_paths.list_view_state_path,
+        )
         root = tk.Tk()
 
         _show_migration_result(
@@ -279,6 +285,7 @@ def _run_application(
             application_settings_service,
             google_books_client.set_api_key,
             window_state_store=window_state_store,
+            list_view_state_store=list_view_state_store,
         )
         _apply_window_icon(root)
         root.update_idletasks()

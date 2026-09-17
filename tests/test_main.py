@@ -632,8 +632,25 @@ def test_run_application_injects_new_paths(
     window_state_store_class.assert_called_once_with(
         paths.window_state_path,
     )
-    assert application_class.call_args.kwargs == {
+    application_keyword_arguments = (
+        application_class.call_args.kwargs
+    )
+    assert application_keyword_arguments[
+        "window_state_store"
+    ] is window_state_store
+    list_view_state_store = application_keyword_arguments[
+        "list_view_state_store"
+    ]
+    assert isinstance(
+        list_view_state_store,
+        main_module.ListViewStateStore,
+    )
+    assert list_view_state_store.path == (
+        paths.list_view_state_path
+    )
+    assert application_keyword_arguments == {
         "window_state_store": window_state_store,
+        "list_view_state_store": list_view_state_store,
     }
     root.mainloop.assert_called_once_with()
     root.update_idletasks.assert_called_once_with()
