@@ -499,3 +499,154 @@ def test_exit_continues_when_tree_width_cannot_be_read() -> None:
     warning.assert_called_once()
     application._save_window_state_on_exit.assert_called_once_with()
     root.destroy.assert_called_once_with()
+
+
+def _create_application_for_reset() -> tuple[
+    BookManagerApplication,
+    Mock,
+]:
+    """初期化処理の試験に必要な最小構成を作る。"""
+    application = BookManagerApplication.__new__(
+        BookManagerApplication
+    )
+    store = Mock()
+    application._list_view_state_store = store
+    application._list_view_state_save_suppressed = False
+    application._book_tree = Mock()
+    application._sort_type_var = Mock()
+    application._sort_direction_var = Mock()
+    return application, store
+
+
+def test_reset_list_view_state_does_nothing_when_cancelled() -> None:
+    """確認を取り消した場合は一覧表示状態を削除しない。"""
+    application, store = _create_application_for_reset()
+    dialog = Mock()
+
+    with patch(
+        "book_manager.gui.book_manager_application.messagebox.askyesno",
+        return_value=False,
+    ):
+        application._reset_list_view_state(dialog)
+
+    store.delete.assert_not_called()
+    assert application._list_view_state_save_suppressed is False
+
+
+def test_reset_list_view_state_deletes_file_and_suppresses_save() -> None:
+    """削除成功時は同じセッションの終了保存を抑止する。"""
+    application, store = _create_application_for_reset()
+    dialog = Mock()
+
+    with (
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.askyesno",
+            return_value=True,
+        ),
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.showinfo",
+        ) as showinfo,
+    ):
+        application._reset_list_view_state(dialog)
+
+    store.delete.assert_called_once_with()
+    assert application._list_view_state_save_suppressed is True
+    showinfo.assert_called_once()
+    assert showinfo.call_args.kwargs["parent"] is dialog
+
+
+def test_reset_list_view_state_keeps_current_view_unchanged() -> None:
+    """初期化しても現在表示中の列幅と並び順は変更しない。"""
+    application, _ = _create_application_for_reset()
+    dialog = Mock()
+
+    with (
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.askyesno",
+            return_value=True,
+        ),
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.showinfo",
+        ),
+    ):
+        application._reset_list_view_state(dialog)
+
+    application._book_tree.column.assert_not_called()
+    application._sort_type_var.set.assert_not_called()
+    application._sort_direction_var.set.assert_not_called()
+
+
+def test_reset_list_view_state_reports_delete_failure() -> None:
+    """削除失敗時はエラーを表示し、保存を抑止しない。"""
+    application, store = _create_application_for_reset()
+    dialog = Mock()
+    store.delete.side_effect = ListViewStateStoreError(
+        "delete failed"
+    )
+
+    with (
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.askyesno",
+            return_value=True,
+        ),
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.showerror",
+        ) as showerror,
+        patch(
+            "book_manager.gui.book_manager_application.logger.warning",
+        ) as warning,
+    ):
+        application._reset_list_view_state(dialog)
+
+    assert application._list_view_state_save_suppressed is False
+    showerror.assert_called_once()
+    assert showerror.call_args.kwargs["parent"] is dialog
+    warning.assert_called_once()
+
+
+def test_reset_list_view_state_reports_unavailable_store() -> None:
+    """Storeがない場合はエラーを表示する。"""
+    application, _ = _create_application_for_reset()
+    application._list_view_state_store = None
+    dialog = Mock()
+
+    with (
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.askyesno",
+            return_value=True,
+        ),
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.showerror",
+        ) as showerror,
+    ):
+        application._reset_list_view_state(dialog)
+
+    assert application._list_view_state_save_suppressed is False
+    showerror.assert_called_once()
+    assert showerror.call_args.kwargs["parent"] is dialog
+
+
+def test_reset_list_view_state_prevents_recreation_on_exit() -> None:
+    """初期化したセッションの終了時に再作成しない。"""
+    application, store = _create_application_for_reset()
+    application._root = Mock()
+    application._save_window_state_on_exit = Mock()
+    dialog = Mock()
+
+    with (
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.askyesno",
+            return_value=True,
+        ),
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.showinfo",
+        ),
+    ):
+        application._reset_list_view_state(dialog)
+
+    application._on_exit()
+
+    store.delete.assert_called_once_with()
+    store.save.assert_not_called()
+    application._save_window_state_on_exit.assert_called_once_with()
+    application._root.destroy.assert_called_once_with()

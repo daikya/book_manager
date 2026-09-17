@@ -3972,6 +3972,27 @@ class BookManagerApplication:
             pady=3,
         )
 
+        ttk.Label(
+            information_frame,
+            text="一覧表示",
+        ).grid(
+            row=len(information_rows) + 1,
+            column=0,
+            sticky="w",
+            padx=(0, 8),
+            pady=3,
+        )
+        ttk.Button(
+            information_frame,
+            text="初期状態に戻す",
+            command=lambda: self._reset_list_view_state(dialog),
+        ).grid(
+            row=len(information_rows) + 1,
+            column=1,
+            sticky="w",
+            pady=3,
+        )
+
         button_frame = ttk.Frame(dialog)
         button_frame.grid(
             row=4,
@@ -4248,6 +4269,57 @@ class BookManagerApplication:
             "ウィンドウ配置の初期化",
             (
                 "ウィンドウ配置を初期状態へ戻しました。\n\n"
+                "次回起動時から適用されます。"
+            ),
+            parent=dialog,
+        )
+
+    def _reset_list_view_state(self, dialog: tk.Toplevel) -> None:
+        """保存済み一覧状態を削除し、終了時の再保存を抑止する。"""
+        confirmed = messagebox.askyesno(
+            "一覧表示の初期化",
+            (
+                "保存されている一覧の列幅と並び順を"
+                "初期状態に戻します。\n\n"
+                "変更は次回起動時から適用されます。続行しますか？"
+            ),
+            parent=dialog,
+        )
+        if not confirmed:
+            return
+
+        store = getattr(
+            self,
+            "_list_view_state_store",
+            None,
+        )
+        if store is None:
+            messagebox.showerror(
+                "一覧表示の初期化エラー",
+                "一覧表示状態の保存処理を利用できません。",
+                parent=dialog,
+            )
+            return
+
+        try:
+            store.delete()
+        except ListViewStateStoreError:
+            logger.warning(
+                "一覧表示状態を削除できませんでした。",
+                exc_info=True,
+            )
+            messagebox.showerror(
+                "一覧表示の初期化エラー",
+                "保存されている一覧表示状態を削除できませんでした。",
+                parent=dialog,
+            )
+            return
+
+        self._list_view_state_save_suppressed = True
+        messagebox.showinfo(
+            "一覧表示の初期化",
+            (
+                "一覧表示を初期状態へ戻しました。\n\n"
                 "次回起動時から適用されます。"
             ),
             parent=dialog,
