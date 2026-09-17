@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import tkinter as tk
 from unittest.mock import Mock, call, patch
 
 import pytest
 
+from book_manager.config.list_view_state_store import (
+    ListViewStateStoreError,
+)
 from book_manager.gui.book_manager_application import BookManagerApplication
 from book_manager.models.list_view_state import ListViewState
 
@@ -320,3 +324,178 @@ def test_init_restores_state_before_first_book_load() -> None:
         "refresh_tags",
         "load_books",
     ]
+
+
+def _create_application_for_save() -> tuple[
+    BookManagerApplication,
+    Mock,
+    Mock,
+    dict[str, int],
+]:
+    """終了保存の試験に必要な最小構成を作る。"""
+    application = BookManagerApplication.__new__(
+        BookManagerApplication
+    )
+    root = Mock()
+    store = Mock()
+    column_widths = {
+        column_id: 100 + index
+        for index, column_id in enumerate(
+            ("#0", *BookManagerApplication.TREE_COLUMNS)
+        )
+    }
+    tree = Mock()
+
+    def column(
+        column_id: str,
+        option: str | None = None,
+        **kwargs: object,
+    ) -> object:
+        del kwargs
+        if option == "width":
+            return column_widths[column_id]
+        return {}
+
+    tree.column.side_effect = column
+    application._root = root
+    application._list_view_state_store = store
+    application._list_view_state_save_suppressed = False
+    application._book_tree = tree
+    application._sort_type_var = Mock()
+    application._sort_type_var.get.return_value = "著者名"
+    application._sort_direction_var = Mock()
+    application._sort_direction_var.get.return_value = "ascending"
+    application._save_window_state_on_exit = Mock()
+    return application, root, store, column_widths
+
+
+def test_exit_saves_current_list_view_state_once() -> None:
+    """終了時に全列幅と並び順を一度保存する。"""
+    application, root, store, column_widths = (
+        _create_application_for_save()
+    )
+
+    application._on_exit()
+
+    store.save.assert_called_once_with(
+        ListViewState(
+            column_widths=column_widths,
+            sort_by="author",
+            descending=False,
+        )
+    )
+    application._save_window_state_on_exit.assert_called_once_with()
+    root.destroy.assert_called_once_with()
+
+
+def test_save_reads_every_current_tree_column_width() -> None:
+    """表紙列を含む現在の全列幅をTreeviewから取得する。"""
+    application, _, _, _ = _create_application_for_save()
+
+    application._save_list_view_state_on_exit()
+
+    assert application._book_tree.column.call_args_list == [
+        call(column_id, "width")
+        for column_id in (
+            "#0",
+            *BookManagerApplication.TREE_COLUMNS,
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    (
+        "sort_label",
+        "direction",
+        "expected_sort_by",
+        "expected_descending",
+    ),
+    [
+        ("登録順", "descending", "registered", True),
+        ("書籍名", "ascending", "title", False),
+        ("評価", "descending", "rating", True),
+    ],
+)
+def test_save_converts_current_sort_settings(
+    sort_label: str,
+    direction: str,
+    expected_sort_by: str,
+    expected_descending: bool,
+) -> None:
+    """現在の画面表示を保存用の並び順へ変換する。"""
+    application, _, store, column_widths = (
+        _create_application_for_save()
+    )
+    application._sort_type_var.get.return_value = sort_label
+    application._sort_direction_var.get.return_value = direction
+
+    application._save_list_view_state_on_exit()
+
+    store.save.assert_called_once_with(
+        ListViewState(
+            column_widths=column_widths,
+            sort_by=expected_sort_by,
+            descending=expected_descending,
+        )
+    )
+
+
+def test_exit_does_not_save_list_state_without_store() -> None:
+    """Storeがない場合もウィンドウ保存と終了を継続する。"""
+    application, root, store, _ = _create_application_for_save()
+    application._list_view_state_store = None
+
+    application._on_exit()
+
+    store.save.assert_not_called()
+    application._book_tree.column.assert_not_called()
+    application._save_window_state_on_exit.assert_called_once_with()
+    root.destroy.assert_called_once_with()
+
+
+def test_exit_does_not_save_list_state_when_suppressed() -> None:
+    """初期化後の保存抑止中は状態ファイルを再作成しない。"""
+    application, root, store, _ = _create_application_for_save()
+    application._list_view_state_save_suppressed = True
+
+    application._on_exit()
+
+    store.save.assert_not_called()
+    application._book_tree.column.assert_not_called()
+    application._save_window_state_on_exit.assert_called_once_with()
+    root.destroy.assert_called_once_with()
+
+
+def test_exit_continues_when_list_state_save_fails() -> None:
+    """一覧状態の保存失敗時も終了処理を継続する。"""
+    application, root, store, _ = _create_application_for_save()
+    store.save.side_effect = ListViewStateStoreError(
+        "save failed"
+    )
+
+    with patch(
+        "book_manager.gui.book_manager_application.logger.warning"
+    ) as warning:
+        application._on_exit()
+
+    warning.assert_called_once()
+    application._save_window_state_on_exit.assert_called_once_with()
+    root.destroy.assert_called_once_with()
+
+
+def test_exit_continues_when_tree_width_cannot_be_read() -> None:
+    """列幅取得失敗時もウィンドウ保存と終了を継続する。"""
+    application, root, store, _ = _create_application_for_save()
+    application._book_tree.column.side_effect = tk.TclError(
+        "tree unavailable"
+    )
+
+    with patch(
+        "book_manager.gui.book_manager_application.logger.warning"
+    ) as warning:
+        application._on_exit()
+
+    store.save.assert_not_called()
+    warning.assert_called_once()
+    application._save_window_state_on_exit.assert_called_once_with()
+    root.destroy.assert_called_once_with()

@@ -37,6 +37,7 @@ from book_manager.config.window_state_store import (
 )
 from book_manager.config.list_view_state_store import (
     ListViewStateStore,
+    ListViewStateStoreError,
 )
 from book_manager.models.list_view_state import ListViewState
 from book_manager.models.window_state import WindowState
@@ -291,6 +292,7 @@ class BookManagerApplication:
         )
         self._window_state_store = window_state_store
         self._list_view_state_store = list_view_state_store
+        self._list_view_state_save_suppressed = False
         self._last_normal_rectangle: WindowRectangle | None = None
         self._window_state_save_suppressed = False
         self._selected_book_id: int | None = None
@@ -5270,8 +5272,60 @@ class BookManagerApplication:
 
     def _on_exit(self) -> None:
         """アプリケーションを終了する。"""
+        self._save_list_view_state_on_exit()
         self._save_window_state_on_exit()
         self._root.destroy()
+
+    def _save_list_view_state_on_exit(self) -> None:
+        """現在の列幅と並び順を終了時に一度だけ保存する。"""
+        store = getattr(
+            self,
+            "_list_view_state_store",
+            None,
+        )
+        if (
+            store is None
+            or getattr(
+                self,
+                "_list_view_state_save_suppressed",
+                False,
+            )
+        ):
+            return
+
+        try:
+            column_widths = {
+                column_id: int(
+                    self._book_tree.column(
+                        column_id,
+                        "width",
+                    )
+                )
+                for column_id in (
+                    "#0",
+                    *self.TREE_COLUMNS,
+                )
+            }
+            sort_by, descending = (
+                self._get_sort_settings()
+            )
+            store.save(
+                ListViewState(
+                    column_widths=column_widths,
+                    sort_by=sort_by,
+                    descending=descending,
+                )
+            )
+        except (
+            ListViewStateStoreError,
+            tk.TclError,
+            TypeError,
+            ValueError,
+        ):
+            logger.warning(
+                "一覧表示状態を保存できませんでした。",
+                exc_info=True,
+            )
 
     def _save_window_state_on_exit(self) -> None:
         """通常矩形と最大化状態を終了時に一度だけ保存する。"""
