@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-09-18
+
 ### Added
 
 - 書籍一覧の全13列の幅、並べ替え列および昇順・降順を`list_view_state.json`へ保存するModelとStore
