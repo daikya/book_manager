@@ -21,6 +21,12 @@ from book_manager.models.application_settings import (
 )
 from book_manager.models.backup_settings import BackupSettings
 from book_manager.services.backup_service import BackupService
+from book_manager.services.cover_image_service import (
+    CoverCacheClearResult,
+    CoverCacheError,
+    CoverCacheStatus,
+    CoverImageService,
+)
 
 
 GOOGLE_BOOKS_API_KEY_ENVIRONMENT_VARIABLE = (
@@ -52,6 +58,10 @@ class BackupSettingsError(ApplicationSettingsError):
     """バックアップ設定・作成処理が失敗した場合。"""
 
 
+class CoverCacheSettingsError(ApplicationSettingsError):
+    """表紙画像キャッシュの確認・削除処理が失敗した場合。"""
+
+
 class ApplicationSettingsService:
     """設定画面で使用する設定処理を提供する。"""
 
@@ -66,6 +76,7 @@ class ApplicationSettingsService:
         backup_service: BackupService | None = None,
         backup_settings_store: BackupSettingsStore | None = None,
         active_backup_settings: BackupSettings | None = None,
+        cover_image_service: CoverImageService | None = None,
     ) -> None:
         """設定表示値と外部操作を受け取る。"""
         self._application_paths = application_paths
@@ -88,6 +99,34 @@ class ApplicationSettingsService:
             else BackupSettingsStore(application_paths.backup_settings_path)
         )
         self._active_backup_settings = active_backup_settings
+        self._cover_image_service = cover_image_service
+
+    def get_cover_cache_status(self) -> CoverCacheStatus:
+        """表紙画像キャッシュの件数と合計サイズを返す。"""
+        try:
+            return self._require_cover_image_service().get_cache_status()
+        except CoverCacheError as error:
+            raise CoverCacheSettingsError(
+                "表紙画像キャッシュの状態を確認できません。"
+            ) from error
+
+    def clear_cover_cache(self) -> CoverCacheClearResult:
+        """表紙画像キャッシュを削除して結果を返す。"""
+        try:
+            return self._require_cover_image_service().clear_cache()
+        except CoverCacheError as error:
+            raise CoverCacheSettingsError(
+                "表紙画像キャッシュを削除できません。"
+            ) from error
+
+    def _require_cover_image_service(self) -> CoverImageService:
+        """設定済みの表紙画像取得Serviceを返す。"""
+        if self._cover_image_service is None:
+            raise CoverCacheSettingsError(
+                "表紙画像キャッシュ管理を利用できません。"
+            )
+
+        return self._cover_image_service
 
     def get_backup_settings_snapshot(self) -> BackupSettingsSnapshot:
         """保存値・起動時有効値と管理対象バックアップの存在情報を返す。"""

@@ -22,10 +22,16 @@ from book_manager.services.application_settings_service import (
     ApplicationSettingsService,
     ApplicationSettingsValidationError,
     BackupSettingsError,
+    CoverCacheSettingsError,
     DirectoryOpenError,
     UserEnvironmentUpdateError,
 )
 from book_manager.services.backup_service import BackupStatus
+from book_manager.services.cover_image_service import (
+    CoverCacheClearResult,
+    CoverCacheError,
+    CoverCacheStatus,
+)
 
 
 def create_application_paths(tmp_path: Path) -> ApplicationPaths:
@@ -53,6 +59,7 @@ def create_service(
     environment: dict[str, str] | None = None,
     user_environment_store: MagicMock | None = None,
     directory_opener: MagicMock | None = None,
+    cover_image_service: MagicMock | None = None,
 ) -> tuple[
     ApplicationSettingsService,
     dict[str, str],
@@ -83,6 +90,7 @@ def create_service(
         user_environment_store=actual_store,
         environment=actual_environment,
         directory_opener=actual_opener,
+        cover_image_service=cover_image_service,
     )
 
     return (
@@ -92,6 +100,104 @@ def create_service(
         actual_opener,
     )
 
+
+def test_get_cover_cache_status_delegates_to_cover_service(
+    tmp_path: Path,
+) -> None:
+    """表紙キャッシュ状態取得を専用Serviceへ委譲する。"""
+    cover_service = MagicMock()
+    expected = CoverCacheStatus(
+        file_count=3,
+        total_size_bytes=2048,
+    )
+    cover_service.get_cache_status.return_value = expected
+    service, _, _, _ = create_service(
+        tmp_path,
+        cover_image_service=cover_service,
+    )
+
+    assert service.get_cover_cache_status() == expected
+    cover_service.get_cache_status.assert_called_once_with()
+
+
+def test_clear_cover_cache_delegates_to_cover_service(
+    tmp_path: Path,
+) -> None:
+    """表紙キャッシュ削除を専用Serviceへ委譲する。"""
+    cover_service = MagicMock()
+    expected = CoverCacheClearResult(
+        deleted_count=2,
+        deleted_size_bytes=1024,
+        failed_count=1,
+        remaining_status=CoverCacheStatus(1, 512),
+    )
+    cover_service.clear_cache.return_value = expected
+    service, _, _, _ = create_service(
+        tmp_path,
+        cover_image_service=cover_service,
+    )
+
+    assert service.clear_cover_cache() == expected
+    cover_service.clear_cache.assert_called_once_with()
+
+
+def test_cover_cache_operations_require_cover_service(
+    tmp_path: Path,
+) -> None:
+    """専用Service未設定時はキャッシュ管理を拒否する。"""
+    service, _, _, _ = create_service(tmp_path)
+
+    with pytest.raises(
+        CoverCacheSettingsError,
+        match="利用できません",
+    ):
+        service.get_cover_cache_status()
+
+    with pytest.raises(
+        CoverCacheSettingsError,
+        match="利用できません",
+    ):
+        service.clear_cover_cache()
+
+
+def test_get_cover_cache_status_wraps_service_error(
+    tmp_path: Path,
+) -> None:
+    """状態取得失敗を設定画面用の例外へ変換する。"""
+    cover_service = MagicMock()
+    cover_service.get_cache_status.side_effect = CoverCacheError(
+        "read failed"
+    )
+    service, _, _, _ = create_service(
+        tmp_path,
+        cover_image_service=cover_service,
+    )
+
+    with pytest.raises(
+        CoverCacheSettingsError,
+        match="状態を確認できません",
+    ):
+        service.get_cover_cache_status()
+
+
+def test_clear_cover_cache_wraps_service_error(
+    tmp_path: Path,
+) -> None:
+    """削除失敗を設定画面用の例外へ変換する。"""
+    cover_service = MagicMock()
+    cover_service.clear_cache.side_effect = CoverCacheError(
+        "delete failed"
+    )
+    service, _, _, _ = create_service(
+        tmp_path,
+        cover_image_service=cover_service,
+    )
+
+    with pytest.raises(
+        CoverCacheSettingsError,
+        match="削除できません",
+    ):
+        service.clear_cover_cache()
 
 def test_get_snapshot_holds_application_information_and_paths(
     tmp_path: Path,
