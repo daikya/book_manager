@@ -7,6 +7,8 @@ import pytest
 import requests
 
 from book_manager.services.cover_image_service import (
+    CoverCacheError,
+    CoverCacheStatus,
     CoverImageService,
 )
 
@@ -248,6 +250,176 @@ def test_fetch_uses_expected_file_suffix(
     )
 
     assert result.suffix == expected_suffix
+
+
+def test_get_cache_status_returns_empty_for_missing_directory(
+    tmp_path: Path,
+) -> None:
+    """未作成のキャッシュを0件として扱う。"""
+    service = CoverImageService(
+        session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+        cache_directory=tmp_path / "missing",
+    )
+
+    assert service.get_cache_status() == CoverCacheStatus(
+        file_count=0,
+        total_size_bytes=0,
+    )
+
+
+def test_get_cache_status_counts_files_and_sizes(
+    tmp_path: Path,
+) -> None:
+    """直下ファイルの件数と合計サイズを返す。"""
+    (tmp_path / "first.jpg").write_bytes(b"123")
+    (tmp_path / "second.png").write_bytes(b"45678")
+    service = CoverImageService(
+        session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+        cache_directory=tmp_path,
+    )
+
+    assert service.get_cache_status() == CoverCacheStatus(
+        file_count=2,
+        total_size_bytes=8,
+    )
+
+
+def test_get_cache_status_ignores_subdirectories(
+    tmp_path: Path,
+) -> None:
+    """サブディレクトリとその内容を集計しない。"""
+    nested_directory = tmp_path / "nested"
+    nested_directory.mkdir()
+    (nested_directory / "nested.jpg").write_bytes(b"nested")
+    (tmp_path / "cover.jpg").write_bytes(b"cover")
+    service = CoverImageService(
+        session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+        cache_directory=tmp_path,
+    )
+
+    assert service.get_cache_status() == CoverCacheStatus(
+        file_count=1,
+        total_size_bytes=5,
+    )
+
+
+def test_get_cache_status_wraps_directory_error(
+    tmp_path: Path,
+) -> None:
+    """キャッシュ保存先がディレクトリでなければ専用例外にする。"""
+    cache_path = tmp_path / "covers"
+    cache_path.write_bytes(b"not-directory")
+    service = CoverImageService(
+        session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+        cache_directory=cache_path,
+    )
+
+    with pytest.raises(
+        CoverCacheError,
+        match="状態を確認できません",
+    ):
+        service.get_cache_status()
+
+
+def test_clear_cache_deletes_files_and_preserves_directory(
+    tmp_path: Path,
+) -> None:
+    """直下ファイルを削除してキャッシュディレクトリを残す。"""
+    (tmp_path / "first.jpg").write_bytes(b"123")
+    (tmp_path / "second.png").write_bytes(b"45678")
+    service = CoverImageService(
+        session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+        cache_directory=tmp_path,
+    )
+
+    result = service.clear_cache()
+
+    assert result.deleted_count == 2
+    assert result.deleted_size_bytes == 8
+    assert result.failed_count == 0
+    assert result.remaining_status == CoverCacheStatus(0, 0)
+    assert tmp_path.is_dir()
+    assert tuple(tmp_path.iterdir()) == ()
+
+
+def test_clear_cache_preserves_subdirectories(
+    tmp_path: Path,
+) -> None:
+    """サブディレクトリとその内容を削除しない。"""
+    nested_directory = tmp_path / "nested"
+    nested_directory.mkdir()
+    nested_file = nested_directory / "nested.jpg"
+    nested_file.write_bytes(b"nested")
+    (tmp_path / "cover.jpg").write_bytes(b"cover")
+    service = CoverImageService(
+        session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+        cache_directory=tmp_path,
+    )
+
+    result = service.clear_cache()
+
+    assert result.deleted_count == 1
+    assert result.failed_count == 0
+    assert nested_file.read_bytes() == b"nested"
+    assert result.remaining_status == CoverCacheStatus(0, 0)
+
+
+def test_clear_cache_returns_empty_result_for_missing_directory(
+    tmp_path: Path,
+) -> None:
+    """未作成のキャッシュを正常な空状態として扱う。"""
+    cache_directory = tmp_path / "missing"
+    service = CoverImageService(
+        session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+        cache_directory=cache_directory,
+    )
+
+    result = service.clear_cache()
+
+    assert result.deleted_count == 0
+    assert result.deleted_size_bytes == 0
+    assert result.failed_count == 0
+    assert result.remaining_status == CoverCacheStatus(0, 0)
+    assert not cache_directory.exists()
+
+
+def test_clear_cache_continues_after_individual_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """1件を削除できなくても残りの削除を継続する。"""
+    failed_file = tmp_path / "failed.jpg"
+    deleted_file = tmp_path / "deleted.jpg"
+    failed_file.write_bytes(b"failed")
+    deleted_file.write_bytes(b"deleted")
+    original_unlink = Path.unlink
+
+    def unlink_with_failure(
+        path: Path,
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        if path == failed_file:
+            raise PermissionError("denied")
+        original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", unlink_with_failure)
+    service = CoverImageService(
+        session=FakeSession(FakeResponse()),  # type: ignore[arg-type]
+        cache_directory=tmp_path,
+    )
+
+    result = service.clear_cache()
+
+    assert result.deleted_count == 1
+    assert result.deleted_size_bytes == len(b"deleted")
+    assert result.failed_count == 1
+    assert result.remaining_status == CoverCacheStatus(
+        file_count=1,
+        total_size_bytes=len(b"failed"),
+    )
+    assert failed_file.exists()
+    assert not deleted_file.exists()
 
 
 def test_create_stored_path_returns_root_relative_posix_path(

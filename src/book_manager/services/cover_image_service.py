@@ -3,11 +3,38 @@
 from __future__ import annotations
 
 import hashlib
+import logging
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
 from requests import Session
+
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class CoverCacheStatus:
+    """表紙画像キャッシュの存在状態。"""
+
+    file_count: int
+    total_size_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
+class CoverCacheClearResult:
+    """表紙画像キャッシュの削除結果。"""
+
+    deleted_count: int
+    deleted_size_bytes: int
+    failed_count: int
+    remaining_status: CoverCacheStatus
+
+
+class CoverCacheError(RuntimeError):
+    """表紙画像キャッシュを確認または整理できない場合。"""
 
 
 class CoverImageService:
@@ -132,6 +159,88 @@ class CoverImageService:
         )
 
         return cache_path
+
+    def get_cache_status(self) -> CoverCacheStatus:
+        """管理対象キャッシュの件数と合計サイズを返す。
+
+        キャッシュディレクトリ直下のファイルだけを対象とし、
+        サブディレクトリとその内容は集計しない。
+
+        Raises:
+            CoverCacheError:
+                キャッシュの列挙またはサイズ取得に失敗した場合。
+        """
+        cache_files = self._get_cache_files()
+        total_size_bytes = 0
+
+        for cache_file in cache_files:
+            try:
+                total_size_bytes += cache_file.stat().st_size
+            except OSError as error:
+                raise CoverCacheError(
+                    "表紙画像キャッシュの状態を確認できません。"
+                ) from error
+
+        return CoverCacheStatus(
+            file_count=len(cache_files),
+            total_size_bytes=total_size_bytes,
+        )
+
+    def clear_cache(self) -> CoverCacheClearResult:
+        """管理対象の表紙画像キャッシュを削除する。
+
+        個別ファイルの削除失敗後も残りの処理を継続する。
+        キャッシュディレクトリとサブディレクトリは削除しない。
+
+        Raises:
+            CoverCacheError:
+                キャッシュの列挙または処理後確認に失敗した場合。
+        """
+        cache_files = self._get_cache_files()
+        deleted_count = 0
+        deleted_size_bytes = 0
+        failed_count = 0
+
+        for cache_file in cache_files:
+            try:
+                file_size = cache_file.stat().st_size
+                cache_file.unlink()
+            except OSError:
+                failed_count += 1
+                logger.warning(
+                    "表紙画像キャッシュを削除できませんでした: %s",
+                    cache_file,
+                    exc_info=True,
+                )
+                continue
+
+            deleted_count += 1
+            deleted_size_bytes += file_size
+
+        remaining_status = self.get_cache_status()
+
+        return CoverCacheClearResult(
+            deleted_count=deleted_count,
+            deleted_size_bytes=deleted_size_bytes,
+            failed_count=failed_count,
+            remaining_status=remaining_status,
+        )
+
+    def _get_cache_files(self) -> tuple[Path, ...]:
+        """キャッシュディレクトリ直下のファイルを返す。"""
+        try:
+            if not self._cache_directory.exists():
+                return ()
+
+            return tuple(
+                entry
+                for entry in self._cache_directory.iterdir()
+                if entry.is_file()
+            )
+        except OSError as error:
+            raise CoverCacheError(
+                "表紙画像キャッシュの状態を確認できません。"
+            ) from error
 
     def _create_cache_path(
         self,
