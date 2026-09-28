@@ -249,6 +249,7 @@ def _run_application(
                 ),
                 backup_service=backup_service,
                 active_backup_settings=backup_settings,
+                cover_image_service=cover_image_service,
             )
         )
         window_state_store = WindowStateStore(

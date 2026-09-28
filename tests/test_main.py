@@ -624,6 +624,7 @@ def test_run_application_injects_new_paths(
         user_environment_store=user_environment_store,
         backup_service=backup_service,
         active_backup_settings=BackupSettings(),
+        cover_image_service=cover_service,
     )
     assert application_class.call_args.args[-2:] == (
         application_settings_service,
