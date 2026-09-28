@@ -3730,11 +3730,14 @@ class BookManagerApplication:
     def _wait_for_dialog(
         self,
         dialog: tk.Toplevel,
+        *,
+        vertical_offset: int = 0,
     ) -> None:
-        """親画面中央へ表示して待機する。"""
+        """親画面中央から指定量だけ上下へ移動して待機する。"""
         center_window_on_parent(
             dialog,
             self._root,
+            vertical_offset=vertical_offset,
         )
         dialog.wait_window()
 
@@ -3758,12 +3761,58 @@ class BookManagerApplication:
 
         dialog = tk.Toplevel(self._root)
         dialog.title("設定")
+        dialog.geometry("900x800")
         dialog.transient(self._root)
         dialog.grab_set()
         dialog.resizable(True, False)
         dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(0, weight=1)
         dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
         dialog.bind("<Escape>", lambda _event: dialog.destroy())
+
+        content_canvas = tk.Canvas(
+            dialog,
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        content_canvas.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+        )
+        content_scrollbar = ttk.Scrollbar(
+            dialog,
+            orient="vertical",
+            command=content_canvas.yview,
+        )
+        content_scrollbar.grid(
+            row=0,
+            column=1,
+            sticky="ns",
+        )
+        content_canvas.configure(
+            yscrollcommand=content_scrollbar.set,
+        )
+        content_frame = ttk.Frame(content_canvas)
+        content_frame.columnconfigure(0, weight=1)
+        content_window = content_canvas.create_window(
+            (0, 0),
+            window=content_frame,
+            anchor="nw",
+        )
+        content_frame.bind(
+            "<Configure>",
+            lambda _event: content_canvas.configure(
+                scrollregion=content_canvas.bbox("all"),
+            ),
+        )
+        content_canvas.bind(
+            "<Configure>",
+            lambda event: content_canvas.itemconfigure(
+                content_window,
+                width=event.width,
+            ),
+        )
 
         api_key_variable = tk.StringVar(master=dialog)
         api_key_status_variable = tk.StringVar(
@@ -3776,7 +3825,7 @@ class BookManagerApplication:
         )
 
         external_service_frame = ttk.LabelFrame(
-            dialog,
+            content_frame,
             text="外部サービス",
             padding=10,
         )
@@ -3866,7 +3915,7 @@ class BookManagerApplication:
         )
 
         data_frame = ttk.LabelFrame(
-            dialog,
+            content_frame,
             text="利用者データ",
             padding=10,
         )
@@ -3913,13 +3962,18 @@ class BookManagerApplication:
             )
 
         self._create_cover_cache_frame(
+            content_frame,
             dialog,
             snapshot.cover_cache_directory,
         )
-        self._create_backup_settings_frame(dialog, backup_snapshot)
+        self._create_backup_settings_frame(
+            content_frame,
+            dialog,
+            backup_snapshot,
+        )
 
         information_frame = ttk.LabelFrame(
-            dialog,
+            content_frame,
             text="アプリケーション情報",
             padding=10,
         )
@@ -4003,8 +4057,9 @@ class BookManagerApplication:
 
         button_frame = ttk.Frame(dialog)
         button_frame.grid(
-            row=5,
+            row=1,
             column=0,
+            columnspan=2,
             sticky="e",
             padx=12,
             pady=(6, 12),
@@ -4016,16 +4071,20 @@ class BookManagerApplication:
         ).grid(row=0, column=0)
 
         api_key_entry.focus_set()
-        self._wait_for_dialog(dialog)
+        self._wait_for_dialog(
+            dialog,
+            vertical_offset=-40,
+        )
 
     def _create_cover_cache_frame(
         self,
+        parent: ttk.Frame,
         dialog: tk.Toplevel,
         cache_directory: Path,
     ) -> None:
         """表紙画像キャッシュの状態と操作ボタンを表示する。"""
         frame = ttk.LabelFrame(
-            dialog,
+            parent,
             text="表紙画像キャッシュ",
             padding=10,
         )
@@ -4246,11 +4305,12 @@ class BookManagerApplication:
 
     def _create_backup_settings_frame(
         self,
+        parent: ttk.Frame,
         dialog: tk.Toplevel,
         snapshot: BackupSettingsSnapshot,
     ) -> None:
         """バックアップ状態、設定と手動作成ボタンを表示する。"""
-        frame = ttk.LabelFrame(dialog, text="バックアップ", padding=10)
+        frame = ttk.LabelFrame(parent, text="バックアップ", padding=10)
         frame.grid(row=3, column=0, sticky="ew", padx=12, pady=6)
         frame.columnconfigure(1, weight=1)
 

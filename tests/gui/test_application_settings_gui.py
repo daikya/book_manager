@@ -156,6 +156,9 @@ def test_open_settings_displays_snapshot_and_centers_dialog(
     application._create_settings_path_row = Mock()
     application._wait_for_dialog = Mock()
     dialog = Mock()
+    content_canvas = Mock()
+    content_frame = Mock()
+    content_scrollbar = Mock()
     api_key_variable = Mock()
     status_variable = Mock()
     string_variable = MagicMock(
@@ -176,12 +179,26 @@ def test_open_settings_displays_snapshot_and_centers_dialog(
             string_variable,
         ),
         patch(
+            "book_manager.gui.book_manager_application.tk.Canvas",
+            return_value=content_canvas,
+        ),
+        patch(
+            "book_manager.gui.book_manager_application.ttk.Scrollbar",
+            return_value=content_scrollbar,
+        ),
+        patch(
             "book_manager.gui.book_manager_application.ttk.LabelFrame",
             side_effect=lambda *_args, **_kwargs: Mock(),
         ),
         patch(
             "book_manager.gui.book_manager_application.ttk.Frame",
-            side_effect=lambda *_args, **_kwargs: Mock(),
+            side_effect=(
+                content_frame,
+                Mock(),
+                Mock(),
+                Mock(),
+                Mock(),
+            ),
         ),
         patch(
             "book_manager.gui.book_manager_application.ttk.Label",
@@ -204,10 +221,24 @@ def test_open_settings_displays_snapshot_and_centers_dialog(
     ]
     api_key_variable.get.assert_not_called()
     assert application._create_settings_path_row.call_count == 4
-    application._wait_for_dialog.assert_called_once_with(dialog)
+    application._wait_for_dialog.assert_called_once_with(
+        dialog,
+        vertical_offset=-40,
+    )
     dialog.title.assert_called_once_with("設定")
+    dialog.geometry.assert_called_once_with("900x800")
     dialog.transient.assert_called_once_with(application._root)
     dialog.grab_set.assert_called_once_with()
+    content_canvas.grid.assert_called_once_with(
+        row=0,
+        column=0,
+        sticky="nsew",
+    )
+    content_scrollbar.grid.assert_called_once_with(
+        row=0,
+        column=1,
+        sticky="ns",
+    )
 
 
 def test_format_file_size_uses_binary_units() -> None:

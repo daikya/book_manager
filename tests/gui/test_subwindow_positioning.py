@@ -24,7 +24,7 @@ def test_wait_for_dialog_centers_before_waiting() -> None:
     with patch(
         "book_manager.gui.book_manager_application."
         "center_window_on_parent",
-        side_effect=lambda *_: events.append("center"),
+        side_effect=lambda *_args, **_kwargs: events.append("center"),
     ) as center_window:
         dialog.wait_window.side_effect = (
             lambda: events.append("wait")
@@ -35,6 +35,7 @@ def test_wait_for_dialog_centers_before_waiting() -> None:
     center_window.assert_called_once_with(
         dialog,
         application._root,
+        vertical_offset=0,
     )
     dialog.wait_window.assert_called_once_with()
     assert events == ["center", "wait"]
