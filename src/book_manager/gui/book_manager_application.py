@@ -43,6 +43,7 @@ from book_manager.models.list_view_state import ListViewState
 from book_manager.models.window_state import WindowState
 from book_manager.services.application_settings_service import (
     ApplicationSettingsError,
+    CoverCacheSettingsError,
     DirectoryOpenError,
 )
 
@@ -60,6 +61,9 @@ if TYPE_CHECKING:
         ApplicationSettingsService,
     )
     from book_manager.services.book_service import BookService
+    from book_manager.services.cover_image_service import (
+        CoverCacheStatus,
+    )
     from book_manager.services.csv_export_service import (
         CsvExportService,
     )
@@ -3908,6 +3912,10 @@ class BookManagerApplication:
                 dialog=dialog,
             )
 
+        self._create_cover_cache_frame(
+            dialog,
+            snapshot.cover_cache_directory,
+        )
         self._create_backup_settings_frame(dialog, backup_snapshot)
 
         information_frame = ttk.LabelFrame(
@@ -3916,7 +3924,7 @@ class BookManagerApplication:
             padding=10,
         )
         information_frame.grid(
-            row=3,
+            row=4,
             column=0,
             sticky="ew",
             padx=12,
@@ -3995,7 +4003,7 @@ class BookManagerApplication:
 
         button_frame = ttk.Frame(dialog)
         button_frame.grid(
-            row=4,
+            row=5,
             column=0,
             sticky="e",
             padx=12,
@@ -4010,6 +4018,232 @@ class BookManagerApplication:
         api_key_entry.focus_set()
         self._wait_for_dialog(dialog)
 
+    def _create_cover_cache_frame(
+        self,
+        dialog: tk.Toplevel,
+        cache_directory: Path,
+    ) -> None:
+        """表紙画像キャッシュの状態と操作ボタンを表示する。"""
+        frame = ttk.LabelFrame(
+            dialog,
+            text="表紙画像キャッシュ",
+            padding=10,
+        )
+        frame.grid(
+            row=2,
+            column=0,
+            sticky="ew",
+            padx=12,
+            pady=6,
+        )
+        frame.columnconfigure(1, weight=1)
+
+        status_variable = tk.StringVar(
+            master=dialog,
+            value="確認中...",
+        )
+        ttk.Label(frame, text="現在の状態").grid(
+            row=0,
+            column=0,
+            sticky="w",
+            padx=(0, 8),
+            pady=3,
+        )
+        ttk.Label(
+            frame,
+            textvariable=status_variable,
+        ).grid(
+            row=0,
+            column=1,
+            sticky="w",
+            pady=3,
+        )
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(
+            row=0,
+            column=2,
+            sticky="e",
+        )
+        ttk.Button(
+            buttons,
+            text="フォルダーを開く",
+            command=lambda: self._open_settings_directory(
+                cache_directory,
+                dialog,
+            ),
+        ).grid(row=0, column=0, padx=(0, 6))
+        clear_button = ttk.Button(
+            buttons,
+            text="キャッシュを削除",
+        )
+        clear_button.configure(
+            command=lambda: self._clear_cover_cache(
+                clear_button,
+                status_variable,
+                dialog,
+            ),
+        )
+        clear_button.grid(row=0, column=1)
+
+        ttk.Label(
+            frame,
+            text=(
+                "削除しても書籍情報は残ります。必要な表紙画像は、"
+                "書籍を選択したときに再取得されます。"
+            ),
+            wraplength=650,
+        ).grid(
+            row=1,
+            column=0,
+            columnspan=3,
+            sticky="w",
+            pady=(8, 0),
+        )
+        self._refresh_cover_cache_status(
+            status_variable,
+            dialog,
+            show_error=False,
+        )
+
+    @staticmethod
+    def _format_file_size(size_bytes: int) -> str:
+        """バイト数を読みやすい二進接頭辞表記へ変換する。"""
+        if size_bytes < 0:
+            raise ValueError("ファイルサイズは0以上である必要があります。")
+
+        value = float(size_bytes)
+        units = ("B", "KiB", "MiB", "GiB")
+        for unit in units[:-1]:
+            if value < 1024:
+                if unit == "B":
+                    return f"{int(value)} {unit}"
+                return f"{value:.1f} {unit}"
+            value /= 1024
+        return f"{value:.1f} {units[-1]}"
+
+    @classmethod
+    def _format_cover_cache_status(
+        cls,
+        status: CoverCacheStatus,
+    ) -> str:
+        """キャッシュ状態を設定画面用の文字列へ変換する。"""
+        return (
+            f"{status.file_count}件・"
+            f"{cls._format_file_size(status.total_size_bytes)}"
+        )
+
+    def _refresh_cover_cache_status(
+        self,
+        status_variable: tk.StringVar,
+        dialog: tk.Toplevel,
+        *,
+        show_error: bool = True,
+    ) -> CoverCacheStatus | None:
+        """最新のキャッシュ状態を取得して画面へ反映する。"""
+        try:
+            status = (
+                self._application_settings_service
+                .get_cover_cache_status()
+            )
+        except CoverCacheSettingsError as error:
+            status_variable.set("取得できません")
+            if show_error:
+                messagebox.showerror(
+                    "表紙画像キャッシュエラー",
+                    str(error),
+                    parent=dialog,
+                )
+            return None
+
+        status_variable.set(
+            self._format_cover_cache_status(status),
+        )
+        return status
+
+    def _clear_cover_cache(
+        self,
+        button: ttk.Button,
+        status_variable: tk.StringVar,
+        dialog: tk.Toplevel,
+    ) -> None:
+        """確認後に表紙画像キャッシュを削除する。"""
+        status = self._refresh_cover_cache_status(
+            status_variable,
+            dialog,
+        )
+        if status is None:
+            return
+        if status.file_count == 0:
+            messagebox.showinfo(
+                "表紙画像キャッシュ",
+                "削除する表紙画像キャッシュはありません。",
+                parent=dialog,
+            )
+            return
+
+        confirmed = messagebox.askyesno(
+            "表紙画像キャッシュの削除",
+            (
+                f"{status.file_count}件・"
+                f"{self._format_file_size(status.total_size_bytes)}の"
+                "表紙画像キャッシュを削除します。\n\n"
+                "DBに保存された書籍情報は削除しません。"
+                "必要な表紙画像は書籍を選択したときに再取得されます。\n\n"
+                "この操作は取り消せません。続行しますか？"
+            ),
+            parent=dialog,
+        )
+        if not confirmed:
+            return
+
+        button.configure(state="disabled")
+        try:
+            result = (
+                self._application_settings_service
+                .clear_cover_cache()
+            )
+        except CoverCacheSettingsError as error:
+            messagebox.showerror(
+                "表紙画像キャッシュエラー",
+                str(error),
+                parent=dialog,
+            )
+            return
+        finally:
+            button.configure(state="normal")
+
+        status_variable.set(
+            self._format_cover_cache_status(
+                result.remaining_status,
+            ),
+        )
+        self._clear_form()
+        self._on_sort_changed()
+
+        if result.failed_count:
+            messagebox.showwarning(
+                "表紙画像キャッシュ",
+                (
+                    f"{result.deleted_count}件を削除しました。\n"
+                    f"削除できなかったファイル：{result.failed_count}件\n"
+                    "残っているキャッシュ："
+                    f"{result.remaining_status.file_count}件"
+                ),
+                parent=dialog,
+            )
+            return
+
+        messagebox.showinfo(
+            "表紙画像キャッシュ",
+            (
+                f"{result.deleted_count}件・"
+                f"{self._format_file_size(result.deleted_size_bytes)}を"
+                "削除しました。"
+            ),
+            parent=dialog,
+        )
+
     def _create_backup_settings_frame(
         self,
         dialog: tk.Toplevel,
@@ -4017,7 +4251,7 @@ class BookManagerApplication:
     ) -> None:
         """バックアップ状態、設定と手動作成ボタンを表示する。"""
         frame = ttk.LabelFrame(dialog, text="バックアップ", padding=10)
-        frame.grid(row=2, column=0, sticky="ew", padx=12, pady=6)
+        frame.grid(row=3, column=0, sticky="ew", padx=12, pady=6)
         frame.columnconfigure(1, weight=1)
 
         interval = tk.StringVar(

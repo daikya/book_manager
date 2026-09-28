@@ -16,7 +16,12 @@ from book_manager.models.application_settings import (
 from book_manager.models.backup_settings import BackupSettings
 from book_manager.services.application_settings_service import (
     ApplicationSettingsError,
+    CoverCacheSettingsError,
     DirectoryOpenError,
+)
+from book_manager.services.cover_image_service import (
+    CoverCacheClearResult,
+    CoverCacheStatus,
 )
 
 
@@ -79,6 +84,9 @@ def create_application() -> BookManagerApplication:
     )
     application._root = Mock()
     application._application_settings_service = Mock()
+    application._application_settings_service.get_cover_cache_status.return_value = (
+        CoverCacheStatus(file_count=2, total_size_bytes=1536)
+    )
     application._on_google_books_api_key_changed = Mock()
 
     return application
@@ -153,6 +161,7 @@ def test_open_settings_displays_snapshot_and_centers_dialog(
     string_variable = MagicMock(
         side_effect=(
             api_key_variable, status_variable,
+            Mock(),
             Mock(), Mock(), Mock(), Mock(), Mock(),
         ),
     )
@@ -199,6 +208,196 @@ def test_open_settings_displays_snapshot_and_centers_dialog(
     dialog.title.assert_called_once_with("設定")
     dialog.transient.assert_called_once_with(application._root)
     dialog.grab_set.assert_called_once_with()
+
+
+def test_format_file_size_uses_binary_units() -> None:
+    """キャッシュサイズを読みやすい単位へ変換する。"""
+    assert BookManagerApplication._format_file_size(0) == "0 B"
+    assert BookManagerApplication._format_file_size(512) == "512 B"
+    assert BookManagerApplication._format_file_size(1536) == "1.5 KiB"
+    assert (
+        BookManagerApplication._format_file_size(12 * 1024 * 1024)
+        == "12.0 MiB"
+    )
+
+
+def test_refresh_cover_cache_status_displays_status() -> None:
+    """最新のキャッシュ件数と合計サイズを表示する。"""
+    application = create_application()
+    status_variable = Mock()
+    dialog = Mock()
+
+    result = application._refresh_cover_cache_status(
+        status_variable,
+        dialog,
+    )
+
+    assert result == CoverCacheStatus(2, 1536)
+    status_variable.set.assert_called_once_with("2件・1.5 KiB")
+
+
+def test_refresh_cover_cache_status_keeps_dialog_on_failure() -> None:
+    """状態取得失敗時は取得不能表示へ切り替える。"""
+    application = create_application()
+    application._application_settings_service.get_cover_cache_status.side_effect = (
+        CoverCacheSettingsError("状態を確認できません。")
+    )
+    status_variable = Mock()
+    dialog = Mock()
+
+    with patch(
+        "book_manager.gui.book_manager_application.messagebox.showerror",
+    ) as showerror:
+        result = application._refresh_cover_cache_status(
+            status_variable,
+            dialog,
+        )
+
+    assert result is None
+    status_variable.set.assert_called_once_with("取得できません")
+    showerror.assert_called_once_with(
+        "表紙画像キャッシュエラー",
+        "状態を確認できません。",
+        parent=dialog,
+    )
+
+
+def test_clear_cover_cache_reports_empty_cache() -> None:
+    """0件の場合は確認せず削除処理を終了する。"""
+    application = create_application()
+    service = application._application_settings_service
+    service.get_cover_cache_status.return_value = CoverCacheStatus(0, 0)
+    button, status_variable, dialog = Mock(), Mock(), Mock()
+
+    with (
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.showinfo",
+        ) as showinfo,
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.askyesno",
+        ) as askyesno,
+    ):
+        application._clear_cover_cache(
+            button,
+            status_variable,
+            dialog,
+        )
+
+    askyesno.assert_not_called()
+    service.clear_cover_cache.assert_not_called()
+    showinfo.assert_called_once_with(
+        "表紙画像キャッシュ",
+        "削除する表紙画像キャッシュはありません。",
+        parent=dialog,
+    )
+
+
+def test_clear_cover_cache_stops_when_confirmation_is_cancelled() -> None:
+    """確認を取り消した場合はキャッシュを削除しない。"""
+    application = create_application()
+    service = application._application_settings_service
+
+    with patch(
+        "book_manager.gui.book_manager_application.messagebox.askyesno",
+        return_value=False,
+    ):
+        application._clear_cover_cache(Mock(), Mock(), Mock())
+
+    service.clear_cover_cache.assert_not_called()
+
+
+def test_clear_cover_cache_updates_view_after_success() -> None:
+    """削除成功後に状態、フォームおよび一覧を更新する。"""
+    application = create_application()
+    application._clear_form = Mock()
+    application._on_sort_changed = Mock()
+    service = application._application_settings_service
+    service.clear_cover_cache.return_value = CoverCacheClearResult(
+        deleted_count=2,
+        deleted_size_bytes=1536,
+        failed_count=0,
+        remaining_status=CoverCacheStatus(0, 0),
+    )
+    button, status_variable, dialog = Mock(), Mock(), Mock()
+
+    with (
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.askyesno",
+            return_value=True,
+        ),
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.showinfo",
+        ) as showinfo,
+    ):
+        application._clear_cover_cache(
+            button,
+            status_variable,
+            dialog,
+        )
+
+    assert button.configure.call_args_list == [
+        call(state="disabled"),
+        call(state="normal"),
+    ]
+    status_variable.set.assert_any_call("0件・0 B")
+    application._clear_form.assert_called_once_with()
+    application._on_sort_changed.assert_called_once_with()
+    assert "2件・1.5 KiB" in showinfo.call_args.args[1]
+
+
+def test_clear_cover_cache_reports_partial_failure() -> None:
+    """一部削除失敗時は失敗件数と残存件数を警告する。"""
+    application = create_application()
+    application._clear_form = Mock()
+    application._on_sort_changed = Mock()
+    application._application_settings_service.clear_cover_cache.return_value = (
+        CoverCacheClearResult(
+            deleted_count=1,
+            deleted_size_bytes=1024,
+            failed_count=1,
+            remaining_status=CoverCacheStatus(1, 512),
+        )
+    )
+
+    with (
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.askyesno",
+            return_value=True,
+        ),
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.showwarning",
+        ) as showwarning,
+    ):
+        application._clear_cover_cache(Mock(), Mock(), Mock())
+
+    assert "削除できなかったファイル：1件" in showwarning.call_args.args[1]
+    assert "残っているキャッシュ：1件" in showwarning.call_args.args[1]
+
+
+def test_clear_cover_cache_failure_reenables_button() -> None:
+    """削除処理失敗時も削除ボタンを有効状態へ戻す。"""
+    application = create_application()
+    application._application_settings_service.clear_cover_cache.side_effect = (
+        CoverCacheSettingsError("削除できません。")
+    )
+    button = Mock()
+
+    with (
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.askyesno",
+            return_value=True,
+        ),
+        patch(
+            "book_manager.gui.book_manager_application.messagebox.showerror",
+        ) as showerror,
+    ):
+        application._clear_cover_cache(button, Mock(), Mock())
+
+    assert button.configure.call_args_list == [
+        call(state="disabled"),
+        call(state="normal"),
+    ]
+    showerror.assert_called_once()
 
 
 def test_open_settings_shows_snapshot_error() -> None:
