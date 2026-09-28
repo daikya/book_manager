@@ -2198,9 +2198,7 @@ class BookManagerApplication:
             book_item.cover_image_path
         )
 
-        self._display_saved_cover_image(
-            self._current_cover_image_path,
-        )
+        self._display_selected_cover_image()
 
     @staticmethod
     def _replace_text(
@@ -2324,11 +2322,11 @@ class BookManagerApplication:
     def _display_saved_cover_image(
         self,
         cover_image_path: str | None,
-    ) -> None:
+    ) -> bool:
         """保存済みの表紙画像を表示する。"""
         if cover_image_path is None:
             self._clear_cover_image()
-            return
+            return False
 
         image_path = self._service.resolve_cover_image_path(
             cover_image_path,
@@ -2336,14 +2334,43 @@ class BookManagerApplication:
 
         if image_path is None or not image_path.is_file():
             self._clear_cover_image()
-            return
+            return False
 
         try:
             self._display_cover_image(
                 str(image_path),
             )
+            return True
         except Exception:
             traceback.print_exc()
+            self._clear_cover_image()
+            return False
+
+    def _display_selected_cover_image(self) -> None:
+        """選択中の書籍に必要な表紙画像だけを取得して表示する。"""
+        if self._display_saved_cover_image(
+            self._current_cover_image_path,
+        ):
+            return
+
+        if not self._current_cover_image_url:
+            return
+
+        try:
+            image_path = self._service.fetch_cover_image(
+                self._current_cover_image_url,
+            )
+            self._current_cover_image_path = (
+                self._service.create_stored_cover_image_path(
+                    image_path,
+                )
+            )
+            self._display_cover_image(str(image_path))
+        except Exception:
+            logger.warning(
+                "選択された書籍の表紙画像を再取得できませんでした。",
+                exc_info=True,
+            )
             self._clear_cover_image()
 
     def _select_book_in_tree(

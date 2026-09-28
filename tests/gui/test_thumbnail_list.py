@@ -109,10 +109,11 @@ def test_display_saved_cover_image_uses_resolved_path(
     application._display_cover_image = Mock()
     application._clear_cover_image = Mock()
 
-    application._display_saved_cover_image(
+    result = application._display_saved_cover_image(
         "cache/covers/cover.jpg",
     )
 
+    assert result is True
     application._display_cover_image.assert_called_once_with(
         str(image_path),
     )
@@ -127,12 +128,93 @@ def test_display_saved_cover_image_clears_rejected_path() -> None:
     application._display_cover_image = Mock()
     application._clear_cover_image = Mock()
 
-    application._display_saved_cover_image(
+    result = application._display_saved_cover_image(
         "../outside.jpg",
     )
 
+    assert result is False
     application._display_cover_image.assert_not_called()
     application._clear_cover_image.assert_called_once_with()
+
+
+def test_display_selected_cover_uses_existing_cache() -> None:
+    """既存キャッシュを表示できる場合は再取得しない。"""
+    application = create_application()
+    application._current_cover_image_path = "cache/covers/cover.jpg"
+    application._current_cover_image_url = "https://example.com/cover.jpg"
+    application._display_saved_cover_image = Mock(return_value=True)
+
+    application._display_selected_cover_image()
+
+    application._display_saved_cover_image.assert_called_once_with(
+        "cache/covers/cover.jpg",
+    )
+    application._service.fetch_cover_image.assert_not_called()
+
+
+def test_display_selected_cover_skips_fetch_without_url() -> None:
+    """取得元URLがない書籍では再取得しない。"""
+    application = create_application()
+    application._current_cover_image_path = None
+    application._current_cover_image_url = None
+    application._display_saved_cover_image = Mock(return_value=False)
+
+    application._display_selected_cover_image()
+
+    application._service.fetch_cover_image.assert_not_called()
+
+
+def test_display_selected_cover_fetches_only_missing_image(
+    tmp_path: Path,
+) -> None:
+    """キャッシュがない選択書籍の表紙だけを再取得する。"""
+    application = create_application()
+    application._current_cover_image_path = "cache/covers/missing.jpg"
+    application._current_cover_image_url = "https://example.com/cover.jpg"
+    application._display_saved_cover_image = Mock(return_value=False)
+    application._display_cover_image = Mock()
+    image_path = tmp_path / "downloaded.jpg"
+    application._service.fetch_cover_image.return_value = image_path
+    application._service.create_stored_cover_image_path.return_value = (
+        "cache/covers/downloaded.jpg"
+    )
+
+    application._display_selected_cover_image()
+
+    application._service.fetch_cover_image.assert_called_once_with(
+        "https://example.com/cover.jpg",
+    )
+    application._service.create_stored_cover_image_path.assert_called_once_with(
+        image_path,
+    )
+    application._display_cover_image.assert_called_once_with(
+        str(image_path),
+    )
+    assert (
+        application._current_cover_image_path
+        == "cache/covers/downloaded.jpg"
+    )
+    application._service.update_book.assert_not_called()
+
+
+def test_display_selected_cover_continues_after_fetch_failure() -> None:
+    """再取得失敗時は画像なしへ戻して例外を伝播しない。"""
+    application = create_application()
+    application._current_cover_image_path = None
+    application._current_cover_image_url = "https://example.com/cover.jpg"
+    application._display_saved_cover_image = Mock(return_value=False)
+    application._clear_cover_image = Mock()
+    application._service.fetch_cover_image.side_effect = OSError(
+        "network error",
+    )
+
+    with patch(
+        "book_manager.gui.book_manager_application.logger.warning",
+    ) as warning:
+        application._display_selected_cover_image()
+
+    application._clear_cover_image.assert_called_once_with()
+    warning.assert_called_once()
 
 
 def test_create_thumbnail_photo_creates_thumbnail(
@@ -236,6 +318,7 @@ def test_display_books_clears_old_thumbnail_photos() -> None:
     )
 
     assert application._thumbnail_photos == {}
+    application._service.fetch_cover_image.assert_not_called()
 
 
 def test_display_books_keeps_created_thumbnail_photo() -> None:
