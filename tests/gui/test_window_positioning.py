@@ -3,16 +3,28 @@
 from __future__ import annotations
 
 import tkinter as tk
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from book_manager.gui.window_positioning import (
+    ScreenWorkArea,
     ScreenSize,
     WindowRectangle,
     calculate_centered_position,
+    calculate_centered_position_in_work_area,
     center_window_on_parent,
 )
+
+
+@pytest.fixture(autouse=True)
+def use_test_work_area():
+    """OSに依存しない主モニター作業領域を使用する。"""
+    with patch(
+        "book_manager.gui.window_positioning.get_screen_work_areas",
+        return_value=(ScreenWorkArea(0, 0, 1920, 1080, True),),
+    ):
+        yield
 
 
 def test_calculate_centered_position_centers_on_parent() -> None:
@@ -158,6 +170,56 @@ def test_calculate_centered_position_rejects_invalid_dimensions(
         )
 
 
+def test_calculate_centered_position_in_work_area_applies_offset() -> None:
+    """上方オフセットを適用して親画面中央へ配置する。"""
+    position = calculate_centered_position_in_work_area(
+        parent=WindowRectangle(100, 80, 1000, 700),
+        child_width=400,
+        child_height=300,
+        work_area=ScreenWorkArea(0, 0, 1920, 1040, True),
+        vertical_offset=-40,
+    )
+
+    assert position == (400, 240)
+
+
+def test_calculate_centered_position_in_negative_work_area() -> None:
+    """負の座標を持つ作業領域内へ配置する。"""
+    position = calculate_centered_position_in_work_area(
+        parent=WindowRectangle(-1700, 100, 1200, 800),
+        child_width=600,
+        child_height=500,
+        work_area=ScreenWorkArea(-1920, 0, 0, 1040),
+        vertical_offset=-40,
+    )
+
+    assert position == (-1400, 210)
+
+
+def test_calculate_centered_position_in_work_area_clamps_bottom() -> None:
+    """タスクバーを除いた作業領域の下端へ補正する。"""
+    position = calculate_centered_position_in_work_area(
+        parent=WindowRectangle(100, 800, 1000, 300),
+        child_width=400,
+        child_height=300,
+        work_area=ScreenWorkArea(0, 0, 1920, 1040, True),
+    )
+
+    assert position == (400, 740)
+
+
+def test_calculate_centered_position_in_work_area_handles_oversized_child() -> None:
+    """作業領域より大きい子画面を作業領域左上へ配置する。"""
+    position = calculate_centered_position_in_work_area(
+        parent=WindowRectangle(-1500, 100, 1000, 700),
+        child_width=2000,
+        child_height=1200,
+        work_area=ScreenWorkArea(-1920, 0, 0, 1040),
+    )
+
+    assert position == (-1920, 0)
+
+
 def create_window_mock(
     *,
     width: int,
@@ -216,6 +278,24 @@ def test_center_window_on_parent_uses_requested_child_size() -> None:
     center_window_on_parent(child, parent)
 
     child.geometry.assert_called_once_with("+400+280")
+
+
+def test_center_window_on_parent_applies_vertical_offset() -> None:
+    """指定された上方オフセットを子画面へ適用する。"""
+    child = create_window_mock(width=400, height=300)
+    child.winfo_screenwidth.return_value = 1920
+    child.winfo_screenheight.return_value = 1080
+    parent = create_window_mock(width=1000, height=700)
+    parent.winfo_rootx.return_value = 100
+    parent.winfo_rooty.return_value = 80
+
+    center_window_on_parent(
+        child,
+        parent,
+        vertical_offset=-40,
+    )
+
+    child.geometry.assert_called_once_with("+400+240")
 
 
 def test_center_window_on_parent_falls_back_to_screen_center() -> None:

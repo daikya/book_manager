@@ -212,13 +212,55 @@ def calculate_centered_position(
     return x, y
 
 
+def calculate_centered_position_in_work_area(
+    parent: WindowRectangle,
+    child_width: int,
+    child_height: int,
+    work_area: ScreenWorkArea,
+    *,
+    margin: int = 0,
+    vertical_offset: int = 0,
+) -> tuple[int, int]:
+    """親の中央を基準に子座標を作業領域内へ補正する。"""
+    _validate_dimensions(
+        parent,
+        child_width,
+        child_height,
+        ScreenSize(work_area.width, work_area.height),
+        margin,
+    )
+
+    centered_x = parent.x + (parent.width - child_width) // 2
+    centered_y = (
+        parent.y
+        + (parent.height - child_height) // 2
+        + vertical_offset
+    )
+    minimum_x = work_area.left + margin
+    minimum_y = work_area.top + margin
+    maximum_x = max(
+        minimum_x,
+        work_area.right - child_width - margin,
+    )
+    maximum_y = max(
+        minimum_y,
+        work_area.bottom - child_height - margin,
+    )
+
+    return (
+        min(maximum_x, max(minimum_x, centered_x)),
+        min(maximum_y, max(minimum_y, centered_y)),
+    )
+
+
 def center_window_on_parent(
     child: tk.Toplevel,
     parent: tk.Misc,
     *,
     margin: int = 0,
+    vertical_offset: int = 0,
 ) -> None:
-    """子ウィンドウを親の中央かつ画面内へ配置する。"""
+    """子ウィンドウを親の中央かつ作業領域内へ配置する。"""
     try:
         child.update_idletasks()
         child_width = _get_window_width(child)
@@ -231,12 +273,17 @@ def center_window_on_parent(
             parent,
             screen,
         )
-        x, y = calculate_centered_position(
+        work_area = select_work_area(
+            parent_rectangle,
+            get_screen_work_areas(parent),
+        )
+        x, y = calculate_centered_position_in_work_area(
             parent=parent_rectangle,
             child_width=child_width,
             child_height=child_height,
-            screen=screen,
+            work_area=work_area,
             margin=margin,
+            vertical_offset=vertical_offset,
         )
         child.geometry(f"+{x}+{y}")
     except (tk.TclError, ValueError):
