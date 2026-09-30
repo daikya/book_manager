@@ -1892,26 +1892,14 @@ class BookManagerApplication:
             padx=(0, 6),
         )
 
-        self._csv_export_button = ttk.Button(
+        self._data_io_button = ttk.Button(
             button_frame,
-            text="CSVエクスポート",
-            command=self._on_export_csv,
+            text="データ入出力 ▼",
+            command=self._show_data_io_menu,
         )
-        self._csv_export_button.grid(
+        self._data_io_button.grid(
             row=0,
             column=6,
-            padx=(0, 6),
-        )
-
-        self._csv_import_button = ttk.Button(
-            button_frame,
-            text="CSVインポート",
-            command=self._on_import_csv,
-        )
-
-        self._csv_import_button.grid(
-            row=0,
-            column=7,
             padx=(0, 6),
         )
 
@@ -1980,31 +1968,6 @@ class BookManagerApplication:
             column=13,
             sticky="e",
         )
-
-        if self._has_csv_data_package_services():
-            self._csv_data_package_export_button = ttk.Button(
-                button_frame,
-                text="完全データ出力",
-                command=self._on_export_csv_data_package,
-            )
-            self._csv_data_package_export_button.grid(
-                row=1,
-                column=6,
-                padx=(0, 6),
-                pady=(6, 0),
-            )
-
-            self._csv_data_package_import_button = ttk.Button(
-                button_frame,
-                text="完全データ取込",
-                command=self._on_import_csv_data_package,
-            )
-            self._csv_data_package_import_button.grid(
-                row=1,
-                column=7,
-                padx=(0, 6),
-                pady=(6, 0),
-            )
 
     def _create_status_frame(
         self,
@@ -5656,6 +5619,42 @@ class BookManagerApplication:
                 "CSVファイルをインポートできませんでした。",
                 parent=self._root,
             )
+
+    def _show_data_io_menu(self) -> None:
+        """書籍一覧CSVと完全データZIPの操作メニューを表示する。"""
+        menu = tk.Menu(
+            self._root,
+            tearoff=False,
+        )
+        menu.add_command(
+            label="書籍一覧をCSVへエクスポート",
+            command=self._on_export_csv,
+        )
+        menu.add_command(
+            label="書籍一覧CSVをインポート",
+            command=self._on_import_csv,
+        )
+        if self._has_csv_data_package_services():
+            menu.add_separator()
+            menu.add_command(
+                label="完全データをZIPへエクスポート",
+                command=self._on_export_csv_data_package,
+            )
+            menu.add_command(
+                label="完全データZIPをインポート",
+                command=self._on_import_csv_data_package,
+            )
+
+        try:
+            menu.tk_popup(
+                self._data_io_button.winfo_rootx(),
+                (
+                    self._data_io_button.winfo_rooty()
+                    + self._data_io_button.winfo_height()
+                ),
+            )
+        finally:
+            menu.grab_release()
 
     def _has_csv_data_package_services(self) -> bool:
         """完全データ入出力に必要なServiceが揃っているか返す。"""

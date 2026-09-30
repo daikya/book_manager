@@ -1,7 +1,7 @@
 """Tests for complete CSV data package GUI operations."""
 
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from book_manager.gui.book_manager_application import (
     BookManagerApplication,
@@ -56,6 +56,91 @@ def create_preview(
         ),
         issues=issues,
     )
+
+
+def test_data_io_operations_are_grouped_in_one_row_menu() -> None:
+    """4つの入出力操作を1段目のドロップダウンへまとめる。"""
+    application = create_application()
+    button_frame = Mock()
+    created_buttons: list[Mock] = []
+
+    def create_button(*_args: object, **_kwargs: object) -> Mock:
+        button = Mock()
+        created_buttons.append(button)
+        return button
+
+    with (
+        patch(
+            "book_manager.gui.book_manager_application.ttk.Frame",
+            return_value=button_frame,
+        ),
+        patch(
+            "book_manager.gui.book_manager_application.ttk.Button",
+            side_effect=create_button,
+        ) as button_class,
+    ):
+        application._create_button_frame(Mock())
+
+    data_io_calls = [
+        (index, item)
+        for index, item in enumerate(button_class.call_args_list)
+        if item.kwargs.get("text") == "データ入出力 ▼"
+    ]
+    assert len(data_io_calls) == 1
+    index, data_io_call = data_io_calls[0]
+    assert data_io_call.kwargs["command"] == (
+        application._show_data_io_menu
+    )
+    data_io_button = created_buttons[index]
+    data_io_button.grid.assert_called_once_with(
+        row=0,
+        column=6,
+        padx=(0, 6),
+    )
+    for button in created_buttons:
+        assert button.grid.call_args.kwargs["row"] == 0
+
+
+def test_show_data_io_menu_lists_four_operations() -> None:
+    """データ入出力メニューへ既存CSVと完全データ操作を表示する。"""
+    application = create_application()
+    application._data_io_button = Mock()
+    application._data_io_button.winfo_rootx.return_value = 100
+    application._data_io_button.winfo_rooty.return_value = 200
+    application._data_io_button.winfo_height.return_value = 30
+    data_io_menu = Mock()
+
+    with patch(
+        "book_manager.gui.book_manager_application.tk.Menu",
+        return_value=data_io_menu,
+    ) as menu_class:
+        application._show_data_io_menu()
+
+    menu_class.assert_called_once_with(
+        application._root,
+        tearoff=False,
+    )
+    assert data_io_menu.add_command.call_args_list == [
+        call(
+            label="書籍一覧をCSVへエクスポート",
+            command=application._on_export_csv,
+        ),
+        call(
+            label="書籍一覧CSVをインポート",
+            command=application._on_import_csv,
+        ),
+        call(
+            label="完全データをZIPへエクスポート",
+            command=application._on_export_csv_data_package,
+        ),
+        call(
+            label="完全データZIPをインポート",
+            command=application._on_import_csv_data_package,
+        ),
+    ]
+    data_io_menu.add_separator.assert_called_once_with()
+    data_io_menu.tk_popup.assert_called_once_with(100, 230)
+    data_io_menu.grab_release.assert_called_once_with()
 
 
 def test_export_package_does_nothing_when_selection_is_cancelled() -> None:
