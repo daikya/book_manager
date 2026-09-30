@@ -290,3 +290,14 @@ class CsvDataPackageImportResult:
     book_item_tag_count: int
     reading_history_count: int
     backup_path: Path
+
+
+@dataclass(frozen=True, slots=True)
+class CsvDataPackageExportResult:
+    """完全データエクスポートの実行結果を表す。"""
+
+    output_path: Path
+    book_item_count: int
+    tag_count: int
+    book_item_tag_count: int
+    reading_history_count: int
