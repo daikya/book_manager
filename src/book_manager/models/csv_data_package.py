@@ -223,6 +223,16 @@ class CsvDataPackageSnapshot:
     reading_histories: tuple[CsvDataPackageReadingHistory, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class CsvDataPackageArchiveFingerprint:
+    """検査済みZIPの同一性確認に使用する情報。"""
+
+    source_path: Path
+    source_size: int
+    source_modified_ns: int
+    source_sha256: str
+
+
 class CsvDataPackageIssueLevel(StrEnum):
     """CSVデータパッケージ検査Issueの重大度。"""
 
