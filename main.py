@@ -60,6 +60,12 @@ from book_manager.models.data_migration_result import (
 from book_manager.repositories.book_repository import (
     BookRepository,
 )
+from book_manager.repositories.csv_data_package_repository import (
+    CsvDataPackageRepository,
+)
+from book_manager.repositories.csv_data_package_restore_repository import (
+    CsvDataPackageRestoreRepository,
+)
 from book_manager.repositories.reading_history_repository import (
     ReadingHistoryRepository,
 )
@@ -80,6 +86,18 @@ from book_manager.services.csv_export_service import (
 )
 from book_manager.services.csv_import_service import (
     CsvImportService,
+)
+from book_manager.services.csv_data_package_archive_validator import (
+    CsvDataPackageArchiveValidator,
+)
+from book_manager.services.csv_data_package_export_service import (
+    CsvDataPackageExportService,
+)
+from book_manager.services.csv_data_package_import_service import (
+    CsvDataPackageImportService,
+)
+from book_manager.services.csv_data_package_preflight_service import (
+    CsvDataPackagePreflightService,
 )
 from book_manager.services.data_migration_service import (
     DataMigrationService,
@@ -235,6 +253,37 @@ def _run_application(
         csv_import_service = CsvImportService(
             book_service=book_service,
         )
+        csv_data_package_repository = CsvDataPackageRepository(
+            database_path,
+        )
+        csv_data_package_restore_repository = (
+            CsvDataPackageRestoreRepository()
+        )
+        csv_data_package_archive_validator = (
+            CsvDataPackageArchiveValidator()
+        )
+        csv_data_package_export_service = (
+            CsvDataPackageExportService(
+                csv_data_package_repository,
+            )
+        )
+        csv_data_package_preflight_service = (
+            CsvDataPackagePreflightService(
+                csv_data_package_archive_validator,
+            )
+        )
+        csv_data_package_import_service = (
+            CsvDataPackageImportService(
+                database_path=database_path,
+                backup_service=backup_service,
+                archive_validator=(
+                    csv_data_package_archive_validator
+                ),
+                restore_repository=(
+                    csv_data_package_restore_repository
+                ),
+            )
+        )
         reading_history_service = ReadingHistoryService(
             reading_history_repository,
             repository,
@@ -287,6 +336,15 @@ def _run_application(
             google_books_client.set_api_key,
             window_state_store=window_state_store,
             list_view_state_store=list_view_state_store,
+            csv_data_package_export_service=(
+                csv_data_package_export_service
+            ),
+            csv_data_package_preflight_service=(
+                csv_data_package_preflight_service
+            ),
+            csv_data_package_import_service=(
+                csv_data_package_import_service
+            ),
         )
         _apply_window_icon(root)
         root.update_idletasks()

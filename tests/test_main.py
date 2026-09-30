@@ -514,6 +514,30 @@ def test_run_application_injects_new_paths(
     user_environment_store = Mock()
     application_settings_service = Mock()
     window_state_store = Mock()
+    package_repository = Mock()
+    package_restore_repository = Mock()
+    package_archive_validator = Mock()
+    package_export_service = Mock()
+    package_preflight_service = Mock()
+    package_import_service = Mock()
+    package_repository_class = Mock(
+        return_value=package_repository,
+    )
+    package_restore_repository_class = Mock(
+        return_value=package_restore_repository,
+    )
+    package_archive_validator_class = Mock(
+        return_value=package_archive_validator,
+    )
+    package_export_service_class = Mock(
+        return_value=package_export_service,
+    )
+    package_preflight_service_class = Mock(
+        return_value=package_preflight_service,
+    )
+    package_import_service_class = Mock(
+        return_value=package_import_service,
+    )
 
     with (
         patch.object(
@@ -562,8 +586,27 @@ def test_run_application_injects_new_paths(
             "BookService",
             return_value=book_service,
         ),
-        patch.object(main_module, "CsvExportService"),
-        patch.object(main_module, "CsvImportService"),
+        patch.multiple(
+            main_module,
+            CsvExportService=Mock(),
+            CsvImportService=Mock(),
+            CsvDataPackageRepository=package_repository_class,
+            CsvDataPackageRestoreRepository=(
+                package_restore_repository_class
+            ),
+            CsvDataPackageArchiveValidator=(
+                package_archive_validator_class
+            ),
+            CsvDataPackageExportService=(
+                package_export_service_class
+            ),
+            CsvDataPackagePreflightService=(
+                package_preflight_service_class
+            ),
+            CsvDataPackageImportService=(
+                package_import_service_class
+            ),
+        ),
         patch.object(main_module, "ReadingHistoryService"),
         patch.object(
             main_module,
@@ -652,7 +695,29 @@ def test_run_application_injects_new_paths(
     assert application_keyword_arguments == {
         "window_state_store": window_state_store,
         "list_view_state_store": list_view_state_store,
+        "csv_data_package_export_service": package_export_service,
+        "csv_data_package_preflight_service": (
+            package_preflight_service
+        ),
+        "csv_data_package_import_service": package_import_service,
     }
+    package_repository_class.assert_called_once_with(
+        paths.database_path
+    )
+    package_restore_repository_class.assert_called_once_with()
+    package_archive_validator_class.assert_called_once_with()
+    package_export_service_class.assert_called_once_with(
+        package_repository
+    )
+    package_preflight_service_class.assert_called_once_with(
+        package_archive_validator
+    )
+    package_import_service_class.assert_called_once_with(
+        database_path=paths.database_path,
+        backup_service=backup_service,
+        archive_validator=package_archive_validator,
+        restore_repository=package_restore_repository,
+    )
     root.mainloop.assert_called_once_with()
     root.update_idletasks.assert_called_once_with()
     session.close.assert_called_once_with()
@@ -746,8 +811,17 @@ def test_run_application_closes_session_when_mainloop_fails(
         patch.object(main_module, "BookMetadataService"),
         patch.object(main_module, "CoverImageService"),
         patch.object(main_module, "BookService"),
-        patch.object(main_module, "CsvExportService"),
-        patch.object(main_module, "CsvImportService"),
+        patch.multiple(
+            main_module,
+            CsvExportService=Mock(),
+            CsvImportService=Mock(),
+            CsvDataPackageRepository=Mock(),
+            CsvDataPackageRestoreRepository=Mock(),
+            CsvDataPackageArchiveValidator=Mock(),
+            CsvDataPackageExportService=Mock(),
+            CsvDataPackagePreflightService=Mock(),
+            CsvDataPackageImportService=Mock(),
+        ),
         patch.object(main_module, "ReadingHistoryService"),
         patch.object(
             main_module.tk,
@@ -789,8 +863,17 @@ def test_run_application_shows_backup_warning(
         patch.object(main_module, "BookMetadataService"),
         patch.object(main_module, "CoverImageService"),
         patch.object(main_module, "BookService"),
-        patch.object(main_module, "CsvExportService"),
-        patch.object(main_module, "CsvImportService"),
+        patch.multiple(
+            main_module,
+            CsvExportService=Mock(),
+            CsvImportService=Mock(),
+            CsvDataPackageRepository=Mock(),
+            CsvDataPackageRestoreRepository=Mock(),
+            CsvDataPackageArchiveValidator=Mock(),
+            CsvDataPackageExportService=Mock(),
+            CsvDataPackagePreflightService=Mock(),
+            CsvDataPackageImportService=Mock(),
+        ),
         patch.object(main_module, "ReadingHistoryService"),
         patch.object(
             main_module.tk,
