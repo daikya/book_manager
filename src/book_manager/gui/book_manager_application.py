@@ -70,6 +70,15 @@ if TYPE_CHECKING:
     from book_manager.services.csv_import_service import (
         CsvImportService,
     )
+    from book_manager.services.csv_data_package_export_service import (
+        CsvDataPackageExportService,
+    )
+    from book_manager.services.csv_data_package_import_service import (
+        CsvDataPackageImportService,
+    )
+    from book_manager.services.csv_data_package_preflight_service import (
+        CsvDataPackagePreflightService,
+    )
     from book_manager.services.reading_history_service import (
         ReadingHistoryService,
     )
@@ -260,6 +269,15 @@ class BookManagerApplication:
         ],
         window_state_store: WindowStateStore | None = None,
         list_view_state_store: ListViewStateStore | None = None,
+        csv_data_package_export_service: (
+            CsvDataPackageExportService | None
+        ) = None,
+        csv_data_package_preflight_service: (
+            CsvDataPackagePreflightService | None
+        ) = None,
+        csv_data_package_import_service: (
+            CsvDataPackageImportService | None
+        ) = None,
     ) -> None:
         """GUIを初期化する。
 
@@ -286,6 +304,15 @@ class BookManagerApplication:
         self._service = service
         self._csv_export_service = csv_export_service
         self._csv_import_service = csv_import_service
+        self._csv_data_package_export_service = (
+            csv_data_package_export_service
+        )
+        self._csv_data_package_preflight_service = (
+            csv_data_package_preflight_service
+        )
+        self._csv_data_package_import_service = (
+            csv_data_package_import_service
+        )
         self._backup_service = backup_service
         self._reading_history_service = reading_history_service
         self._application_settings_service = (
@@ -1953,6 +1980,31 @@ class BookManagerApplication:
             column=13,
             sticky="e",
         )
+
+        if self._has_csv_data_package_services():
+            self._csv_data_package_export_button = ttk.Button(
+                button_frame,
+                text="完全データ出力",
+                command=self._on_export_csv_data_package,
+            )
+            self._csv_data_package_export_button.grid(
+                row=1,
+                column=6,
+                padx=(0, 6),
+                pady=(6, 0),
+            )
+
+            self._csv_data_package_import_button = ttk.Button(
+                button_frame,
+                text="完全データ取込",
+                command=self._on_import_csv_data_package,
+            )
+            self._csv_data_package_import_button.grid(
+                row=1,
+                column=7,
+                padx=(0, 6),
+                pady=(6, 0),
+            )
 
     def _create_status_frame(
         self,
@@ -5604,6 +5656,223 @@ class BookManagerApplication:
                 "CSVファイルをインポートできませんでした。",
                 parent=self._root,
             )
+
+    def _has_csv_data_package_services(self) -> bool:
+        """完全データ入出力に必要なServiceが揃っているか返す。"""
+        return all(
+            service is not None
+            for service in (
+                getattr(
+                    self,
+                    "_csv_data_package_export_service",
+                    None,
+                ),
+                getattr(
+                    self,
+                    "_csv_data_package_preflight_service",
+                    None,
+                ),
+                getattr(
+                    self,
+                    "_csv_data_package_import_service",
+                    None,
+                ),
+            )
+        )
+
+    def _on_export_csv_data_package(self) -> None:
+        """書籍・タグ・関連・読書履歴をZIPへ出力する。"""
+        service = self._csv_data_package_export_service
+        if service is None:
+            return
+
+        output_filename = filedialog.asksaveasfilename(
+            parent=self._root,
+            title="完全データZIPを保存",
+            defaultextension=".zip",
+            initialfile=service.create_default_file_name(),
+            filetypes=[
+                ("ZIPファイル", "*.zip"),
+                ("すべてのファイル", "*.*"),
+            ],
+        )
+        if not output_filename:
+            return
+
+        try:
+            result = service.export(Path(output_filename))
+            messagebox.showinfo(
+                "完全データ出力完了",
+                (
+                    "完全データの出力が完了しました。\n\n"
+                    f"保存先: {result.output_path}\n"
+                    f"書籍: {result.book_item_count}件\n"
+                    f"タグ: {result.tag_count}件\n"
+                    "書籍タグ関連: "
+                    f"{result.book_item_tag_count}件\n"
+                    "読書履歴: "
+                    f"{result.reading_history_count}件"
+                ),
+                parent=self._root,
+            )
+        except Exception as error:
+            logger.exception("完全データの出力に失敗しました。")
+            messagebox.showerror(
+                "完全データ出力エラー",
+                (
+                    "完全データZIPを保存できませんでした。\n\n"
+                    "出力先には未完成のZIPを残していません。\n"
+                    f"詳細: {error}"
+                ),
+                parent=self._root,
+            )
+
+    def _on_import_csv_data_package(self) -> None:
+        """完全データZIPを検査し、確認後に空DBへ復元する。"""
+        preflight_service = self._csv_data_package_preflight_service
+        import_service = self._csv_data_package_import_service
+        if preflight_service is None or import_service is None:
+            return
+
+        input_filename = filedialog.askopenfilename(
+            parent=self._root,
+            title="完全データZIPを選択",
+            filetypes=[
+                ("ZIPファイル", "*.zip"),
+                ("すべてのファイル", "*.*"),
+            ],
+        )
+        if not input_filename:
+            return
+
+        try:
+            preview = preflight_service.preview(Path(input_filename))
+        except Exception as error:
+            logger.exception("完全データの事前検査に失敗しました。")
+            messagebox.showerror(
+                "完全データ事前検査エラー",
+                (
+                    "完全データZIPを検査できませんでした。\n\n"
+                    f"詳細: {error}"
+                ),
+                parent=self._root,
+            )
+            return
+
+        preview_message = self._format_csv_data_package_preview(
+            preview
+        )
+        if not preview.can_import:
+            messagebox.showerror(
+                "完全データ事前検査エラー",
+                preview_message,
+                parent=self._root,
+            )
+            return
+
+        confirmed = messagebox.askyesno(
+            "完全データ取込の確認",
+            (
+                f"{preview_message}\n\n"
+                "完全データは空のデータベースだけに"
+                "取り込めます。\n"
+                "実行直前にデータベースをバックアップします。\n\n"
+                "取り込みを実行しますか？"
+            ),
+            parent=self._root,
+        )
+        if not confirmed:
+            return
+
+        try:
+            result = import_service.import_preview(preview)
+            self._refresh_tag_options()
+            self._load_all_books()
+            messagebox.showinfo(
+                "完全データ取込完了",
+                (
+                    "完全データの取り込みが完了しました。\n\n"
+                    f"書籍: {result.book_item_count}件\n"
+                    f"タグ: {result.tag_count}件\n"
+                    "書籍タグ関連: "
+                    f"{result.book_item_tag_count}件\n"
+                    "読書履歴: "
+                    f"{result.reading_history_count}件\n\n"
+                    f"実行前バックアップ: {result.backup_path}"
+                ),
+                parent=self._root,
+            )
+        except Exception as error:
+            logger.exception("完全データの取り込みに失敗しました。")
+            messagebox.showerror(
+                "完全データ取込エラー",
+                (
+                    "完全データを取り込めませんでした。\n\n"
+                    "データベースへの変更は保存されていません。\n"
+                    "バックアップ作成後の失敗では、作成済みの"
+                    "バックアップも保持されます。\n"
+                    f"詳細: {error}"
+                ),
+                parent=self._root,
+            )
+
+    @classmethod
+    def _format_csv_data_package_preview(cls, preview: object) -> str:
+        """完全データの件数と検査Issueを確認用文面に整形する。"""
+        manifest = preview.manifest
+        if manifest is None:
+            message_lines = [
+                "パッケージ情報を読み取れませんでした。",
+            ]
+        else:
+            message_lines = [
+                "【完全データの内容】",
+                f"生成元Version: {manifest.application_version}",
+                f"出力日時: {manifest.exported_at}",
+                f"書籍: {manifest.book_item_count}件",
+                f"タグ: {manifest.tag_count}件",
+                "書籍タグ関連: "
+                f"{manifest.book_item_tag_count}件",
+                "読書履歴: "
+                f"{manifest.reading_history_count}件",
+            ]
+
+        cls._append_csv_data_package_issues(
+            message_lines,
+            "警告",
+            preview.warnings,
+        )
+        cls._append_csv_data_package_issues(
+            message_lines,
+            "エラー",
+            preview.errors,
+        )
+        if not preview.issues:
+            message_lines.extend(["", "検査結果: 問題ありません。"])
+        return "\n".join(message_lines)
+
+    @staticmethod
+    def _append_csv_data_package_issues(
+        message_lines: list[str],
+        heading: str,
+        issues: tuple[object, ...],
+    ) -> None:
+        """検査Issueを最大20件まで確認用文面へ追加する。"""
+        if not issues:
+            return
+
+        message_lines.extend(["", f"【{heading}】"])
+        for issue in issues[:20]:
+            location = issue.file_name
+            if issue.row_number is not None:
+                location += f" {issue.row_number}行目"
+            if issue.column_name is not None:
+                location += f" {issue.column_name}"
+            message_lines.append(f"{location}: {issue.message}")
+
+        remaining_count = len(issues) - 20
+        if remaining_count > 0:
+            message_lines.append(f"ほか{remaining_count}件")
 
     def _on_restore_backup(self) -> None:
         """バックアップからデータベースを復元する。"""
