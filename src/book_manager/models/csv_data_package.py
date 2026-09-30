@@ -213,6 +213,16 @@ class CsvDataPackageReadingHistory:
     notes: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class CsvDataPackageSnapshot:
+    """DBから取得した完全データの一貫したスナップショット。"""
+
+    book_items: tuple[CsvDataPackageBookItem, ...] = ()
+    tags: tuple[CsvDataPackageTag, ...] = ()
+    book_item_tags: tuple[CsvDataPackageBookItemTag, ...] = ()
+    reading_histories: tuple[CsvDataPackageReadingHistory, ...] = ()
+
+
 class CsvDataPackageIssueLevel(StrEnum):
     """CSVデータパッケージ検査Issueの重大度。"""
 
