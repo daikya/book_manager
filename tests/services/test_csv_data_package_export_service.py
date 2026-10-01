@@ -367,3 +367,37 @@ def test_export_result_contains_actual_counts(tmp_path: Path) -> None:
     assert result.tag_count == 1
     assert result.book_item_tag_count == 1
     assert result.reading_history_count == 1
+
+
+def test_export_preflight_roundtrip_preserves_nullable_status_and_same_isbn(
+    tmp_path: Path,
+) -> None:
+    """出力したZIPを再検査し、同じISBNの書籍とNULL状態を保持する。"""
+    from dataclasses import replace
+    from book_manager.services.csv_data_package_archive_validator import (
+        CsvDataPackageArchiveValidator,
+    )
+    from book_manager.services.csv_data_package_preflight_service import (
+        CsvDataPackagePreflightService,
+    )
+
+    snapshot = create_snapshot()
+    snapshot = replace(
+        snapshot,
+        book_items=tuple(
+            replace(book, isbn="9784101010014", reading_status=None)
+            for book in snapshot.book_items
+        ),
+    )
+    service, _ = create_service(snapshot)
+    path = tmp_path / "roundtrip.zip"
+    service.export(path)
+    preview = CsvDataPackagePreflightService(
+        CsvDataPackageArchiveValidator()
+    ).preview(path)
+
+    assert not preview.errors
+    assert preview.book_items == snapshot.book_items
+    assert preview.tags == snapshot.tags
+    assert preview.book_item_tags == snapshot.book_item_tags
+    assert preview.reading_histories == snapshot.reading_histories

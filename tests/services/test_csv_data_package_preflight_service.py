@@ -545,3 +545,36 @@ def test_preview_reports_file_row_column_and_value(tmp_path: Path) -> None:
     assert issue.file_name == BOOK_ITEMS_FILE_NAME
     assert issue.row_number == 2
     assert issue.value == "9"
+
+
+@pytest.mark.parametrize("identifier_column", ["ISBN", "雑誌コード"])
+def test_preview_preserves_duplicate_identifiers_and_empty_status(
+    tmp_path: Path,
+    identifier_column: str,
+) -> None:
+    """識別コードが同じ別書籍と空の読書状態を欠落させない。"""
+    rows = valid_rows()
+    first = rows[BOOK_ITEMS_FILE_NAME][1]
+    index = list(BOOK_ITEM_HEADERS).index(identifier_column)
+    first[index] = "9784101010014" if identifier_column == "ISBN" else "12345"
+    first[list(BOOK_ITEM_HEADERS).index("読書状態")] = ""
+    second = first.copy()
+    second[0] = "B000002"
+    rows[BOOK_ITEMS_FILE_NAME].append(second)
+    rows[BOOK_ITEM_TAGS_FILE_NAME].append(["B000002", "T000001"])
+    history = rows[READING_HISTORIES_FILE_NAME][1].copy()
+    history[0:2] = ["H000002", "B000002"]
+    rows[READING_HISTORIES_FILE_NAME].append(history)
+    replace_manifest_value(rows, "book_item_count", "2")
+    replace_manifest_value(rows, "book_item_tag_count", "2")
+    replace_manifest_value(rows, "reading_history_count", "2")
+    path = tmp_path / "package.zip"
+    write_package(path, rows)
+
+    preview = create_service().preview(path)
+
+    assert not preview.errors
+    assert len(preview.book_items) == 2
+    assert all(book.reading_status is None for book in preview.book_items)
+    assert len(preview.book_item_tags) == 2
+    assert len(preview.reading_histories) == 2

@@ -166,7 +166,7 @@ class CsvDataPackageBookItem:
 
     book_key: str
     title: str
-    reading_status: str
+    reading_status: str | None
     is_favorite: bool
     created_at: str
     updated_at: str

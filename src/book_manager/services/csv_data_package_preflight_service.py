@@ -399,8 +399,6 @@ class CsvDataPackagePreflightService:
         """book_items.csvを全行検査して正規化する。"""
         books: list[CsvDataPackageBookItem] = []
         key_rows: dict[str, int] = {}
-        isbn_rows: dict[str, int] = {}
-        magazine_rows: dict[str, int] = {}
 
         for row_number, row in content.rows:
             values = dict(zip(BOOK_ITEM_HEADERS, row, strict=True))
@@ -436,15 +434,6 @@ class CsvDataPackagePreflightService:
                     "ISBN",
                     issues,
                 )
-                self._validate_duplicate(
-                    isbn,
-                    isbn_rows,
-                    BOOK_ITEMS_FILE_NAME,
-                    row_number,
-                    "ISBN",
-                    "ISBNが重複しています。",
-                    issues,
-                )
 
             magazine_code = self._optional(values["雑誌コード"])
             if magazine_code is not None:
@@ -454,15 +443,6 @@ class CsvDataPackagePreflightService:
                     BOOK_ITEMS_FILE_NAME,
                     row_number,
                     "雑誌コード",
-                    issues,
-                )
-                self._validate_duplicate(
-                    magazine_code,
-                    magazine_rows,
-                    BOOK_ITEMS_FILE_NAME,
-                    row_number,
-                    "雑誌コード",
-                    "雑誌コードが重複しています。",
                     issues,
                 )
 
@@ -479,7 +459,7 @@ class CsvDataPackagePreflightService:
             reading_status = self.READING_STATUS_VALUES.get(
                 values["読書状態"]
             )
-            if reading_status is None:
+            if values["読書状態"] != "" and reading_status is None:
                 self._add_error(
                     issues,
                     BOOK_ITEMS_FILE_NAME,
@@ -524,7 +504,6 @@ class CsvDataPackagePreflightService:
 
             if len(issues) != row_issue_count:
                 continue
-            assert reading_status is not None
             assert is_favorite is not None
             assert created_at is not None
             assert updated_at is not None

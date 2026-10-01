@@ -446,3 +446,34 @@ def test_restore_rejects_missing_relation_key(
         if connection.in_transaction:
             connection.rollback()
         connection.close()
+
+
+def test_restore_preserves_null_status_and_duplicate_isbn(
+    database_path: Path,
+) -> None:
+    """同じISBNの別書籍をNULL状態と個別の関連・履歴ごと復元する。"""
+    from dataclasses import replace
+
+    preview = create_preview()
+    preview = replace(
+        preview,
+        book_items=tuple(
+            replace(book, isbn="9784101010014", reading_status=None)
+            for book in preview.book_items
+        ),
+    )
+    connection = create_connection(database_path)
+    try:
+        with connection:
+            CsvDataPackageRestoreRepository().restore(connection, preview)
+        books = fetch_all(connection, "book_items")
+        assert len(books) == 2
+        assert all(row["isbn"] == "9784101010014" for row in books)
+        assert all(row["reading_status"] is None for row in books)
+        histories = fetch_all(connection, "reading_histories")
+        assert [row["book_item_id"] for row in histories] == [
+            row["id"] for row in books
+        ]
+        assert len(fetch_all(connection, "book_item_tags")) == 3
+    finally:
+        connection.close()
