@@ -23,6 +23,7 @@ class CsvImportResult:
     error_count: int
     skipped: tuple[CsvImportIssue, ...]
     errors: tuple[CsvImportIssue, ...]
+    backup_path: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +31,7 @@ class CsvImportPreview:
     """DBを変更せずに検査した、単一CSVの登録予定と行別結果。"""
 
     input_path: Path
+    source_sha256: str
     books: tuple[BookItem, ...]
     skipped: tuple[CsvImportIssue, ...]
     errors: tuple[CsvImportIssue, ...]

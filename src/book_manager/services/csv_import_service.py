@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import csv
+import hashlib
+from dataclasses import replace
+from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -14,6 +17,7 @@ from book_manager.models.csv_import_result import (
 
 if TYPE_CHECKING:
     from book_manager.services.book_service import BookService
+    from book_manager.services.backup_service import BackupService
 
 
 class CsvImportService:
@@ -78,11 +82,9 @@ class CsvImportService:
         """CSV全件を検査し、登録やタグ作成を行わずに結果を返す。"""
         input_path = Path(input_path)
 
-        with input_path.open(
-            "r",
-            encoding="utf-8-sig",
-            newline="",
-        ) as file:
+        source_bytes = input_path.read_bytes()
+        source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+        with StringIO(source_bytes.decode("utf-8-sig"), newline="") as file:
             try:
                 reader = csv.reader(
                     file,
@@ -159,9 +161,45 @@ class CsvImportService:
                 seen_magazine_codes.add(book.magazine_code)
         return CsvImportPreview(
             input_path=input_path,
+            source_sha256=source_sha256,
             books=tuple(books),
             skipped=tuple(skipped),
             errors=tuple(errors),
+        )
+
+    def execute_preview(
+        self, preview: CsvImportPreview, *, backup_service: BackupService,
+    ) -> CsvImportResult:
+        """確認済みCSVを再検査し、バックアップ後に正常行を一括登録する。"""
+        def validate_current() -> CsvImportPreview:
+            current = self.preview_file(preview.input_path)
+            def content(books):
+                # 検査時に生成する登録日時は、比較から除外する。
+                return tuple(replace(book, created_at=None, updated_at=None) for book in books)
+            if (
+                current.source_sha256 != preview.source_sha256
+                or content(current.books) != content(preview.books)
+                or current.skipped != preview.skipped
+                or current.errors != preview.errors
+            ):
+                raise ValueError("検査後にCSVまたは重複状況が変わりました。再検査してください。")
+            return current
+
+        current = validate_current()
+        backup_path = None
+        if current.books:
+            backup_path = backup_service.create_backup()
+            if backup_path is None or not Path(backup_path).is_file():
+                raise RuntimeError("取込前バックアップを確認できません。")
+            current = validate_current()
+            self._book_service.add_books(current.books)
+        return CsvImportResult(
+            imported_count=current.importable_count,
+            skipped_count=current.skipped_count,
+            error_count=current.error_count,
+            skipped=current.skipped,
+            errors=current.errors,
+            backup_path=Path(backup_path) if backup_path is not None else None,
         )
 
     def import_file(

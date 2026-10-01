@@ -5567,8 +5567,33 @@ class BookManagerApplication:
             return
 
         try:
-            result = self._csv_import_service.import_file(
-                Path(input_filename),
+            preview = self._csv_import_service.preview_file(Path(input_filename))
+            lines = [
+                f"登録予定: {preview.importable_count}件",
+                f"スキップ: {preview.skipped_count}件",
+                f"エラー: {preview.error_count}件",
+            ]
+            for label, issues in (("スキップ", preview.skipped), ("エラー", preview.errors)):
+                if issues:
+                    lines.extend(["", f"【{label}】"])
+                    lines.extend(
+                        f"{issue.row_number}行目: {issue.message}" for issue in issues[:20]
+                    )
+                    if len(issues) > 20:
+                        lines.append(f"ほか{len(issues) - 20}件")
+            if preview.importable_count == 0:
+                messagebox.showinfo("CSV事前検査", "\n".join(lines), parent=self._root)
+                return
+            lines.extend([
+                "", "スキップ行とエラー行は登録しません。",
+                "取込前にバックアップを作成します。登録予定行を取り込みますか？",
+            ])
+            if not messagebox.askyesno(
+                "CSVインポート確認", "\n".join(lines), parent=self._root,
+            ):
+                return
+            result = self._csv_import_service.execute_preview(
+                preview, backup_service=self._backup_service,
             )
 
             self._refresh_tag_options()
@@ -5605,6 +5630,9 @@ class BookManagerApplication:
                     f"{issue.row_number}行目: {issue.message}"
                     for issue in result.errors
                 )
+
+            if result.backup_path is not None:
+                message_lines.extend(["", f"取込前バックアップ: {result.backup_path}"])
 
             messagebox.showinfo(
                 "CSVインポート完了",
