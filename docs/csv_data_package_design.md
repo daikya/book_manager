@@ -153,8 +153,8 @@ book_key,ISBN,雑誌コード,書籍名,著者名,出版社,出版形態,内容�
 | 列 | 必須 | 規則 |
 | --- | ---: | --- |
 | `book_key` | ○ | パッケージ内で一意な `B` + 6桁以上の連番 |
-| `ISBN` |  | 正規化後に形式検証し、パッケージ内で重複不可 |
-| `雑誌コード` |  | 正規化後に形式検証し、パッケージ内で重複不可 |
+| `ISBN` |  | 形式検証し、同じコードの別書籍は保持する |
+| `雑誌コード` |  | 形式検証し、同じコードの別書籍は保持する |
 | `書籍名` | ○ | `BookItem`と同じ文字数・空白規則 |
 | `著者名` |  | `BookItem`と同じ規則 |
 | `出版社` |  | `BookItem`と同じ規則 |
@@ -162,7 +162,7 @@ book_key,ISBN,雑誌コード,書籍名,著者名,出版社,出版形態,内容�
 | `内容紹介` |  | `BookItem`と同じ規則 |
 | `表紙画像URL` |  | URLまたは空。`cover_image_path`は移行しない |
 | `読了年月` |  | 定義済み書式または空 |
-| `読書状態` | ○ | 定義済み表示名 |
+| `読書状態` |  | 未読・読書中・読了。空欄は未設定（NULL） |
 | `お気に入り` | ○ | `はい` または `いいえ` |
 | `評価` |  | 1～5または空 |
 | `備考` |  | `BookItem`と同じ規則 |
@@ -294,7 +294,7 @@ tag_key  -> new_tag_id
 2. `manifest.csv`の形式Versionと必須値
 3. 各CSVの文字コード、ヘッダー、列数
 4. 各セルの型、必須値、文字数、列挙値、日時
-5. 各ファイル内のキーと業務キーの重複
+5. 各ファイル内のパッケージキー、タグ名、同一書籍タグ関連の重複
 6. ファイル間の参照整合性
 7. manifest件数と実件数の一致
 8. 移行先DBが空であること
@@ -364,6 +364,8 @@ DBが空でも、実行直前に`BackupService.create_backup()`を呼ぶ。バ�
 
 ## 18. 既存単一CSVインポートの安全化
 
+**実装状況：未実装。以下は残作業の設計であり、完全データZIPの実装完了とは区別する。**
+
 既存形式と行単位の問題報告は維持しつつ、DB変更方法を改善する。
 
 ### 18.1 処理の分離
@@ -423,19 +425,31 @@ CSV関連操作を次のように明確に分ける。
 ```text
 src/book_manager/models/csv_data_package.py
 src/book_manager/repositories/csv_data_package_repository.py
-src/book_manager/services/csv_data_package_service.py
+src/book_manager/repositories/csv_data_package_restore_repository.py
+src/book_manager/services/csv_data_package_export_service.py
+src/book_manager/services/csv_data_package_archive_validator.py
+src/book_manager/services/csv_data_package_preflight_service.py
+src/book_manager/services/csv_data_package_import_service.py
 tests/models/test_csv_data_package.py
 tests/repositories/test_csv_data_package_repository.py
-tests/services/test_csv_data_package_service.py
-tests/gui/test_csv_data_package.py
+tests/repositories/test_csv_data_package_restore_repository.py
+tests/services/test_csv_data_package_export_service.py
+tests/services/test_csv_data_package_archive_validator.py
+tests/services/test_csv_data_package_preflight_service.py
+tests/services/test_csv_data_package_import_service.py
+tests/gui/test_csv_data_package_gui.py
 ```
 
 ### 20.2 主な責務
 
 | コンポーネント | 責務 |
 | --- | --- |
-| `CsvDataPackageService` | ZIP生成、読込、安全検査、事前検査、処理調整 |
-| `CsvDataPackageRepository` | 同一接続での4テーブル取得・一括復元 |
+| `CsvDataPackageExportService` | ZIP生成 |
+| `CsvDataPackageArchiveValidator` | ZIP構造と安全性の検査 |
+| `CsvDataPackagePreflightService` | 全CSV・値・参照関係の事前検査 |
+| `CsvDataPackageImportService` | バックアップとトランザクションの調整 |
+| `CsvDataPackageRepository` | 同一接続での4テーブル取得 |
+| `CsvDataPackageRestoreRepository` | 共有接続での新規採番と4テーブル一括復元 |
 | パッケージModel | manifest、行データ、検査Issue、プレビュー、結果 |
 | `BackupService` | インポート直前のSQLiteバックアップ |
 | GUI | ファイル選択、プレビュー、確認、結果表示、画面更新 |
@@ -474,7 +488,7 @@ tests/gui/test_csv_data_package.py
 - 必須ファイル欠落、追加、重複
 - manifest件数不一致
 - 各キー重複、参照先欠落
-- ISBN・雑誌コード・タグ名の重複
+- タグ名の重複拒否、ISBN・雑誌コードが同じ別書籍の保持
 - 読書履歴の日付規則
 - 検査後のファイル改変検知
 - 一時ファイルの後始末
@@ -526,7 +540,7 @@ tests/gui/test_csv_data_package.py
 10. 既存データがあるDBでは実行できないことを確認する。
 11. 既存単一CSVの現行形式と旧形式を確認する。
 
-検証には必ず`BOOK_MANAGER_HOME`で分離した一時保存先を使い、普段の利用者データを直接対象にしない。
+検証には必ず`BOOK_MANAGER_HOME`で分離した一時保存先を使い、普段の利用者データを直接対象にしない。新規保存先は旧DBの自動移行対象になる場合があるため、空DB検証ではinitialize_databaseで正式な空DBを先に作成し、4テーブルが0件であることを確認してから起動する。
 
 ## 24. 実装順序
 
@@ -569,3 +583,12 @@ Version 2.7以降では、必要性を確認したうえで次を検討する。
 - 追加テーブル導入時の任意ファイル対応
 
 Version 2.6では完全性と安全性を優先し、統合ロジックを同時に持ち込まない。
+
+
+## 27. 実装・検証状況（2026年10月1日）
+
+2026年10月1日時点で、完全データZIPの実装とWindowsソース版の検証を完了した。全1694件の自動テストが成功した。検証用の空DBへ書籍31件・タグ7件・書籍タグ関連43件・読書履歴30件を復元し、ZIPと復元DBの全項目・参照関係が一致することを確認した。SQLiteの整合性検査と外部キー検査も成功した。実行前バックアップ、画面上のタグ・読書履歴の復元、非空DBへの再取込拒否、および拒否前後のDBハッシュ一致を確認した。通常利用DBのハッシュも一致した。
+
+読書状態の空欄は未設定（NULL）として保持する。ISBN・雑誌コードが同じ別書籍も保持し、書籍の識別と関連付けにはbook_keyを使う。キー・タグ名・同一関連の重複は引き続き拒否する。
+
+Windows配布版のビルド・実機検証と正式リリースは未実施である。既存単一CSVインポートの事前確認・安全バックアップ・一括トランザクション化は設計段階の残作業であり、今回の完全データZIP実装には含まれない。
