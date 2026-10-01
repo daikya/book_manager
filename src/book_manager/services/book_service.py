@@ -79,7 +79,45 @@ class BookService:
         notes: str | None = None,
         tags: tuple[str, ...] | list[str] = (),
     ) -> BookItem:
-        """書籍情報を登録する。
+        """入力値を検証し、書籍情報を登録する。"""
+        return self._repository.add(self.prepare_book(
+            title=title,
+            isbn=isbn,
+            magazine_code=magazine_code,
+            author=author,
+            publisher=publisher,
+            publication_format=publication_format,
+            description=description,
+            cover_image_url=cover_image_url,
+            cover_image_path=cover_image_path,
+            completion_month=completion_month,
+            reading_status=reading_status,
+            is_favorite=is_favorite,
+            rating=rating,
+            notes=notes,
+            tags=tags,
+        ))
+
+    def prepare_book(
+        self,
+        *,
+        title: str,
+        isbn: str | None = None,
+        magazine_code: str | None = None,
+        author: str | None = None,
+        publisher: str | None = None,
+        publication_format: str | None = None,
+        description: str | None = None,
+        cover_image_url: str | None = None,
+        cover_image_path: str | None = None,
+        completion_month: str | None = None,
+        reading_status: str | None = None,
+        is_favorite: bool = False,
+        rating: int | None = None,
+        notes: str | None = None,
+        tags: tuple[str, ...] | list[str] = (),
+    ) -> BookItem:
+        """DBを変更せず、入力値を正規化・検証する。
 
         Args:
             title: 書籍名。
@@ -189,7 +227,11 @@ class BookService:
             tags=normalized_tags,
         )
 
-        return self._repository.add(book_item)
+        return book_item
+
+    def add_books(self, books: tuple[BookItem, ...]) -> tuple[BookItem, ...]:
+        """検証済み書籍とタグを1トランザクションで登録する。"""
+        return self._repository.add_many(books)
 
     def find_duplicate_candidates(
         self,

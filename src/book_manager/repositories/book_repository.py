@@ -63,11 +63,27 @@ class BookRepository:
         """データベースファイルのパスを保持する。"""
         self._database_path = Path(database_path)
 
-    def add(
-        self,
-        book_item: BookItem,
-    ) -> BookItem:
+    def add(self, book_item: BookItem) -> BookItem:
         """書籍情報を登録し、自動採番されたIDを持つモデルを返す。"""
+        return self.add_many((book_item,))[0]
+
+    def add_many(self, books: tuple[BookItem, ...]) -> tuple[BookItem, ...]:
+        """全書籍とタグを登録し、途中の例外では全件を取り消す。"""
+        if not books:
+            return ()
+        connection = create_connection(self._database_path)
+        try:
+            with connection:
+                return tuple(
+                    self._add_with_connection(connection, book) for book in books
+                )
+        finally:
+            connection.close()
+
+    def _add_with_connection(
+        self, connection: sqlite3.Connection, book_item: BookItem,
+    ) -> BookItem:
+        """呼出元のトランザクション内で書籍とタグを登録する。"""
         query = """
             INSERT INTO book_items (
                 isbn,
@@ -107,35 +123,15 @@ class BookRepository:
             book_item.created_at,
             book_item.updated_at,
         )
-        connection = create_connection(self._database_path)
-
-        try:
-            with connection:
-                cursor = connection.execute(
-                    query,
-                    parameters,
-                )
-
-                book_id = cursor.lastrowid
-
-                if book_id is None:
-                    raise sqlite3.DatabaseError(
-                        "登録した書籍のIDを取得できませんでした。"
-                    )
-
-                self._replace_book_tags(
-                    connection,
-                    book_id=book_id,
-                    tag_names=book_item.tags,
-                    timestamp=book_item.created_at,
-                )
-
-            return replace(
-                book_item,
-                id=book_id,
-            )
-        finally:
-            connection.close()
+        cursor = connection.execute(query, parameters)
+        book_id = cursor.lastrowid
+        if book_id is None:
+            raise sqlite3.DatabaseError("登録した書籍のIDを取得できませんでした。")
+        self._replace_book_tags(
+            connection, book_id=book_id, tag_names=book_item.tags,
+            timestamp=book_item.created_at,
+        )
+        return replace(book_item, id=book_id)
 
     def get_by_id(
         self,
