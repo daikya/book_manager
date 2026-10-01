@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from book_manager.models.csv_import_result import (
     CsvImportIssue,
+    CsvImportPreview,
     CsvImportResult,
 )
 
@@ -72,6 +73,96 @@ class CsvImportService:
                 書籍情報の登録・検索を担当するサービス。
         """
         self._book_service = book_service
+
+    def preview_file(self, input_path: Path) -> CsvImportPreview:
+        """CSV全件を検査し、登録やタグ作成を行わずに結果を返す。"""
+        input_path = Path(input_path)
+
+        with input_path.open(
+            "r",
+            encoding="utf-8-sig",
+            newline="",
+        ) as file:
+            try:
+                reader = csv.reader(
+                    file,
+                    strict=True,
+                )
+                rows = list(reader)
+            except csv.Error as exc:
+                raise ValueError(
+                    "CSVとして正常に解析できません。"
+                ) from exc
+
+        if not rows:
+            raise ValueError(
+                "CSVヘッダーが存在しません。"
+            )
+
+        header = tuple(rows[0])
+
+        if header not in {
+            self.HEADERS,
+            self.LEGACY_HEADERS,
+        }:
+            raise ValueError(
+                "CSVヘッダーが仕様と一致しません。"
+            )
+
+        books = []
+        skipped: list[CsvImportIssue] = []
+        errors: list[CsvImportIssue] = []
+        seen_isbns: set[str] = set()
+        seen_magazine_codes: set[str] = set()
+        for row_number, row in enumerate(rows[1:], start=2):
+            if len(row) != len(header):
+                errors.append(CsvImportIssue(row_number, "列数が不正です。"))
+                continue
+            values = dict(zip(header, row, strict=True))
+            try:
+                book = self._book_service.prepare_book(
+                    title=values["書籍名"],
+                    isbn=values["ISBN"],
+                    magazine_code=values["雑誌コード"],
+                    author=values["著者名"],
+                    publisher=values["出版社"],
+                    publication_format=values["出版形態"],
+                    description=values["内容紹介"],
+                    completion_month=values["読了年月"],
+                    reading_status=self._convert_reading_status(values["読書状態"]),
+                    is_favorite=self._convert_is_favorite(values["お気に入り"]),
+                    rating=self._convert_rating(values["評価"]),
+                    tags=self._convert_tags(values.get("タグ", "")),
+                    notes=values["備考"],
+                )
+                message = None
+                if book.isbn:
+                    if self._book_service.find_books_by_isbn(book.isbn):
+                        message = "ISBNが既存データと重複しています。"
+                    elif book.isbn in seen_isbns:
+                        message = "ISBNがCSV内の登録予定データと重複しています。"
+                if message is None and book.magazine_code:
+                    if self._book_service.find_books_by_magazine_code(book.magazine_code):
+                        message = "雑誌コードが既存データと重複しています。"
+                    elif book.magazine_code in seen_magazine_codes:
+                        message = "雑誌コードがCSV内の登録予定データと重複しています。"
+                if message is not None:
+                    skipped.append(CsvImportIssue(row_number, message))
+                    continue
+            except ValueError as exc:
+                errors.append(CsvImportIssue(row_number, str(exc)))
+                continue
+            books.append(book)
+            if book.isbn:
+                seen_isbns.add(book.isbn)
+            if book.magazine_code:
+                seen_magazine_codes.add(book.magazine_code)
+        return CsvImportPreview(
+            input_path=input_path,
+            books=tuple(books),
+            skipped=tuple(skipped),
+            errors=tuple(errors),
+        )
 
     def import_file(
         self,
