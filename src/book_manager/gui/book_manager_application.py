@@ -1580,26 +1580,33 @@ class BookManagerApplication:
             sticky="w",
             padx=(12, 0),
         )
-        identifier_frame = ttk.Frame(form_frame)
-        identifier_frame.grid(
-            row=3, column=0, columnspan=4, sticky="ew", pady=4,
+        ttk.Label(form_frame, text="ISBN").grid(
+            row=3, column=0, sticky="w", padx=(0, 6), pady=4,
         )
-        for column in (1, 3, 5):
-            identifier_frame.columnconfigure(column, weight=1)
-        for column, label, variable, attribute in (
-            (0, "ISBN", self._isbn_var, "_isbn_entry"),
-            (2, "参照ISBN", self._reference_isbn_var, "_reference_isbn_entry"),
-            (4, "雑誌コード", self._magazine_code_var, "_magazine_code_entry"),
-        ):
-            ttk.Label(identifier_frame, text=label).grid(
-                row=0, column=column, sticky="w", padx=(0, 6),
-            )
-            entry = ttk.Entry(identifier_frame, textvariable=variable, width=15)
-            entry.grid(
-                row=0, column=column + 1, sticky="ew",
-                padx=(0, 12) if column < 4 else 0,
-            )
-            setattr(self, attribute, entry)
+        self._isbn_entry = ttk.Entry(form_frame, textvariable=self._isbn_var)
+        self._isbn_entry.grid(
+            row=3, column=1, sticky="ew", padx=(0, 12), pady=4,
+        )
+        ttk.Label(form_frame, text="参照ISBN").grid(
+            row=3, column=2, sticky="w", padx=(0, 6), pady=4,
+        )
+        identifier_frame = ttk.Frame(form_frame)
+        identifier_frame.grid(row=3, column=3, sticky="ew", pady=4)
+        identifier_frame.columnconfigure(0, weight=1)
+        identifier_frame.columnconfigure(2, weight=1)
+        self._reference_isbn_entry = ttk.Entry(
+            identifier_frame, textvariable=self._reference_isbn_var, width=15,
+        )
+        self._reference_isbn_entry.grid(
+            row=0, column=0, sticky="ew", padx=(0, 12),
+        )
+        ttk.Label(identifier_frame, text="雑誌コード").grid(
+            row=0, column=1, sticky="w", padx=(0, 6),
+        )
+        self._magazine_code_entry = ttk.Entry(
+            identifier_frame, textvariable=self._magazine_code_var, width=15,
+        )
+        self._magazine_code_entry.grid(row=0, column=2, sticky="ew")
 
         ttk.Label(
             form_frame,
