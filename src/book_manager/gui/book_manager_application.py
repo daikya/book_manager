@@ -13,6 +13,8 @@ from datetime import datetime
 import ctypes
 import sys
 
+from book_manager.gui.excel_column_mapping_dialog import ExcelColumnMappingDialog
+from book_manager.gui.excel_import_preview_dialog import ExcelImportPreviewDialog
 from book_manager.models.book_item import BookItem
 from book_manager.models.application_settings import BackupSettingsSnapshot
 from book_manager.models.reading_history import ReadingHistory
@@ -56,6 +58,9 @@ from book_manager.metadata.exceptions import (
 )
 
 if TYPE_CHECKING:
+    from book_manager.services.excel_workbook_reader_service import ExcelWorkbookReaderService
+    from book_manager.services.excel_import_preflight_service import ExcelImportPreflightService
+    from book_manager.services.excel_import_service import ExcelImportService
     from book_manager.services.backup_service import BackupService
     from book_manager.services.application_settings_service import (
         ApplicationSettingsService,
@@ -278,6 +283,9 @@ class BookManagerApplication:
         csv_data_package_import_service: (
             CsvDataPackageImportService | None
         ) = None,
+        excel_workbook_reader_service: ExcelWorkbookReaderService | None = None,
+        excel_import_preflight_service: ExcelImportPreflightService | None = None,
+        excel_import_service: ExcelImportService | None = None,
     ) -> None:
         """GUIを初期化する。
 
@@ -313,6 +321,9 @@ class BookManagerApplication:
         self._csv_data_package_import_service = (
             csv_data_package_import_service
         )
+        self._excel_workbook_reader_service = excel_workbook_reader_service
+        self._excel_import_preflight_service = excel_import_preflight_service
+        self._excel_import_service = excel_import_service
         self._backup_service = backup_service
         self._reading_history_service = reading_history_service
         self._application_settings_service = (
@@ -5656,6 +5667,8 @@ class BookManagerApplication:
             label="書籍一覧CSVをインポート",
             command=self._on_import_csv,
         )
+        if self._has_excel_import_services():
+            menu.add_command(label="Excelから書籍と読書履歴をインポート", command=self._on_import_excel)
         if self._has_csv_data_package_services():
             menu.add_separator()
             menu.add_command(
@@ -5677,6 +5690,49 @@ class BookManagerApplication:
             )
         finally:
             menu.grab_release()
+
+    def _has_excel_import_services(self) -> bool:
+        """Excel取込に必要なServiceが揃っているか返す。"""
+        return all(getattr(self, name, None) is not None for name in (
+            "_excel_workbook_reader_service", "_excel_import_preflight_service", "_excel_import_service",
+        ))
+
+    def _on_import_excel(self) -> None:
+        """Excel選択、列割り当て、全行検査、承認、登録を順に行う。"""
+        if not self._has_excel_import_services():
+            messagebox.showwarning("Excel取込", "Excel取込の準備ができていません。", parent=self._root)
+            return
+        filename = filedialog.askopenfilename(
+            title="1シートのExcelファイルを選択", filetypes=[("Excelファイル", "*.xlsx")],
+            parent=self._root,
+        )
+        if not filename:
+            return
+        try:
+            sheet = self._excel_workbook_reader_service.read_sheet(Path(filename))
+            while True:
+                options = ExcelColumnMappingDialog(self._root, sheet).show()
+                if options is None:
+                    return
+                preview = self._excel_import_preflight_service.preview_sheet(sheet, options=options)
+                if ExcelImportPreviewDialog(self._root, preview).show():
+                    result = self._excel_import_service.import_preview(preview)
+                    break
+                # 確認画面から戻った場合は、列割り当てから再確認する。
+        except Exception as error:
+            logger.exception("Excelインポートに失敗しました。")
+            messagebox.showerror("Excelインポートエラー", str(error), parent=self._root)
+            return
+        self._refresh_tag_options()
+        self._load_all_books()
+        messagebox.showinfo(
+            "Excelインポート完了",
+            f"書籍：{result.counts.books}件\n"
+            f"新規タグ：{result.counts.tags}件\n"
+            f"読書履歴：{result.counts.reading_histories}件\n\n"
+            f"取込前バックアップ：{result.backup_path}",
+            parent=self._root,
+        )
 
     def _has_csv_data_package_services(self) -> bool:
         """完全データ入出力に必要なServiceが揃っているか返す。"""
