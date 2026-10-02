@@ -39,6 +39,7 @@ class CsvDataPackageRepository:
                 SELECT
                     id,
                     isbn,
+                    reference_isbn,
                     magazine_code,
                     title,
                     author,
@@ -133,6 +134,7 @@ class CsvDataPackageRepository:
             CsvDataPackageBookItem(
                 book_key=book_keys[int(row["id"])],
                 isbn=row["isbn"],
+                reference_isbn=row["reference_isbn"],
                 magazine_code=row["magazine_code"],
                 title=row["title"],
                 author=row["author"],

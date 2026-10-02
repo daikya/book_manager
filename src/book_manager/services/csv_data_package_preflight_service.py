@@ -14,6 +14,8 @@ from book_manager.models.csv_data_package import (
     BOOLEAN_FALSE_TEXT,
     BOOLEAN_TRUE_TEXT,
     BOOK_ITEM_HEADERS,
+    BOOK_ITEM_HEADERS_VERSION_1,
+    SUPPORTED_PACKAGE_FORMAT_VERSIONS,
     BOOK_ITEM_TAG_HEADERS,
     BOOK_ITEM_TAGS_FILE_NAME,
     BOOK_ITEMS_FILE_NAME,
@@ -44,6 +46,9 @@ from book_manager.models.csv_data_package import (
 )
 from book_manager.services.csv_data_package_archive_validator import (
     CsvDataPackageArchiveValidator,
+)
+from book_manager.validators.reading_history_validator import (
+    validate_reading_date, validate_reading_history_dates,
 )
 from book_manager.validators.completion_month_validator import (
     validate_completion_month,
@@ -94,10 +99,16 @@ class CsvDataPackagePreflightService:
                 expected_headers=MANIFEST_HEADERS,
                 issues=issues,
             )
+            manifest = self._parse_manifest(manifest_content, issues)
+            format_version = manifest.format_version if manifest else PACKAGE_FORMAT_VERSION
+            book_headers = (
+                BOOK_ITEM_HEADERS_VERSION_1 if format_version == 1
+                else BOOK_ITEM_HEADERS
+            )
             book_content = self._read_csv(
                 archive,
                 file_name=BOOK_ITEMS_FILE_NAME,
-                expected_headers=BOOK_ITEM_HEADERS,
+                expected_headers=book_headers,
                 issues=issues,
             )
             tag_content = self._read_csv(
@@ -119,8 +130,7 @@ class CsvDataPackagePreflightService:
                 issues=issues,
             )
 
-        manifest = self._parse_manifest(manifest_content, issues)
-        book_items, book_rows = self._parse_books(book_content, issues)
+        book_items, book_rows = self._parse_books(book_content, issues, book_headers)
         tags, tag_rows = self._parse_tags(tag_content, issues)
         relations, relation_rows = self._parse_relations(
             relation_content,
@@ -129,6 +139,7 @@ class CsvDataPackagePreflightService:
         histories, history_rows = self._parse_histories(
             history_content,
             issues,
+            format_version,
         )
 
         self._validate_references(
@@ -317,7 +328,7 @@ class CsvDataPackagePreflightService:
         )
         if (
             format_version is not None
-            and format_version != PACKAGE_FORMAT_VERSION
+            and format_version not in SUPPORTED_PACKAGE_FORMAT_VERSIONS
         ):
             self._add_error(
                 issues,
@@ -395,13 +406,14 @@ class CsvDataPackagePreflightService:
         self,
         content: _CsvContent,
         issues: list[CsvDataPackageIssue],
+        headers: tuple[str, ...] = BOOK_ITEM_HEADERS,
     ) -> tuple[list[CsvDataPackageBookItem], dict[str, int]]:
         """book_items.csvを全行検査して正規化する。"""
         books: list[CsvDataPackageBookItem] = []
         key_rows: dict[str, int] = {}
 
         for row_number, row in content.rows:
-            values = dict(zip(BOOK_ITEM_HEADERS, row, strict=True))
+            values = dict(zip(headers, row, strict=True))
             row_issue_count = len(issues)
             book_key = values["book_key"]
             self._validate_key(
@@ -433,6 +445,13 @@ class CsvDataPackagePreflightService:
                     row_number,
                     "ISBN",
                     issues,
+                )
+
+            reference_isbn = self._optional(values.get("参照ISBN", ""))
+            if reference_isbn is not None:
+                self._validate_with(
+                    validate_isbn, reference_isbn, BOOK_ITEMS_FILE_NAME,
+                    row_number, "参照ISBN", issues,
                 )
 
             magazine_code = self._optional(values["雑誌コード"])
@@ -511,6 +530,7 @@ class CsvDataPackagePreflightService:
                 CsvDataPackageBookItem(
                     book_key=book_key,
                     isbn=isbn,
+                    reference_isbn=reference_isbn,
                     magazine_code=magazine_code,
                     title=title,
                     author=self._optional(values["著者名"]),
@@ -648,6 +668,7 @@ class CsvDataPackagePreflightService:
         self,
         content: _CsvContent,
         issues: list[CsvDataPackageIssue],
+        format_version: int = PACKAGE_FORMAT_VERSION,
     ) -> tuple[list[CsvDataPackageReadingHistory], list[int]]:
         """reading_histories.csvを全行検査して正規化する。"""
         histories: list[CsvDataPackageReadingHistory] = []
@@ -682,6 +703,7 @@ class CsvDataPackagePreflightService:
                 row_number,
                 "読書開始日",
                 issues,
+                allow_month=format_version >= 2,
             )
             completed_on = self._parse_date(
                 values["読了日"],
@@ -689,6 +711,7 @@ class CsvDataPackagePreflightService:
                 row_number,
                 "読了日",
                 issues,
+                allow_month=format_version >= 2,
             )
             notes = self._optional(values["読書メモ"])
             if started_on is None and completed_on is None and notes is None:
@@ -700,19 +723,12 @@ class CsvDataPackagePreflightService:
                     None,
                     "読書履歴には日付またはメモが必要です。",
                 )
-            if (
-                started_on is not None
-                and completed_on is not None
-                and started_on > completed_on
-            ):
+            try:
+                validate_reading_history_dates(started_on, completed_on)
+            except ValueError as error:
                 self._add_error(
-                    issues,
-                    READING_HISTORIES_FILE_NAME,
-                    row_number,
-                    "読了日",
-                    completed_on,
-                    "読書開始日は読了日以前である"
-                    "必要があります。",
+                    issues, READING_HISTORIES_FILE_NAME, row_number,
+                    "読了日", completed_on, str(error),
                 )
             created_at, updated_at = self._validate_timestamp_pair(
                 values["登録日時"],
@@ -1020,10 +1036,21 @@ class CsvDataPackagePreflightService:
         row_number: int,
         column_name: str,
         issues: list[CsvDataPackageIssue],
+        *,
+        allow_month: bool = False,
     ) -> str | None:
         """空値または固定書式の日付を検査する。"""
         if value == "":
             return None
+        if allow_month:
+            try:
+                validate_reading_date(value, field_name=column_name)
+            except ValueError as error:
+                CsvDataPackagePreflightService._add_error(
+                    issues, file_name, row_number, column_name, value, str(error),
+                )
+                return None
+            return value
         try:
             parsed = date.fromisoformat(value)
         except ValueError:

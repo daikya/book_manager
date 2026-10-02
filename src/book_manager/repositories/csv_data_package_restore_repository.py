@@ -77,6 +77,7 @@ class CsvDataPackageRestoreRepository:
         query = """
             INSERT INTO book_items (
                 isbn,
+                reference_isbn,
                 magazine_code,
                 title,
                 author,
@@ -93,7 +94,7 @@ class CsvDataPackageRestoreRepository:
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)
         """
         book_ids: dict[str, int] = {}
 
@@ -102,6 +103,7 @@ class CsvDataPackageRestoreRepository:
                 query,
                 (
                     book.isbn,
+                    book.reference_isbn,
                     book.magazine_code,
                     book.title,
                     book.author,

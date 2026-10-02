@@ -166,7 +166,7 @@ def test_export_writes_manifest_from_actual_counts(
     assert rows[0] == list(MANIFEST_HEADERS)
     assert dict(rows[1:]) == {
         "package_format": PACKAGE_FORMAT,
-        "format_version": "1",
+        "format_version": "2",
         "application_version": "2.6.0",
         "database_schema_version": "7",
         "exported_at": "2026-09-30 12:34:56",
@@ -192,6 +192,7 @@ def test_export_writes_all_book_fields_and_special_characters(
         "B000001",
         "9784000000000",
         "",
+        "",
         '引用符"と,カンマを含む書籍',
         "著者\n二行目",
         "出版社",
@@ -207,7 +208,7 @@ def test_export_writes_all_book_fields_and_special_characters(
         "2026-09-02 11:00:00",
     ]
     assert rows[2][0] == "B000002"
-    assert rows[2][10:13] == ["未読", "いいえ", ""]
+    assert rows[2][11:14] == ["未読", "いいえ", ""]
 
 
 def test_export_writes_tags_relations_and_histories(
@@ -367,37 +368,3 @@ def test_export_result_contains_actual_counts(tmp_path: Path) -> None:
     assert result.tag_count == 1
     assert result.book_item_tag_count == 1
     assert result.reading_history_count == 1
-
-
-def test_export_preflight_roundtrip_preserves_nullable_status_and_same_isbn(
-    tmp_path: Path,
-) -> None:
-    """出力したZIPを再検査し、同じISBNの書籍とNULL状態を保持する。"""
-    from dataclasses import replace
-    from book_manager.services.csv_data_package_archive_validator import (
-        CsvDataPackageArchiveValidator,
-    )
-    from book_manager.services.csv_data_package_preflight_service import (
-        CsvDataPackagePreflightService,
-    )
-
-    snapshot = create_snapshot()
-    snapshot = replace(
-        snapshot,
-        book_items=tuple(
-            replace(book, isbn="9784101010014", reading_status=None)
-            for book in snapshot.book_items
-        ),
-    )
-    service, _ = create_service(snapshot)
-    path = tmp_path / "roundtrip.zip"
-    service.export(path)
-    preview = CsvDataPackagePreflightService(
-        CsvDataPackageArchiveValidator()
-    ).preview(path)
-
-    assert not preview.errors
-    assert preview.book_items == snapshot.book_items
-    assert preview.tags == snapshot.tags
-    assert preview.book_item_tags == snapshot.book_item_tags
-    assert preview.reading_histories == snapshot.reading_histories

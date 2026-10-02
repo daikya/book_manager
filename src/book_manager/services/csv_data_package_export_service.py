@@ -246,6 +246,7 @@ class CsvDataPackageExportService:
         return (
             book.book_key,
             book.isbn or "",
+            book.reference_isbn or "",
             book.magazine_code or "",
             book.title,
             book.author or "",

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from book_manager.models.csv_data_package import (
-    BOOK_ITEM_HEADERS,
+    BOOK_ITEM_HEADERS_VERSION_1 as BOOK_ITEM_HEADERS,
     BOOK_ITEM_TAG_HEADERS,
     BOOK_ITEM_TAGS_FILE_NAME,
     BOOK_ITEMS_FILE_NAME,
@@ -481,7 +481,7 @@ def test_preview_rejects_manifest_count_mismatch(tmp_path: Path) -> None:
     ("key", "value"),
     [
         ("package_format", "other"),
-        ("format_version", "2"),
+        ("format_version", "3"),
         ("application_version", ""),
         ("database_schema_version", "0"),
         ("exported_at", "2026/09/30"),
@@ -578,3 +578,92 @@ def test_preview_preserves_duplicate_identifiers_and_empty_status(
     assert all(book.reading_status is None for book in preview.book_items)
     assert len(preview.book_item_tags) == 2
     assert len(preview.reading_histories) == 2
+
+
+def version_2_rows() -> dict[str, list[list[str]]]:
+    """参照ISBNと年月を含むVersion 2の検証データを返す。"""
+    from book_manager.models.csv_data_package import BOOK_ITEM_HEADERS as headers
+    rows = valid_rows()
+    replace_manifest_value(rows, "format_version", "2")
+    replace_manifest_value(rows, "database_schema_version", "8")
+    rows[BOOK_ITEMS_FILE_NAME][0] = list(headers)
+    rows[BOOK_ITEMS_FILE_NAME][1].insert(2, "9784101010014")
+    rows[READING_HISTORIES_FILE_NAME][1][2:4] = ["2026-09-20", "2026-09"]
+    return rows
+
+
+def test_preview_version_2_preserves_reference_and_month(tmp_path: Path) -> None:
+    path = tmp_path / "v2.zip"
+    write_package(path, version_2_rows())
+    preview = create_service().preview(path)
+    assert preview.can_import
+    assert preview.manifest.format_version == 2
+    assert preview.book_items[0].reference_isbn == "9784101010014"
+    assert preview.reading_histories[0].started_on == "2026-09-20"
+    assert preview.reading_histories[0].completed_on == "2026-09"
+
+
+def test_preview_version_1_has_no_reference_isbn(tmp_path: Path) -> None:
+    path = tmp_path / "v1.zip"
+    write_package(path, valid_rows())
+    preview = create_service().preview(path)
+    assert preview.can_import
+    assert preview.book_items[0].reference_isbn is None
+
+
+@pytest.mark.parametrize("started,completed", [
+    ("2026-10", "2026-09"),
+    ("2026-09-31", "2026-10"),
+    ("2026-00", "2026-10"),
+])
+def test_preview_version_2_rejects_invalid_dates(
+    tmp_path: Path, started: str, completed: str,
+) -> None:
+    rows = version_2_rows()
+    rows[READING_HISTORIES_FILE_NAME][1][2:4] = [started, completed]
+    path = tmp_path / "invalid.zip"
+    write_package(path, rows)
+    assert not create_service().preview(path).can_import
+
+
+def test_preview_version_1_rejects_month(tmp_path: Path) -> None:
+    rows = valid_rows()
+    rows[READING_HISTORIES_FILE_NAME][1][3] = "2026-09"
+    path = tmp_path / "v1_month.zip"
+    write_package(path, rows)
+    assert not create_service().preview(path).can_import
+
+
+def test_preview_version_2_rejects_invalid_reference(tmp_path: Path) -> None:
+    rows = version_2_rows()
+    rows[BOOK_ITEMS_FILE_NAME][1][2] = "invalid"
+    path = tmp_path / "reference.zip"
+    write_package(path, rows)
+    assert not create_service().preview(path).can_import
+
+
+@pytest.mark.parametrize("version", ["1", "2"])
+def test_preview_rejects_header_from_other_version(tmp_path: Path, version: str) -> None:
+    rows = version_2_rows() if version == "1" else valid_rows()
+    replace_manifest_value(rows, "format_version", version)
+    path = tmp_path / "wrong_version_header.zip"
+    write_package(path, rows)
+    assert not create_service().preview(path).can_import
+
+
+@pytest.mark.parametrize("started,completed", [
+    ("2026-09", "2026-09-01"),
+    ("2026-09", "2026-09"),
+    ("2026-09", "2026-10"),
+])
+def test_preview_version_2_preserves_date_precision(
+    tmp_path: Path, started: str, completed: str,
+) -> None:
+    rows = version_2_rows()
+    rows[READING_HISTORIES_FILE_NAME][1][2:4] = [started, completed]
+    path = tmp_path / "precision.zip"
+    write_package(path, rows)
+    preview = create_service().preview(path)
+    assert preview.can_import
+    assert preview.reading_histories[0].started_on == started
+    assert preview.reading_histories[0].completed_on == completed

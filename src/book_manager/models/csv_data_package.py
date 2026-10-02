@@ -9,7 +9,8 @@ from pathlib import Path
 
 
 PACKAGE_FORMAT = "book_manager_csv_package"
-PACKAGE_FORMAT_VERSION = 1
+PACKAGE_FORMAT_VERSION = 2
+SUPPORTED_PACKAGE_FORMAT_VERSIONS = (1, 2)
 
 MANIFEST_FILE_NAME = "manifest.csv"
 BOOK_ITEMS_FILE_NAME = "book_items.csv"
@@ -26,7 +27,7 @@ REQUIRED_FILE_NAMES = (
 )
 
 MANIFEST_HEADERS = ("key", "value")
-BOOK_ITEM_HEADERS = (
+BOOK_ITEM_HEADERS_VERSION_1 = (
     "book_key",
     "ISBN",
     "雑誌コード",
@@ -44,6 +45,12 @@ BOOK_ITEM_HEADERS = (
     "登録日時",
     "更新日時",
 )
+BOOK_ITEM_HEADERS = (
+    *BOOK_ITEM_HEADERS_VERSION_1[:2],
+    "参照ISBN",
+    *BOOK_ITEM_HEADERS_VERSION_1[2:],
+)
+
 TAG_HEADERS = (
     "tag_key",
     "タグ名",
@@ -139,7 +146,7 @@ class CsvDataPackageManifest:
         """manifestの基本的な整合性を検証する。"""
         if self.package_format != PACKAGE_FORMAT:
             raise ValueError("パッケージ形式が正しくありません。")
-        if self.format_version != PACKAGE_FORMAT_VERSION:
+        if self.format_version not in SUPPORTED_PACKAGE_FORMAT_VERSIONS:
             raise ValueError("未対応のパッケージ形式Versionです。")
         if not self.application_version.strip():
             raise ValueError("アプリケーションVersionは必須です。")
@@ -180,6 +187,7 @@ class CsvDataPackageBookItem:
     completion_month: str | None = None
     rating: int | None = None
     notes: str | None = None
+    reference_isbn: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
