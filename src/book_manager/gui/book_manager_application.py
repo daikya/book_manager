@@ -2252,11 +2252,14 @@ class BookManagerApplication:
     def _apply_fetched_book_data(
         self,
         fetched_data: FetchedBookData,
+        *,
+        use_reference_isbn: bool = False,
     ) -> None:
         """取得した書誌情報を入力フォームへ反映する。"""
-        self._isbn_var.set(
-            fetched_data.isbn,
+        isbn_variable = (
+            self._reference_isbn_var if use_reference_isbn else self._isbn_var
         )
+        isbn_variable.set(fetched_data.isbn)
 
         if fetched_data.title is not None:
             self._title_var.set(
@@ -6039,13 +6042,16 @@ class BookManagerApplication:
             )
 
     def _on_fetch_book_metadata(self) -> None:
-        """ISBNから外部書誌情報を取得してフォームへ反映する。"""
+        """ISBNを優先し、空欄の場合は参照ISBNから書誌情報を取得する。"""
         isbn = self._isbn_var.get().strip()
+        use_reference_isbn = not isbn
+        if use_reference_isbn:
+            isbn = self._reference_isbn_var.get().strip()
 
         if isbn == "":
             messagebox.showwarning(
                 "入力内容の確認",
-                "ISBNを入力してください。",
+                "ISBNまたは参照ISBNを入力してください。",
                 parent=self._root,
             )
             self._isbn_entry.focus_set()
@@ -6070,9 +6076,10 @@ class BookManagerApplication:
                 )
                 return
 
-            self._apply_fetched_book_data(
-                result,
-            )
+            if use_reference_isbn:
+                self._apply_fetched_book_data(result, use_reference_isbn=True)
+            else:
+                self._apply_fetched_book_data(result)
 
             if result.cover_image_url is not None:
                 self._current_cover_image_url = (
