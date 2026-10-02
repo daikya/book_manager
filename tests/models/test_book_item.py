@@ -217,3 +217,10 @@ def test_book_item_tag_default_is_immutable_tuple() -> None:
     assert isinstance(second.tags, tuple)
     assert first.tags == ()
     assert second.tags == ()
+
+
+def test_reference_isbn_is_independent_optional_field() -> None:
+    book = BookItem(title="音声版", isbn=None, reference_isbn="9784101010014")
+    assert book.isbn is None
+    assert book.reference_isbn == "9784101010014"
+    assert BookItem(title="書籍").reference_isbn is None

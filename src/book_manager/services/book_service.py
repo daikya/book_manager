@@ -65,6 +65,7 @@ class BookService:
         *,
         title: str,
         isbn: str | None = None,
+        reference_isbn: str | None = None,
         magazine_code: str | None = None,
         author: str | None = None,
         publisher: str | None = None,
@@ -83,6 +84,7 @@ class BookService:
         return self._repository.add(self.prepare_book(
             title=title,
             isbn=isbn,
+            reference_isbn=reference_isbn,
             magazine_code=magazine_code,
             author=author,
             publisher=publisher,
@@ -103,6 +105,7 @@ class BookService:
         *,
         title: str,
         isbn: str | None = None,
+        reference_isbn: str | None = None,
         magazine_code: str | None = None,
         author: str | None = None,
         publisher: str | None = None,
@@ -122,6 +125,7 @@ class BookService:
         Args:
             title: 書籍名。
             isbn: ISBN。
+            reference_isbn: 別媒体の書誌情報を参照するISBN。
             magazine_code: 雑誌コード。
             author: 著者名。
             publisher: 出版社名。
@@ -144,6 +148,7 @@ class BookService:
         """
         normalized_title = self._normalize_title(title)
         normalized_isbn = self._normalize_isbn(isbn)
+        normalized_reference_isbn = self._normalize_reference_isbn(reference_isbn)
         normalized_magazine_code = (
             self._normalize_optional_text(
                 magazine_code
@@ -208,6 +213,7 @@ class BookService:
         book_item = BookItem(
             title=normalized_title,
             isbn=normalized_isbn,
+            reference_isbn=normalized_reference_isbn,
             magazine_code=normalized_magazine_code,
             author=normalized_author,
             publisher=normalized_publisher,
@@ -681,6 +687,7 @@ class BookService:
         normalized_isbn = self._normalize_isbn(
             book_item.isbn
         )
+        normalized_reference_isbn = self._normalize_reference_isbn(book_item.reference_isbn)
         normalized_magazine_code = (
             self._normalize_optional_text(
                 book_item.magazine_code
@@ -746,6 +753,7 @@ class BookService:
             id=book_item.id,
             title=normalized_title,
             isbn=normalized_isbn,
+            reference_isbn=normalized_reference_isbn,
             magazine_code=normalized_magazine_code,
             author=normalized_author,
             publisher=normalized_publisher,
@@ -902,6 +910,33 @@ class BookService:
             return None
 
         return normalized_isbn
+
+    @classmethod
+    def _normalize_reference_isbn(cls, value: str | None) -> str | None:
+        """参照ISBNを検証し、ISBN-10はISBN-13へ変換する。"""
+        if value is not None and not isinstance(value, str):
+            raise ValueError("参照ISBNは文字列で入力してください。")
+        normalized = cls._normalize_isbn(value)
+        if normalized is None:
+            return None
+        normalized = normalized.upper()
+        if len(normalized) == 10:
+            if not (
+                all("0" <= c <= "9" for c in normalized[:9])
+                and normalized[-1] in "0123456789X"
+            ):
+                raise ValueError("参照ISBNの形式が正しくありません。")
+            digits = [int(c) for c in normalized[:9]] + [10 if normalized[-1] == "X" else int(normalized[-1])]
+            if sum((10 - i) * digit for i, digit in enumerate(digits)) % 11:
+                raise ValueError("参照ISBNのチェックデジットが正しくありません。")
+            prefix = "978" + normalized[:9]
+            check = (-sum(int(c) * (1 if i % 2 == 0 else 3) for i, c in enumerate(prefix))) % 10
+            normalized = prefix + str(check)
+        try:
+            validate_isbn(normalized)
+        except ValueError as error:
+            raise ValueError(f"参照ISBN：{error}") from error
+        return normalized
 
     def _current_timestamp(self) -> str:
         """現在日時を保存用文字列として取得する。"""

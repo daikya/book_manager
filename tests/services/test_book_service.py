@@ -2786,3 +2786,41 @@ def test_delete_and_count_missing_tag(
     """存在しないタグの削除と使用冊数取得結果を返す。"""
     assert service.count_books_by_tag(999) == 0
     assert service.delete_tag(999) is False
+
+
+@pytest.mark.parametrize("value, expected", [
+    (None, None), (" - ", None), ("978-4-10-101001-4", "9784101010014"),
+    ("4-10-101001-3", "9784101010014"), ("0-8044-2957-x", "9780804429573"),
+])
+def test_prepare_reference_isbn_normalizes_without_saving(service, repository, value, expected) -> None:
+    book = service.prepare_book(title="音声版", reference_isbn=value)
+    assert book.reference_isbn == expected
+    assert book.isbn is None
+    assert repository.get_all() == []
+
+
+@pytest.mark.parametrize("value", ["invalid", "4101010014", "9784101010015", 123])
+def test_invalid_reference_isbn_does_not_save(service, repository, value) -> None:
+    with pytest.raises(ValueError, match="参照ISBN"):
+        service.add_book(title="音声版", reference_isbn=value)
+    assert repository.get_all() == []
+
+
+def test_reference_isbn_shared_and_update_preserves_book_fields(service, repository) -> None:
+    first = service.add_book(title="音声版", publication_format="Audible", notes="メモ", reference_isbn="4101010013")
+    second = service.add_book(title="電子版", reference_isbn="9784101010014")
+    assert first.reference_isbn == second.reference_isbn == "9784101010014"
+    assert service.find_books_by_isbn("9784101010014") == []
+    assert service.update_book(replace(first, reference_isbn="9784065363706"))
+    updated = repository.get_by_id(first.id)
+    assert updated.title == "音声版"
+    assert updated.publication_format == "Audible"
+    assert updated.notes == "メモ"
+    assert updated.isbn is None
+    assert updated.reference_isbn == "9784065363706"
+    assert updated.created_at == first.created_at
+    with pytest.raises(ValueError, match="参照ISBN"):
+        service.update_book(replace(updated, reference_isbn="invalid"))
+    assert repository.get_by_id(first.id) == updated
+    assert service.update_book(replace(updated, reference_isbn=None))
+    assert repository.get_by_id(first.id).reference_isbn is None

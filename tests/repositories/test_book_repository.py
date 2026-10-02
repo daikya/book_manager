@@ -2752,3 +2752,26 @@ def test_search_by_conditions_rejects_conflicting_tag_filters(
             tag_name="小説",
             untagged_only=True,
         )
+
+
+def test_reference_isbn_roundtrip_update_and_shared_values(repository) -> None:
+    from dataclasses import replace
+    first = repository.add(BookItem(title="音声版", reference_isbn="9784101010014", created_at="a", updated_at="b"))
+    second = repository.add(BookItem(title="電子版", reference_isbn="9784101010014", created_at="a", updated_at="b"))
+    assert repository.get_by_id(first.id) == first
+    assert repository.get_by_id(second.id) == second
+    assert repository.find_by_isbn("9784101010014") == []
+    changed = replace(first, reference_isbn="9784065363706")
+    assert repository.update(changed)
+    assert repository.get_by_id(first.id).reference_isbn == "9784065363706"
+    assert repository.get_by_id(second.id).reference_isbn == "9784101010014"
+    assert repository.update(replace(changed, reference_isbn=None))
+    assert repository.get_by_id(first.id).reference_isbn is None
+
+
+def test_add_many_preserves_reference_isbn(repository) -> None:
+    books = tuple(BookItem(title=title, reference_isbn="9784101010014", created_at="a", updated_at="b") for title in ("音声版", "電子版"))
+    registered = repository.add_many(books)
+    assert len(registered) == 2
+    for book in registered:
+        assert repository.get_by_id(book.id).reference_isbn == "9784101010014"

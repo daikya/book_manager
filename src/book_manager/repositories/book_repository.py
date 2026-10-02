@@ -12,6 +12,7 @@ from book_manager.models.tag import Tag
 BOOK_ITEM_COLUMNS = """
     id,
     isbn,
+    reference_isbn,
     magazine_code,
     title,
     author,
@@ -87,6 +88,7 @@ class BookRepository:
         query = """
             INSERT INTO book_items (
                 isbn,
+                reference_isbn,
                 magazine_code,
                 title,
                 author,
@@ -103,10 +105,11 @@ class BookRepository:
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         parameters = (
             book_item.isbn,
+            book_item.reference_isbn,
             book_item.magazine_code,
             book_item.title,
             book_item.author,
@@ -565,6 +568,7 @@ class BookRepository:
             UPDATE book_items
             SET
                 isbn = ?,
+                reference_isbn = ?,
                 magazine_code = ?,
                 title = ?,
                 author = ?,
@@ -584,6 +588,7 @@ class BookRepository:
 
         parameters = (
             book_item.isbn,
+            book_item.reference_isbn,
             book_item.magazine_code,
             book_item.title,
             book_item.author,
@@ -939,6 +944,7 @@ class BookRepository:
         return BookItem(
             id=row["id"],
             isbn=row["isbn"],
+            reference_isbn=row["reference_isbn"],
             magazine_code=row["magazine_code"],
             title=row["title"],
             author=row["author"],
