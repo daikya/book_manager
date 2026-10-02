@@ -19,6 +19,8 @@ def create_form_application(
 
     application._title_var = Mock()
     application._isbn_var = Mock()
+    application._reference_isbn_var = Mock()
+    application._reference_isbn_var.get.return_value = ""
     application._magazine_code_var = Mock()
     application._author_var = Mock()
     application._publisher_var = Mock()
@@ -92,6 +94,8 @@ def test_display_book_in_form_sets_true_is_favorite() -> None:
 
     application._title_var = Mock()
     application._isbn_var = Mock()
+    application._reference_isbn_var = Mock()
+    application._reference_isbn_var.get.return_value = ""
     application._magazine_code_var = Mock()
     application._author_var = Mock()
     application._publisher_var = Mock()
@@ -133,6 +137,8 @@ def test_display_book_in_form_sets_false_is_favorite() -> None:
 
     application._title_var = Mock()
     application._isbn_var = Mock()
+    application._reference_isbn_var = Mock()
+    application._reference_isbn_var.get.return_value = ""
     application._magazine_code_var = Mock()
     application._author_var = Mock()
     application._publisher_var = Mock()
@@ -174,6 +180,8 @@ def test_clear_form_resets_is_favorite() -> None:
 
     application._title_var = Mock()
     application._isbn_var = Mock()
+    application._reference_isbn_var = Mock()
+    application._reference_isbn_var.get.return_value = ""
     application._magazine_code_var = Mock()
     application._author_var = Mock()
     application._publisher_var = Mock()

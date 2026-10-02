@@ -29,6 +29,7 @@ def create_application() -> BookManagerApplication:
         return_value={
             "title": "テスト書籍",
             "isbn": None,
+            "reference_isbn": None,
             "magazine_code": None,
             "author": None,
             "publisher": None,

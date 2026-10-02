@@ -380,6 +380,9 @@ class BookManagerApplication:
         self._isbn_var = tk.StringVar(
             master=self._root,
         )
+        self._reference_isbn_var = tk.StringVar(
+            master=self._root,
+        )
         self._magazine_code_var = tk.StringVar(
             master=self._root,
         )
@@ -1577,50 +1580,26 @@ class BookManagerApplication:
             sticky="w",
             padx=(12, 0),
         )
-        ttk.Label(
-            form_frame,
-            text="ISBN",
-        ).grid(
-            row=3,
-            column=0,
-            sticky="w",
-            padx=(0, 6),
-            pady=4,
+        identifier_frame = ttk.Frame(form_frame)
+        identifier_frame.grid(
+            row=3, column=0, columnspan=4, sticky="ew", pady=4,
         )
-
-        self._isbn_entry = ttk.Entry(
-            form_frame,
-            textvariable=self._isbn_var,
-        )
-        self._isbn_entry.grid(
-            row=3,
-            column=1,
-            sticky="ew",
-            padx=(0, 12),
-            pady=4,
-        )
-
-        ttk.Label(
-            form_frame,
-            text="雑誌コード",
-        ).grid(
-            row=3,
-            column=2,
-            sticky="w",
-            padx=(0, 6),
-            pady=4,
-        )
-
-        self._magazine_code_entry = ttk.Entry(
-            form_frame,
-            textvariable=self._magazine_code_var,
-        )
-        self._magazine_code_entry.grid(
-            row=3,
-            column=3,
-            sticky="ew",
-            pady=4,
-        )
+        for column in (1, 3, 5):
+            identifier_frame.columnconfigure(column, weight=1)
+        for column, label, variable, attribute in (
+            (0, "ISBN", self._isbn_var, "_isbn_entry"),
+            (2, "参照ISBN", self._reference_isbn_var, "_reference_isbn_entry"),
+            (4, "雑誌コード", self._magazine_code_var, "_magazine_code_entry"),
+        ):
+            ttk.Label(identifier_frame, text=label).grid(
+                row=0, column=column, sticky="w", padx=(0, 6),
+            )
+            entry = ttk.Entry(identifier_frame, textvariable=variable, width=15)
+            entry.grid(
+                row=0, column=column + 1, sticky="ew",
+                padx=(0, 12) if column < 4 else 0,
+            )
+            setattr(self, attribute, entry)
 
         ttk.Label(
             form_frame,
@@ -2157,6 +2136,7 @@ class BookManagerApplication:
         self._isbn_var.set(
             book_item.isbn or "",
         )
+        self._reference_isbn_var.set(book_item.reference_isbn or "")
         self._magazine_code_var.set(
             book_item.magazine_code or "",
         )
@@ -2430,6 +2410,7 @@ class BookManagerApplication:
         """入力フォームと選択状態を初期化する。"""
         self._title_var.set("")
         self._isbn_var.set("")
+        self._reference_isbn_var.set("")
         self._magazine_code_var.set("")
         self._author_var.set("")
         self._publisher_var.set("")
@@ -2475,6 +2456,7 @@ class BookManagerApplication:
         return {
             "title": self._title_var.get(),
             "isbn": self._isbn_var.get(),
+            "reference_isbn": self._reference_isbn_var.get(),
             "magazine_code": self._magazine_code_var.get(),
             "author": self._author_var.get(),
             "publisher": self._publisher_var.get(),
@@ -2528,6 +2510,7 @@ class BookManagerApplication:
             id=book_id,
             title=str(values["title"] or ""),
             isbn=values["isbn"],
+            reference_isbn=values["reference_isbn"],
             magazine_code=values["magazine_code"],
             author=values["author"],
             publisher=values["publisher"],
@@ -5214,6 +5197,7 @@ class BookManagerApplication:
             registered_book = self._service.add_book(
                 title=values["title"],
                 isbn=values["isbn"],
+                reference_isbn=values["reference_isbn"],
                 magazine_code=values["magazine_code"],
                 author=values["author"],
                 publisher=values["publisher"],

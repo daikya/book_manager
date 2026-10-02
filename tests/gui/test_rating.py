@@ -80,6 +80,8 @@ def test_get_form_values_converts_rating(
     application._title_var.get.return_value = "テスト書籍"
 
     application._isbn_var = Mock()
+    application._reference_isbn_var = Mock()
+    application._reference_isbn_var.get.return_value = ""
     application._isbn_var.get.return_value = ""
 
     application._magazine_code_var = Mock()
@@ -136,6 +138,7 @@ def test_create_book_item_from_form_sets_rating() -> None:
         return_value={
             "title": "テスト書籍",
             "isbn": None,
+            "reference_isbn": None,
             "magazine_code": None,
             "author": None,
             "publisher": None,
@@ -178,6 +181,8 @@ def test_display_book_in_form_sets_rating(
 
     application._title_var = Mock()
     application._isbn_var = Mock()
+    application._reference_isbn_var = Mock()
+    application._reference_isbn_var.get.return_value = ""
     application._magazine_code_var = Mock()
     application._author_var = Mock()
     application._publisher_var = Mock()
@@ -220,6 +225,8 @@ def test_display_book_in_form_sets_unrated() -> None:
 
     application._title_var = Mock()
     application._isbn_var = Mock()
+    application._reference_isbn_var = Mock()
+    application._reference_isbn_var.get.return_value = ""
     application._magazine_code_var = Mock()
     application._author_var = Mock()
     application._publisher_var = Mock()
@@ -262,6 +269,8 @@ def test_clear_form_resets_rating() -> None:
 
     application._title_var = Mock()
     application._isbn_var = Mock()
+    application._reference_isbn_var = Mock()
+    application._reference_isbn_var.get.return_value = ""
     application._magazine_code_var = Mock()
     application._author_var = Mock()
     application._publisher_var = Mock()
