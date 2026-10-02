@@ -30,6 +30,8 @@ docs/documentation_guide.md
 
 両者の役割を明確に分離し、取り違えを防ぐ。
 
+利用者向けの[Google Books APIキー取得マニュアル](google_books_api_key_guide.md)は、キー取得前の用語説明、Books APIの有効化、API制限、Windows版への登録、料金・クォータの確認、およびトラブル時の確認事項を扱う。READMEのGoogle Books API設定節から案内する。
+
 ---
 
 ## 3. 現在のドキュメント構成
@@ -46,6 +48,7 @@ docs/
 ├── documentation_guide.md
 ├── book_manager_roadmap.md
 ├── development_guidelines.md
+├── google_books_api_key_guide.md
 ├── external_book_metadata_design.md
 ├── favorite_design.md
 ├── rating_design.md

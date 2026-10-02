@@ -370,6 +370,8 @@ Google Books APIを利用する場合は、続けて「Google Books APIの設定
 
 ## Google Books APIの設定
 
+APIキーを初めて取得する方は、[Google Books APIキーの取得方法](docs/google_books_api_key_guide.md)を参照してください。プロジェクト、OAuth、料金・クォータ、キー制限、アプリへの登録と取得できない場合の確認事項を説明しています。
+
 `book_manager`では、ISBNからの書誌情報取得にGoogle Books APIおよびopenBDを利用します。
 
 メイン画面の「設定」から、Google Books APIキーの設定状態を確認し、登録・変更・削除できます。登録したAPIキーはWindowsの利用者環境変数`GOOGLE_BOOKS_API_KEY`へ保存され、アプリケーションの再起動後も使用できます。
