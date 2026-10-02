@@ -1,12 +1,13 @@
 """SQLite schema definitions."""
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 CREATE_BOOK_ITEMS_TABLE = """
 CREATE TABLE IF NOT EXISTS book_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     isbn TEXT,
+    reference_isbn TEXT,
     magazine_code TEXT,
     title TEXT NOT NULL,
     author TEXT,
@@ -99,7 +100,13 @@ CREATE TABLE IF NOT EXISTS reading_histories (
     CHECK (
         started_on IS NULL
         OR completed_on IS NULL
-        OR started_on <= completed_on
+        OR (
+            CASE WHEN length(started_on) = 7
+                THEN started_on || '-01' ELSE started_on END
+            <=
+            CASE WHEN length(completed_on) = 7
+                THEN completed_on || '-31' ELSE completed_on END
+        )
     )
 )
 """
@@ -149,8 +156,10 @@ MIGRATE_VERSION_5_TO_6 = (
     CREATE_BOOK_ITEM_TAGS_TAG_ID_INDEX,
 )
 
+CREATE_READING_HISTORIES_TABLE_VERSION_7 = '\nCREATE TABLE IF NOT EXISTS reading_histories (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    book_item_id INTEGER NOT NULL,\n    started_on TEXT,\n    completed_on TEXT,\n    notes TEXT,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    FOREIGN KEY (book_item_id)\n        REFERENCES book_items (id)\n        ON DELETE CASCADE,\n    CHECK (\n        started_on IS NOT NULL\n        OR completed_on IS NOT NULL\n        OR notes IS NOT NULL\n    ),\n    CHECK (\n        started_on IS NULL\n        OR completed_on IS NULL\n        OR started_on <= completed_on\n    )\n)\n'
+
 MIGRATE_VERSION_6_TO_7 = (
-    CREATE_READING_HISTORIES_TABLE,
+    CREATE_READING_HISTORIES_TABLE_VERSION_7,
     CREATE_READING_HISTORIES_BOOK_ITEM_ID_INDEX,
 )
 

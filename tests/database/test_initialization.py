@@ -137,10 +137,10 @@ def test_initialize_database_creates_rating_column(
         connection.close()
 
 
-def test_initialize_database_migrates_version_1_to_7(
+def test_initialize_database_migrates_version_1_to_8(
     tmp_path: Path,
 ) -> None:
-    """Version 1のDBをVersion 7へ移行する。"""
+    """Version 1のDBをVersion 8へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -228,10 +228,10 @@ def test_initialize_database_migrates_version_1_to_7(
     finally:
         connection.close()
 
-def test_initialize_database_migrates_version_2_to_7(
+def test_initialize_database_migrates_version_2_to_8(
     tmp_path: Path,
 ) -> None:
-    """Version 2のDBをVersion 7へ移行する。"""
+    """Version 2のDBをVersion 8へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -322,10 +322,10 @@ def test_initialize_database_migrates_version_2_to_7(
     finally:
         connection.close()
 
-def test_initialize_database_migrates_version_3_to_7(
+def test_initialize_database_migrates_version_3_to_8(
     tmp_path: Path,
 ) -> None:
-    """Version 3のDBをVersion 7へ移行する。"""
+    """Version 3のDBをVersion 8へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -419,10 +419,10 @@ def test_initialize_database_migrates_version_3_to_7(
     finally:
         connection.close()
 
-def test_initialize_database_migrates_version_4_to_7(
+def test_initialize_database_migrates_version_4_to_8(
     tmp_path: Path,
 ) -> None:
-    """Version 4のDBをVersion 7へ移行する。"""
+    """Version 4のDBをVersion 8へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -519,10 +519,10 @@ def test_initialize_database_migrates_version_4_to_7(
         connection.close()
 
 
-def test_initialize_database_migrates_version_5_to_7(
+def test_initialize_database_migrates_version_5_to_8(
     tmp_path: Path,
 ) -> None:
-    """Version 5のDBをVersion 7へ移行する。"""
+    """Version 5のDBをVersion 8へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
 
     connection = sqlite3.connect(database_path)
@@ -627,10 +627,10 @@ def test_initialize_database_migrates_version_5_to_7(
         connection.close()
 
 
-def test_initialize_database_migrates_version_6_to_7(
+def test_initialize_database_migrates_version_6_to_8(
     tmp_path: Path,
 ) -> None:
-    """Version 6のDBをVersion 7へ移行する。"""
+    """Version 6のDBをVersion 8へ移行する。"""
     database_path = tmp_path / "test_book_manager.db"
     connection = sqlite3.connect(database_path)
 
@@ -1533,3 +1533,115 @@ def test_initialize_database_uses_null_as_default_rating(
 
     finally:
         connection.close()
+
+
+def _create_version_7_database(path: Path) -> None:
+    """移行元の履歴と削除済みIDの連番を用意する。"""
+    from book_manager.database.schema import (
+        CREATE_READING_HISTORIES_TABLE_VERSION_7,
+    )
+    initialize_database(path)
+    with create_connection(path) as connection:
+        connection.execute("DROP TABLE reading_histories")
+        connection.execute(CREATE_READING_HISTORIES_TABLE_VERSION_7)
+        connection.execute("ALTER TABLE book_items DROP COLUMN reference_isbn")
+        connection.execute(
+            "INSERT INTO book_items (id, title, created_at, updated_at) "
+            "VALUES (5, '移行テスト', '登録日時', '更新日時')"
+        )
+        connection.execute(
+            "INSERT INTO reading_histories VALUES "
+            "(9, 5, '2026-05-01', '2026-05-20', '読書メモ', '登録日時', '更新日時')"
+        )
+        connection.execute(
+            "INSERT INTO reading_histories VALUES "
+            "(100, 5, NULL, NULL, '削除する履歴', '登録日時', '更新日時')"
+        )
+        connection.execute("DELETE FROM reading_histories WHERE id = 100")
+        connection.execute("PRAGMA user_version = 7")
+
+
+def test_version_7_migration_preserves_history_and_sequence(tmp_path: Path) -> None:
+    path = tmp_path / "books.db"
+    _create_version_7_database(path)
+    initialize_database(path)
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT * FROM reading_histories").fetchall() == [
+            (9, 5, '2026-05-01', '2026-05-20', '読書メモ', '登録日時', '更新日時')
+        ]
+        assert connection.execute("SELECT reference_isbn FROM book_items").fetchone() == (None,)
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert connection.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
+        cursor = connection.execute(
+            "INSERT INTO reading_histories (book_item_id, started_on, completed_on, created_at, updated_at) "
+            "VALUES (5, '2026-05-20', '2026-05', '登録日時', '更新日時')"
+        )
+        assert cursor.lastrowid == 101
+    backups = list((tmp_path / "schema_backups").glob("*.db"))
+    assert len(backups) == 1
+    assert get_user_version(backups[0]) == 7
+    with sqlite3.connect(backups[0]) as connection:
+        assert connection.execute("SELECT id FROM reading_histories").fetchall() == [(9,)]
+        assert connection.execute("SELECT seq FROM sqlite_sequence WHERE name = 'reading_histories'").fetchone() == (100,)
+    initialize_database(path)
+    assert len(list((tmp_path / "schema_backups").glob("*.db"))) == 1
+
+
+def test_month_precision_database_constraint(tmp_path: Path) -> None:
+    path = tmp_path / "books.db"
+    initialize_database(path)
+    with create_connection(path) as connection:
+        connection.execute("INSERT INTO book_items (id, title, created_at, updated_at) VALUES (1, '書籍', 'a', 'b')")
+        for started, completed in [
+            ('2026-05', '2026-05-10'), ('2026-05-20', '2026-05'),
+            ('2026-05', '2026-05'), (None, '2026-05'),
+        ]:
+            connection.execute(
+                "INSERT INTO reading_histories (book_item_id, started_on, completed_on, created_at, updated_at) VALUES (1, ?, ?, 'a', 'b')",
+                (started, completed),
+            )
+        for started, completed in [('2026-06', '2026-05-31'), ('2026-06-01', '2026-05'), ('2026-05-11', '2026-05-10')]:
+            with pytest.raises(sqlite3.IntegrityError):
+                connection.execute(
+                    "INSERT INTO reading_histories (book_item_id, started_on, completed_on, created_at, updated_at) VALUES (1, ?, ?, 'a', 'b')",
+                    (started, completed),
+                )
+        connection.execute("DELETE FROM book_items WHERE id = 1")
+        assert connection.execute("SELECT COUNT(*) FROM reading_histories").fetchone()[0] == 0
+
+
+def test_migration_failure_rolls_back_schema_and_data(tmp_path: Path) -> None:
+    from unittest.mock import patch
+    from book_manager.database.initializer import _migrate_version_7_to_8
+    path = tmp_path / "books.db"
+    _create_version_7_database(path)
+
+    def fail_after_rebuild(connection):
+        _migrate_version_7_to_8(connection)
+        raise RuntimeError("意図的な移行失敗")
+
+    with patch("book_manager.database.initializer._migrate_version_7_to_8", side_effect=fail_after_rebuild):
+        with pytest.raises(RuntimeError):
+            initialize_database(path)
+    assert get_user_version(path) == 7
+    assert "reference_isbn" not in get_table_column_names(path, "book_items")
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT id, notes FROM reading_histories").fetchall() == [(9, '読書メモ')]
+        assert connection.execute("SELECT seq FROM sqlite_sequence WHERE name = 'reading_histories'").fetchone() == (100,)
+    assert len(list((tmp_path / "schema_backups").glob("*.db"))) == 1
+
+
+def test_backup_failure_prevents_migration(tmp_path: Path) -> None:
+    from unittest.mock import patch
+    path = tmp_path / "books.db"
+    _create_version_7_database(path)
+    before = path.read_bytes()
+    with patch("book_manager.database.initializer._create_migration_backup", side_effect=OSError("保存失敗")):
+        with pytest.raises(OSError):
+            initialize_database(path)
+    assert path.read_bytes() == before
+
+
+def test_new_database_does_not_create_migration_backup(tmp_path: Path) -> None:
+    initialize_database(tmp_path / "books.db")
+    assert not (tmp_path / "schema_backups").exists()
