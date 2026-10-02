@@ -84,6 +84,10 @@ from book_manager.services.cover_image_service import (
 from book_manager.services.csv_export_service import (
     CsvExportService,
 )
+from book_manager.services.excel_workbook_reader_service import ExcelWorkbookReaderService
+from book_manager.services.excel_import_preflight_service import ExcelImportPreflightService
+from book_manager.services.excel_import_service import ExcelImportService
+from book_manager.repositories.excel_import_repository import ExcelImportRepository
 from book_manager.services.csv_import_service import (
     CsvImportService,
 )
@@ -253,6 +257,16 @@ def _run_application(
         csv_import_service = CsvImportService(
             book_service=book_service,
         )
+        excel_workbook_reader_service = ExcelWorkbookReaderService()
+        excel_import_preflight_service = ExcelImportPreflightService(
+            book_service=book_service, reader=excel_workbook_reader_service,
+        )
+        excel_import_service = ExcelImportService(
+            database_path=database_path,
+            backup_service=backup_service,
+            preflight_service=excel_import_preflight_service,
+            repository=ExcelImportRepository(),
+        )
         csv_data_package_repository = CsvDataPackageRepository(
             database_path,
         )
@@ -334,6 +348,9 @@ def _run_application(
             reading_history_service,
             application_settings_service,
             google_books_client.set_api_key,
+            excel_workbook_reader_service=excel_workbook_reader_service,
+            excel_import_preflight_service=excel_import_preflight_service,
+            excel_import_service=excel_import_service,
             window_state_store=window_state_store,
             list_view_state_store=list_view_state_store,
             csv_data_package_export_service=(

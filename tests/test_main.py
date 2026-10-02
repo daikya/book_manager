@@ -514,6 +514,10 @@ def test_run_application_injects_new_paths(
     user_environment_store = Mock()
     application_settings_service = Mock()
     window_state_store = Mock()
+    excel_reader_class = Mock()
+    excel_preflight_class = Mock()
+    excel_import_class = Mock()
+    excel_repository_class = Mock()
     package_repository = Mock()
     package_restore_repository = Mock()
     package_archive_validator = Mock()
@@ -588,6 +592,10 @@ def test_run_application_injects_new_paths(
         ),
         patch.multiple(
             main_module,
+            ExcelWorkbookReaderService=excel_reader_class,
+            ExcelImportPreflightService=excel_preflight_class,
+            ExcelImportService=excel_import_class,
+            ExcelImportRepository=excel_repository_class,
             CsvExportService=Mock(),
             CsvImportService=Mock(),
             CsvDataPackageRepository=package_repository_class,
@@ -692,7 +700,21 @@ def test_run_application_injects_new_paths(
     assert list_view_state_store.path == (
         paths.list_view_state_path
     )
+    excel_reader_class.assert_called_once_with()
+    excel_repository_class.assert_called_once_with()
+    excel_preflight_class.assert_called_once_with(
+        book_service=book_service, reader=excel_reader_class.return_value,
+    )
+    excel_import_class.assert_called_once_with(
+        database_path=paths.database_path,
+        backup_service=backup_service,
+        preflight_service=excel_preflight_class.return_value,
+        repository=excel_repository_class.return_value,
+    )
     assert application_keyword_arguments == {
+        "excel_workbook_reader_service": excel_reader_class.return_value,
+        "excel_import_preflight_service": excel_preflight_class.return_value,
+        "excel_import_service": excel_import_class.return_value,
         "window_state_store": window_state_store,
         "list_view_state_store": list_view_state_store,
         "csv_data_package_export_service": package_export_service,
