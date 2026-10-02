@@ -162,7 +162,7 @@ def test_add_history_rejects_all_empty_values(
         (
             "2026/09/01",
             None,
-            "読書開始日はYYYY-MM-DD形式で入力してください。",
+            "読書開始日はYYYY-MMまたはYYYY-MM-DD形式で入力してください。",
         ),
         (
             None,
@@ -603,3 +603,76 @@ def test_get_monthly_reading_counts_rejects_invalid_results(
         match="月別読了数の集計結果が不正です。",
     ):
         service.get_monthly_reading_counts(2026)
+
+
+@pytest.mark.parametrize("started, completed", [
+    ("2026-05", "2026-05"), ("2026-05-20", "2026-05"),
+    ("2026-05", "2026-05-10"), ("2028-02-29", "2028-02"),
+    ("2026-05", None), (None, "2026-05"),
+])
+def test_add_month_precision_preserves_values_and_book(components, started, completed) -> None:
+    """年月へ日を付けずに保存し、書籍の読了情報も保持する。"""
+    book_repository, service = components
+    book = add_book(book_repository)
+    assert book.id is not None
+    before = book_repository.get_by_id(book.id)
+    registered = service.add_history(
+        book_item_id=book.id, started_on=started, completed_on=completed,
+    )
+    assert registered.started_on == started
+    assert registered.completed_on == completed
+    assert service.get_history(registered.id) == registered
+    assert book_repository.get_by_id(book.id) == before
+
+
+def test_update_month_precision_preserves_identity_and_book(components) -> None:
+    book_repository, service = components
+    book = add_book(book_repository)
+    assert book.id is not None
+    before = book_repository.get_by_id(book.id)
+    history = service.add_history(book_item_id=book.id, completed_on="2026-05-20")
+    updater = ReadingHistoryService(
+        service._repository, book_repository, now_provider=lambda: UPDATED_NOW,
+    )
+    assert updater.update_history(replace(history, started_on=" 2026-05 ", completed_on=" 2026-05 "))
+    updated = service.get_history(history.id)
+    assert updated is not None
+    assert updated.started_on == "2026-05"
+    assert updated.completed_on == "2026-05"
+    assert updated.created_at == history.created_at
+    assert updated.updated_at == "2026-09-08 11:45:30"
+    assert updated.book_item_id == history.book_item_id
+    assert book_repository.get_by_id(book.id) == before
+
+
+@pytest.mark.parametrize("started, completed", [
+    ("2026-06", "2026-05-31"), ("2026-06-01", "2026-05"),
+    (None, "2026-13"), ("2026-5", None),
+])
+def test_invalid_month_input_leaves_existing_history_unchanged(components, started, completed) -> None:
+    book_repository, service = components
+    book = add_book(book_repository)
+    assert book.id is not None
+    history = service.add_history(book_item_id=book.id, completed_on="2026-05")
+    with pytest.raises(ValueError):
+        service.add_history(book_item_id=book.id, started_on=started, completed_on=completed)
+    with pytest.raises(ValueError):
+        service.update_history(replace(history, started_on=started, completed_on=completed))
+    assert service.get_histories_for_book(book.id) == [history]
+
+
+def test_service_month_precision_statistics(components) -> None:
+    book_repository, service = components
+    book = add_book(book_repository)
+    assert book.id is not None
+    for completed in ("2026-05", "2026-05-20", "2026-12"):
+        service.add_history(book_item_id=book.id, completed_on=completed)
+    service.add_history(book_item_id=book.id, started_on="2026-05")
+    service.add_history(book_item_id=book.id, notes="日付なし")
+    counts = service.get_monthly_reading_counts(2026)
+    assert len(counts) == 12
+    assert counts[4] == MonthlyReadingCount(year=2026, month=5, completed_count=2)
+    assert counts[11].completed_count == 1
+    assert sum(item.completed_count for item in counts) == 3
+    assert service.get_statistics_summary().completed_history_count == 3
+    assert service.get_completed_years() == [2026]

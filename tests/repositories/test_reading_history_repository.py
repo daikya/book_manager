@@ -629,3 +629,66 @@ def test_get_monthly_completed_counts_supports_year_limits(
     )
 
     assert repository.get_monthly_completed_counts(year) == {1: 1}
+
+
+def test_month_and_day_precision_order_and_roundtrip(repositories) -> None:
+    """異なる精度をそのまま保存し、同月の日付ありを先に並べる。"""
+    book_repository, repository = repositories
+    book = add_book(book_repository)
+    assert book.id is not None
+    registered = []
+    for completed in ("2026-05", "2026-05-01", "2026-05-31", "2026-06", "2026-05"):
+        history = repository.add(create_reading_history(
+            book_item_id=book.id, started_on=None, completed_on=completed,
+        ))
+        assert repository.get_by_id(history.id) == history
+        registered.append(history)
+    assert repository.get_by_book_id(book.id) == [
+        registered[3], registered[2], registered[1], registered[4], registered[0],
+    ]
+
+
+def test_month_precision_started_and_created_date_fallback(repositories) -> None:
+    """読了・開始・登録日の優先順位を維持する。"""
+    book_repository, repository = repositories
+    book = add_book(book_repository)
+    assert book.id is not None
+    month = repository.add(create_reading_history(
+        book_item_id=book.id, started_on="2026-05", completed_on=None,
+        created_at="2026-12-01 00:00:00",
+    ))
+    exact = repository.add(create_reading_history(
+        book_item_id=book.id, started_on="2026-05-10", completed_on=None,
+    ))
+    note = repository.add(create_reading_history(
+        book_item_id=book.id, started_on=None, completed_on=None,
+        created_at="2026-05-20 00:00:00",
+    ))
+    completed = repository.add(create_reading_history(
+        book_item_id=book.id, started_on="2026-04", completed_on="2026-04",
+        created_at="2026-12-01 00:00:00",
+    ))
+    assert repository.get_by_book_id(book.id) == [note, exact, month, completed]
+
+
+def test_month_precision_statistics_include_completed_only(repositories) -> None:
+    """年月と年月日を集計し、開始のみとメモのみは読了数に含めない。"""
+    book_repository, repository = repositories
+    book = add_book(book_repository)
+    assert book.id is not None
+    for completed in ("2025-12", "2026-01", "2026-01-31", "2026-12", "2027-01"):
+        repository.add(create_reading_history(
+            book_item_id=book.id, started_on=None, completed_on=completed,
+        ))
+    repository.add(create_reading_history(
+        book_item_id=book.id, started_on="2026-01", completed_on=None,
+    ))
+    repository.add(create_reading_history(
+        book_item_id=book.id, started_on=None, completed_on=None,
+    ))
+    assert repository.get_monthly_completed_counts(2026) == {1: 2, 12: 1}
+    assert repository.get_completed_years() == [2027, 2026, 2025]
+    assert repository.get_statistics_summary() == ReadingStatisticsSummary(
+        total_history_count=7, books_with_history_count=1,
+        completed_history_count=5, reread_book_count=1,
+    )
