@@ -106,3 +106,38 @@ def test_preview_empty_data(tmp_path: Path):
     _, _, _, service = make_service(tmp_path)
     preview = service.preview_file(write_csv(tmp_path, []))
     assert preview.importable_count == preview.skipped_count == preview.error_count == 0
+
+
+def test_reference_isbn_preview_normalizes_shares_and_reports_errors(tmp_path: Path):
+    database, repository, books, service = make_service(tmp_path)
+    books.add_book(title="紙版", isbn="9784101010014")
+    path = write_csv(tmp_path, [
+        {"書籍名": "音声版", "参照ISBN": "4101010013"},
+        {"書籍名": "電子版", "参照ISBN": "978-4-10-101001-4"},
+        {"参照ISBN": "invalid", "タグ": "作成されないタグ"},
+    ])
+    before = database.read_bytes()
+    preview = service.preview_file(path)
+    assert preview.importable_count == 2
+    assert preview.skipped_count == 0
+    assert preview.error_count == 1
+    assert preview.errors[0].row_number == 4
+    assert all(book.reference_isbn == "9784101010014" and book.isbn is None for book in preview.books)
+    assert len(repository.get_all()) == 1
+    assert repository.get_all_tags() == []
+    assert database.read_bytes() == before
+
+
+@pytest.mark.parametrize("headers", [CsvImportService.V26_HEADERS, CsvImportService.LEGACY_HEADERS])
+def test_old_csv_preview_defaults_reference_isbn_to_none(tmp_path: Path, headers):
+    _, _, _, service = make_service(tmp_path)
+    path = tmp_path / "old.csv"
+    values = {header: "" for header in headers}
+    values.update({"書籍名": "旧形式", "お気に入り": "いいえ"})
+    with path.open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(headers)
+        writer.writerow([values[h] for h in headers])
+    preview = service.preview_file(path)
+    assert preview.importable_count == 1
+    assert preview.books[0].reference_isbn is None

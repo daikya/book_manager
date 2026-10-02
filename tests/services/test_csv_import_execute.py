@@ -112,3 +112,28 @@ def test_execute_detects_file_changed_during_backup(tmp_path: Path):
     with pytest.raises(ValueError):
         service.execute_preview(preview, backup_service=backup)
     assert repository.get_all() == []
+
+
+def test_execute_restores_shared_reference_isbn_and_preserves_text(tmp_path: Path):
+    from book_manager.models.book_item import BookItem
+    from book_manager.services.csv_export_service import CsvExportService
+    _, repository, _, service = make_service(tmp_path)
+    path = tmp_path / "roundtrip.csv"
+    books = [BookItem(title=title, reference_isbn="9784101010014", description="一行目\n二行目", notes='メモ, "引用"', tags=("共通",)) for title in ("音声版", "電子版")]
+    CsvExportService().export(books, path)
+    preview = service.preview_file(path)
+    backup = Mock()
+    saved = tmp_path / "backup.db"
+    saved.write_bytes(b"test backup")
+    backup.create_backup.return_value = saved
+    result = service.execute_preview(preview, backup_service=backup)
+    assert result.imported_count == 2
+    actual = repository.get_all()
+    assert len(actual) == 2
+    for book in actual:
+        assert book.isbn is None
+        assert book.reference_isbn == "9784101010014"
+        assert book.description == "一行目\n二行目"
+        assert book.notes == 'メモ, "引用"'
+        assert book.tags == ("共通",)
+    backup.create_backup.assert_called_once_with()

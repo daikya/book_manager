@@ -14,6 +14,7 @@ class CsvExportService:
     HEADERS = (
         "書籍名",
         "ISBN",
+        "参照ISBN",
         "雑誌コード",
         "著者名",
         "出版社",
@@ -84,6 +85,7 @@ class CsvExportService:
         return (
             book.title,
             book.isbn or "",
+            book.reference_isbn or "",
             book.magazine_code or "",
             book.author or "",
             book.publisher or "",

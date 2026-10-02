@@ -1561,7 +1561,7 @@ def test_import_file_accepts_new_header(
         encoding="utf-8-sig",
         newline="",
     ) as file:
-        csv.writer(file).writerow(CsvImportService.HEADERS)
+        csv.writer(file).writerow(CsvImportService.V26_HEADERS)
 
     service = CsvImportService(
         book_service=Mock(spec=BookService),
@@ -1609,7 +1609,7 @@ def test_import_file_passes_tags_to_book_service(
         newline="",
     ) as file:
         writer = csv.writer(file)
-        writer.writerow(CsvImportService.HEADERS)
+        writer.writerow(CsvImportService.V26_HEADERS)
         writer.writerow(
             (
                 "タグ付き書籍",
@@ -1712,7 +1712,7 @@ def test_import_file_registers_and_reuses_tags(
         newline="",
     ) as file:
         writer = csv.writer(file)
-        writer.writerow(CsvImportService.HEADERS)
+        writer.writerow(CsvImportService.V26_HEADERS)
         for title in ("1冊目", "2冊目"):
             writer.writerow(
                 (
@@ -1764,7 +1764,7 @@ def test_import_file_does_not_keep_tags_from_error_row(
         newline="",
     ) as file:
         writer = csv.writer(file)
-        writer.writerow(CsvImportService.HEADERS)
+        writer.writerow(CsvImportService.V26_HEADERS)
         writer.writerow(
             (
                 "不正タグ書籍",
@@ -1817,7 +1817,7 @@ def test_import_file_does_not_keep_tags_from_duplicate_row(
         newline="",
     ) as file:
         writer = csv.writer(file)
-        writer.writerow(CsvImportService.HEADERS)
+        writer.writerow(CsvImportService.V26_HEADERS)
         writer.writerow(
             (
                 "重複書籍",
@@ -1873,3 +1873,19 @@ def test_exported_csv_can_restore_tags_on_import(
     imported = destination_service.get_all_books()
     assert len(imported) == 1
     assert imported[0].tags == ("Python", "技術書")
+
+
+def test_new_csv_import_preserves_reference_isbn(tmp_path: Path) -> None:
+    from book_manager.models.book_item import BookItem
+    source = tmp_path / "new.csv"
+    database = tmp_path / "new.db"
+    initialize_database(database)
+    books = BookService(BookRepository(database))
+    CsvExportService().export([
+        BookItem(title="音声版", reference_isbn="9784101010014"),
+        BookItem(title="電子版", reference_isbn="9784101010014"),
+    ], source)
+    result = CsvImportService(book_service=books).import_file(source)
+    assert result.imported_count == 2
+    assert result.error_count == result.skipped_count == 0
+    assert [book.reference_isbn for book in books.get_all_books()] == ["9784101010014"] * 2

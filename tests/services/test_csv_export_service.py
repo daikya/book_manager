@@ -44,6 +44,7 @@ def test_export_writes_headers(
         [
             "書籍名",
             "ISBN",
+            "参照ISBN",
             "雑誌コード",
             "著者名",
             "出版社",
@@ -98,6 +99,7 @@ def test_export_writes_book_values(
     assert rows[1] == [
         "テスト書籍",
         "9784000000000",
+        "",
         "12345",
         "テスト著者",
         "テスト出版社",
@@ -176,6 +178,7 @@ def test_export_writes_none_as_empty_string(
         "",
         "",
         "",
+        "",
         "いいえ",
         "",
         "",
@@ -217,8 +220,8 @@ def test_export_preserves_newlines(
         output_path,
     )
 
-    assert rows[1][6] == description
-    assert rows[1][12] == notes
+    assert rows[1][7] == description
+    assert rows[1][13] == notes
 
 
 def test_export_preserves_comma(
@@ -244,7 +247,7 @@ def test_export_preserves_comma(
     )
 
     assert rows[1][0] == "テスト,書籍"
-    assert rows[1][12] == "メモ,追記"
+    assert rows[1][13] == "メモ,追記"
 
 
 def test_export_preserves_double_quote(
@@ -270,7 +273,7 @@ def test_export_preserves_double_quote(
     )
 
     assert rows[1][0] == '「"引用"」を含む書籍'
-    assert rows[1][12] == 'メモに"引用"あり'
+    assert rows[1][13] == 'メモに"引用"あり'
 
 
 def test_export_writes_utf8_bom(
@@ -321,8 +324,8 @@ def test_export_preserves_japanese_text(
     )
 
     assert rows[1][0] == "日本語タイトル"
-    assert rows[1][3] == "日本語著者"
-    assert rows[1][4] == "日本語出版社"
+    assert rows[1][4] == "日本語著者"
+    assert rows[1][5] == "日本語出版社"
 
 
 def test_export_propagates_write_error(
@@ -382,7 +385,7 @@ def test_export_converts_reading_status_to_japanese(
         output_path,
     )
 
-    assert rows[1][8] == expected
+    assert rows[1][9] == expected
 
 
 def test_export_writes_none_reading_status_as_empty_string(
@@ -407,7 +410,7 @@ def test_export_writes_none_reading_status_as_empty_string(
         output_path,
     )
 
-    assert rows[1][8] == ""
+    assert rows[1][9] == ""
 
 
 def test_export_preserves_completion_month_with_reading_status(
@@ -433,8 +436,8 @@ def test_export_preserves_completion_month_with_reading_status(
         output_path,
     )
 
-    assert rows[1][7] == "2025-05"
-    assert rows[1][8] == "読書中"
+    assert rows[1][8] == "2025-05"
+    assert rows[1][9] == "読書中"
 
 
 def test_export_writes_true_is_favorite_as_yes(
@@ -459,7 +462,7 @@ def test_export_writes_true_is_favorite_as_yes(
         output_path,
     )
 
-    assert rows[1][9] == "はい"
+    assert rows[1][10] == "はい"
 
 
 def test_export_writes_false_is_favorite_as_no(
@@ -484,7 +487,7 @@ def test_export_writes_false_is_favorite_as_no(
         output_path,
     )
 
-    assert rows[1][9] == "いいえ"
+    assert rows[1][10] == "いいえ"
 
 
 def test_export_preserves_reading_status_with_is_favorite(
@@ -512,10 +515,10 @@ def test_export_preserves_reading_status_with_is_favorite(
         output_path,
     )
 
-    assert rows[1][7] == "2025-05"
-    assert rows[1][8] == "読書中"
-    assert rows[1][9] == "はい"
-    assert rows[1][10] == "5"
+    assert rows[1][8] == "2025-05"
+    assert rows[1][9] == "読書中"
+    assert rows[1][10] == "はい"
+    assert rows[1][11] == "5"
 
 
 @pytest.mark.parametrize(
@@ -555,7 +558,7 @@ def test_export_writes_rating_as_number(
         output_path,
     )
 
-    assert rows[1][10] == expected
+    assert rows[1][11] == expected
 
 
 def test_export_writes_none_rating_as_empty_string(
@@ -580,7 +583,7 @@ def test_export_writes_none_rating_as_empty_string(
         output_path,
     )
 
-    assert rows[1][10] == ""
+    assert rows[1][11] == ""
 
 
 def test_export_writes_single_tag(
@@ -596,7 +599,7 @@ def test_export_writes_single_tag(
     CsvExportService().export([book], output_path)
 
     rows = _read_csv(output_path)
-    assert rows[1][11] == "小説"
+    assert rows[1][12] == "小説"
 
 
 def test_export_writes_multiple_tags_in_name_order(
@@ -612,7 +615,7 @@ def test_export_writes_multiple_tags_in_name_order(
     CsvExportService().export([book], output_path)
 
     rows = _read_csv(output_path)
-    assert rows[1][11] == "Python|仕事|技術書"
+    assert rows[1][12] == "Python|仕事|技術書"
 
 
 def test_export_writes_empty_tag_column(
@@ -627,7 +630,7 @@ def test_export_writes_empty_tag_column(
     )
 
     rows = _read_csv(output_path)
-    assert rows[1][11] == ""
+    assert rows[1][12] == ""
 
 
 def test_export_preserves_csv_special_characters_in_tags(
@@ -643,4 +646,14 @@ def test_export_preserves_csv_special_characters_in_tags(
     )
 
     rows = _read_csv(output_path)
-    assert rows[1][11] == 'Python,"実践"|技術書'
+    assert rows[1][12] == 'Python,"実践"|技術書'
+
+
+def test_export_reference_isbn_separate_from_isbn(tmp_path: Path) -> None:
+    path = tmp_path / "reference.csv"
+    book = BookItem(title="音声版", reference_isbn="9784101010014")
+    CsvExportService().export([book], path)
+    rows = _read_csv(path)
+    assert rows[0][1:3] == ["ISBN", "参照ISBN"]
+    assert rows[1][1:3] == ["", "9784101010014"]
+    assert len(rows[0]) == len(rows[1]) == 16

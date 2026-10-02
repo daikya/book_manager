@@ -26,6 +26,25 @@ class CsvImportService:
     HEADERS = (
         "書籍名",
         "ISBN",
+        "参照ISBN",
+        "雑誌コード",
+        "著者名",
+        "出版社",
+        "出版形態",
+        "内容紹介",
+        "読了年月",
+        "読書状態",
+        "お気に入り",
+        "評価",
+        "タグ",
+        "備考",
+        "登録日時",
+        "更新日時",
+    )
+
+    V26_HEADERS = (
+        "書籍名",
+        "ISBN",
         "雑誌コード",
         "著者名",
         "出版社",
@@ -105,6 +124,7 @@ class CsvImportService:
 
         if header not in {
             self.HEADERS,
+            self.V26_HEADERS,
             self.LEGACY_HEADERS,
         }:
             raise ValueError(
@@ -124,6 +144,7 @@ class CsvImportService:
             try:
                 book = self._book_service.prepare_book(
                     title=values["書籍名"],
+                    **({"reference_isbn": values["参照ISBN"]} if "参照ISBN" in values else {}),
                     isbn=values["ISBN"],
                     magazine_code=values["雑誌コード"],
                     author=values["著者名"],
@@ -246,6 +267,7 @@ class CsvImportService:
 
         if header not in {
             self.HEADERS,
+            self.V26_HEADERS,
             self.LEGACY_HEADERS,
         }:
             raise ValueError(
@@ -353,6 +375,7 @@ class CsvImportService:
             try:
                 self._book_service.add_book(
                     title=values["書籍名"],
+                    **({"reference_isbn": values["参照ISBN"]} if "参照ISBN" in values else {}),
                     isbn=isbn,
                     magazine_code=magazine_code,
                     author=values["著者名"],
