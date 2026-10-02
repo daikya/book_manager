@@ -28,7 +28,12 @@ class ExcelImportServiceTests(unittest.TestCase):
         self.write_excel()
         # 外部API・DB照会を持たない準備処理。検査と登録は本物を使用する。
         preparer = Mock(spec=["prepare_book"])
-        preparer.prepare_book.side_effect = lambda **values: BookItem(**values)
+        self.prepare_sequence = 0
+        def prepare_book(**values):
+            self.prepare_sequence += 1
+            timestamp = f"generated-{self.prepare_sequence}"
+            return BookItem(**values, created_at=timestamp, updated_at=timestamp)
+        preparer.prepare_book.side_effect = prepare_book
         self.preflight = ExcelImportPreflightService(book_service=preparer)
         self.backup = BackupService(database_path=self.database, backup_directory=self.root / "backups")
         self.service = ExcelImportService(database_path=self.database,
@@ -75,6 +80,14 @@ class ExcelImportServiceTests(unittest.TestCase):
         self.assertEqual(result.counts.reading_histories, 1)
         self.assertEqual(self.query(result.backup_path, "SELECT COUNT(*) FROM book_items"), [(0,)])
         self.assertEqual(self.query(self.database, "SELECT completed_on FROM reading_histories"), [("2022-03",)])
+
+    def test_generated_timestamps_may_change_during_revalidation(self):
+        original_timestamp = self.preview.records[0].book.created_at
+        current = self.preflight.preview_file(self.source, options=self.preview.options)
+        self.assertNotEqual(original_timestamp, current.records[0].book.created_at)
+        result = self.service.import_preview(self.preview)
+        self.assertEqual(result.counts.books, 1)
+        self.assertEqual(self.preview.records[0].book.created_at, original_timestamp)
 
     def test_existing_data_kept_and_second_import_backup_has_first_book(self):
         self.service.import_preview(self.preview)

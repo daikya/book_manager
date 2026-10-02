@@ -1,5 +1,5 @@
 """Excel取込前の再検査、必須バックアップ、一括登録を管理する。"""
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import sqlite3
 
@@ -41,7 +41,7 @@ class ExcelImportService:
         current = self._preflight_service.preview_file(
             preview.source_path, options=preview.options, header_row=preview.header_row,
         )
-        if current != preview or not current.can_import:
+        if self._comparison_preview(current) != self._comparison_preview(preview) or not current.can_import:
             raise ValueError("確認後にExcelまたは登録予定が変更されました。事前検査からやり直してください。")
 
         connection = create_connection(self._database_path)
@@ -71,6 +71,14 @@ class ExcelImportService:
         finally:
             connection.close()
         return ExcelImportResult(counts=counts, backup_path=Path(backup_path))
+
+    @staticmethod
+    def _comparison_preview(preview: ExcelImportPreview) -> ExcelImportPreview:
+        """prepare_bookが検査の都度付与する日時は登録内容の比較に含めない。"""
+        return replace(preview, records=tuple(
+            replace(record, book=replace(record.book, created_at=None, updated_at=None))
+            for record in preview.records
+        ))
 
     @classmethod
     def _counts(cls, connection: sqlite3.Connection) -> tuple[int, ...]:
