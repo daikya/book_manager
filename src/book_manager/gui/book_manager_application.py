@@ -3108,7 +3108,7 @@ class BookManagerApplication:
         )
         input_frame.columnconfigure(1, weight=1)
 
-        ttk.Label(input_frame, text="読書開始日").grid(
+        ttk.Label(input_frame, text="開始日・年月").grid(
             row=0,
             column=0,
             sticky="w",
@@ -3124,7 +3124,7 @@ class BookManagerApplication:
             sticky="ew",
             pady=(0, 6),
         )
-        ttk.Label(input_frame, text="YYYY-MM-DD").grid(
+        ttk.Label(input_frame, text="YYYY-MM または YYYY-MM-DD").grid(
             row=0,
             column=2,
             sticky="w",
@@ -3132,7 +3132,7 @@ class BookManagerApplication:
             pady=(0, 6),
         )
 
-        ttk.Label(input_frame, text="読了日").grid(
+        ttk.Label(input_frame, text="読了日・年月").grid(
             row=1,
             column=0,
             sticky="w",
@@ -3148,7 +3148,7 @@ class BookManagerApplication:
             sticky="ew",
             pady=(0, 6),
         )
-        ttk.Label(input_frame, text="YYYY-MM-DD").grid(
+        ttk.Label(input_frame, text="YYYY-MM または YYYY-MM-DD").grid(
             row=1,
             column=2,
             sticky="w",
@@ -3193,11 +3193,11 @@ class BookManagerApplication:
         )
         self._reading_history_tree.heading(
             "started_on",
-            text="開始日",
+            text="開始日・年月",
         )
         self._reading_history_tree.heading(
             "completed_on",
-            text="読了日",
+            text="読了日・年月",
         )
         self._reading_history_tree.heading(
             "notes",

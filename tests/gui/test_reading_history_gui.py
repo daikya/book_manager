@@ -305,3 +305,49 @@ def test_clear_reading_history_form_resets_input_and_selection() -> None:
     application._reading_history_tree.selection_remove.assert_called_once_with(
         "8"
     )
+
+
+def test_month_precision_tree_display_preserves_value() -> None:
+    """年月の表示へ日を補わない。"""
+    application = create_application()
+    tree = Mock()
+    tree.get_children.return_value = ()
+    application._reading_history_service.get_histories_for_book.return_value = [
+        ReadingHistory(id=1, book_item_id=10, started_on="2026-05", completed_on="2026-05"),
+    ]
+    BookManagerApplication._populate_reading_history_tree(application, 10, tree)
+    tree.insert.assert_called_once_with("", "end", iid="1", values=("2026-05", "2026-05", ""))
+
+
+def test_month_precision_selection_preserves_form_value() -> None:
+    application = create_application()
+    application._reading_history_tree.selection.return_value = ("3",)
+    application._reading_history_service.get_history.return_value = ReadingHistory(
+        id=3, book_item_id=10, started_on="2026-05", completed_on="2026-05-20",
+    )
+    application._on_reading_history_select()
+    application._reading_history_started_on_var.set.assert_called_once_with("2026-05")
+    application._reading_history_completed_on_var.set.assert_called_once_with("2026-05-20")
+
+
+def test_month_precision_add_passes_original_values() -> None:
+    application = create_application()
+    application._get_reading_history_form_values.return_value = ("2026-05-20", "2026-05", "メモ")
+    with patch("book_manager.gui.book_manager_application.messagebox.showinfo"):
+        application._add_reading_history()
+    application._reading_history_service.add_history.assert_called_once_with(
+        book_item_id=10, started_on="2026-05-20", completed_on="2026-05", notes="メモ",
+    )
+
+
+def test_month_precision_update_passes_original_values() -> None:
+    application = create_application()
+    application._selected_reading_history_id = 4
+    application._get_reading_history_form_values.return_value = ("2026-05", "2026-05-10", "メモ")
+    application._reading_history_service.update_history.return_value = True
+    with patch("book_manager.gui.book_manager_application.messagebox.showinfo"):
+        application._update_reading_history()
+    target = application._reading_history_service.update_history.call_args.args[0]
+    assert target.id == 4
+    assert target.started_on == "2026-05"
+    assert target.completed_on == "2026-05-10"
