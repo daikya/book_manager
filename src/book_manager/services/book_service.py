@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from book_manager.models.book_item import BookItem
+from book_manager.models.book_search_candidate import BookSearchCandidate
 from book_manager.models.tag import Tag
 from book_manager.repositories.book_repository import BookRepository
 from book_manager.validators.completion_month_validator import (
@@ -964,6 +965,22 @@ class BookService:
             validate_completion_month(
                 completion_month
             )
+
+    def search_book_candidates(
+        self,
+        *,
+        title: str = "",
+        author: str = "",
+        max_results: int = 20,
+    ) -> list[BookSearchCandidate]:
+        """候補検索へ委譲する。Repositoryの読み書きは行わない。"""
+        if self._book_metadata_service is None:
+            raise BookMetadataConfigurationError(
+                "書誌情報取得Serviceが設定されていません。"
+            )
+        return self._book_metadata_service.search_candidates(
+            title=title, author=author, max_results=max_results,
+        )
 
     def fetch_book_metadata(
         self,

@@ -2,6 +2,8 @@
 
 import pytest
 
+from book_manager.models.book_search_candidate import BookSearchCandidate
+
 from book_manager.metadata.book_metadata_service import (
     BookMetadataService,
 )
@@ -544,3 +546,72 @@ def test_fetch_by_isbn_rejects_results_with_no_metadata() -> None:
         service.fetch_by_isbn(
             "9784163917733"
         )
+
+
+class RecordingSearchClient:
+    def __init__(self, result=None, error=None):
+        self.result = result if result is not None else []
+        self.error = error
+        self.calls = []
+
+    def search_candidates(self, **kwargs):
+        self.calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+
+def test_search_delegates_without_isbn_fetch():
+    isbn_client = RecordingBookMetadataClient(source_name="openBD")
+    candidate = BookSearchCandidate(source="Google Books", title="候補")
+    search = RecordingSearchClient([candidate])
+    service = BookMetadataService([isbn_client], search_client=search)
+    result = service.search_candidates(title=" 本 ", author=" 著者 ", max_results=5)
+    assert result == [candidate]
+    assert search.calls == [{"title": "本", "author": "著者", "max_results": 5}]
+    assert isbn_client.calls == []
+
+
+def test_search_missing_configuration():
+    service = BookMetadataService([FakeBookMetadataClient("openBD")])
+    with pytest.raises(BookMetadataConfigurationError):
+        service.search_candidates(title="本")
+
+
+def test_search_empty_result():
+    service = BookMetadataService(
+        [FakeBookMetadataClient("openBD")], search_client=RecordingSearchClient()
+    )
+    assert service.search_candidates(author="著者") == []
+
+
+@pytest.mark.parametrize("error", [
+    BookMetadataConnectionError("通信"), BookMetadataRateLimitError("制限"),
+    BookMetadataResponseError("応答"),
+])
+def test_search_propagates_error_without_retry(error):
+    search = RecordingSearchClient(error=error)
+    service = BookMetadataService(
+        [FakeBookMetadataClient("openBD")], search_client=search
+    )
+    with pytest.raises(type(error)) as caught:
+        service.search_candidates(title="本")
+    assert caught.value is error
+    assert len(search.calls) == 1
+
+
+@pytest.mark.parametrize("kwargs,error", [
+    ({}, ValueError), ({"title": "　"}, ValueError),
+    ({"title": None}, TypeError), ({"title": "本", "author": 3}, TypeError),
+    ({"title": "本", "max_results": False}, TypeError),
+    ({"title": "本", "max_results": 0}, ValueError),
+    ({"title": "本", "max_results": 41}, ValueError),
+])
+def test_search_rejects_input_before_delegation(kwargs, error):
+    search = RecordingSearchClient()
+    service = BookMetadataService(
+        [FakeBookMetadataClient("openBD")], search_client=search
+    )
+    with pytest.raises(error):
+        service.search_candidates(**kwargs)
+    assert search.calls == []

@@ -133,15 +133,16 @@ class GoogleBooksClient:
         if not 1 <= max_results <= 40:
             raise ValueError("取得件数は1から40の範囲で指定してください。")
 
-        # 引用符を利用者の検索演算子として解釈させない。
+        # 通常キーワード検索で候補の取りこぼしを減らす。
         parts = []
-        for field, value in (("intitle", title), ("inauthor", author)):
+        for value in (title, author):
             if value:
-                value = value.replace('"', " ").replace("\\", " ")
+                for character in ('"', "\\", ":"):
+                    value = value.replace(character, " ")
                 value = " ".join(value.split())
                 if not value:
                     raise ValueError("検索条件に文字を入力してください。")
-                parts.append(f'{field}:"{value}"')
+                parts.append(value)
         params: dict[str, str | int] = {
             "q": " ".join(parts),
             "maxResults": max_results,

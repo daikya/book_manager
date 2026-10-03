@@ -2,6 +2,8 @@
 
 from typing import Protocol
 
+from book_manager.models.book_search_candidate import BookSearchCandidate
+
 from book_manager.models.fetched_book_data import FetchedBookData
 
 
@@ -27,4 +29,18 @@ class BookMetadataClient(Protocol):
             書誌情報を取得できた場合はFetchedBookData。
             対象書籍が見つからない場合はNone。
         """
+        ...
+
+
+class BookCandidateSearchClient(Protocol):
+    """書籍名・著者名から候補を検索するClientのインターフェース。"""
+
+    def search_candidates(
+        self,
+        *,
+        title: str = "",
+        author: str = "",
+        max_results: int = 20,
+    ) -> list[BookSearchCandidate]:
+        """未確認の候補を返す。候補なしは空リストとする。"""
         ...

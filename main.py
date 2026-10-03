@@ -238,6 +238,7 @@ def _run_application(
                 google_books_client,
                 openbd_client,
             ],
+            search_client=google_books_client,
         )
         cover_image_service = CoverImageService(
             session=session,

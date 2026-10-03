@@ -113,10 +113,12 @@ def create_metadata_application():
     return application
 
 
-def test_reference_fetch_applies_same_metadata_without_setting_regular_isbn():
+def test_reference_fetch_preserves_original_metadata_without_setting_regular_isbn():
     application = create_metadata_application()
     application._reference_isbn_var.set("4-10-101001-3")
     application._title_var.set("元の書籍名")
+    application._author_var.set("元の著者")
+    application._publisher_var.set("元の出版社")
     application._publication_format_var.set("音声版")
     application._completion_month_var.set("2026-09")
     application._tags_var.set("音声")
@@ -126,11 +128,12 @@ def test_reference_fetch_applies_same_metadata_without_setting_regular_isbn():
     application._confirm_metadata_overwrite.assert_called_once_with()
     assert application._isbn_var.get() == ""
     assert application._reference_isbn_var.get() == "9784101010014"
-    assert application._title_var.get() == "取得書籍名"
-    assert application._author_var.get() == "取得著者"
-    assert application._publisher_var.get() == "取得出版社"
-    assert application._publication_format_var.get() == "文庫"
-    application._replace_text.assert_called_once_with(application._description_text, "取得した内容紹介")
+    assert application._title_var.get() == "元の書籍名"
+    assert application._author_var.get() == "元の著者"
+    assert application._publisher_var.get() == "元の出版社"
+    assert application._publication_format_var.get() == "音声版"
+    application._replace_text.assert_not_called()
+    assert application._description_text.get.return_value == "内容紹介\n"
     assert application._current_cover_image_url == "https://example.com/cover.jpg"
     assert application._current_cover_image_path == "covers/cover.jpg"
     assert application._completion_month_var.get() == "2026-09"
@@ -167,13 +170,18 @@ def test_regular_isbn_takes_priority_over_reference():
     assert application._reference_isbn_var.get() == "9784065363706"
 
 
-def test_reference_fetch_without_cover_clears_cover_as_regular_fetch_does():
+def test_reference_fetch_without_cover_preserves_existing_cover():
     application = create_metadata_application()
     application._reference_isbn_var.set("9784101010014")
+    application._current_cover_image_url = "https://example.com/original.jpg"
+    application._current_cover_image_path = "original.jpg"
     application._service.fetch_book_metadata.return_value.cover_image_url = None
     with patch("book_manager.gui.book_manager_application.messagebox.showinfo"):
         application._on_fetch_book_metadata()
-    application._clear_cover_state.assert_called_once_with()
+    application._clear_cover_state.assert_not_called()
+    application._display_cover_image.assert_not_called()
+    assert application._current_cover_image_url == "https://example.com/original.jpg"
+    assert application._current_cover_image_path == "original.jpg"
     application._service.fetch_cover_image.assert_not_called()
 
 

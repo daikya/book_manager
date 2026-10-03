@@ -13,6 +13,9 @@ from datetime import datetime
 import ctypes
 import sys
 
+from book_manager.gui.book_candidate_search_dialog import (
+    BookCandidateSearchDialog, CandidateSearchTask,
+)
 from book_manager.gui.excel_column_mapping_dialog import ExcelColumnMappingDialog
 from book_manager.gui.excel_import_preview_dialog import ExcelImportPreviewDialog
 from book_manager.models.book_item import BookItem
@@ -1594,30 +1597,33 @@ class BookManagerApplication:
         ttk.Label(form_frame, text="ISBN").grid(
             row=3, column=0, sticky="w", padx=(0, 6), pady=4,
         )
-        self._isbn_entry = ttk.Entry(form_frame, textvariable=self._isbn_var)
-        self._isbn_entry.grid(
-            row=3, column=1, sticky="ew", padx=(0, 12), pady=4,
-        )
-        ttk.Label(form_frame, text="参照ISBN").grid(
-            row=3, column=2, sticky="w", padx=(0, 6), pady=4,
-        )
         identifier_frame = ttk.Frame(form_frame)
-        identifier_frame.grid(row=3, column=3, sticky="ew", pady=4)
-        identifier_frame.columnconfigure(0, weight=1)
-        identifier_frame.columnconfigure(2, weight=1)
+        identifier_frame.grid(
+            row=3, column=1, columnspan=3, sticky="ew", pady=4,
+        )
+        self._isbn_entry = ttk.Entry(
+            identifier_frame, textvariable=self._isbn_var, width=15,
+        )
+        self._isbn_entry.grid(row=0, column=0, padx=(0, 12))
+        ttk.Label(identifier_frame, text="参照ISBN").grid(
+            row=0, column=1, sticky="w", padx=(0, 6),
+        )
         self._reference_isbn_entry = ttk.Entry(
             identifier_frame, textvariable=self._reference_isbn_var, width=15,
         )
-        self._reference_isbn_entry.grid(
-            row=0, column=0, sticky="ew", padx=(0, 12),
-        )
+        self._reference_isbn_entry.grid(row=0, column=2, padx=(0, 12))
         ttk.Label(identifier_frame, text="雑誌コード").grid(
-            row=0, column=1, sticky="w", padx=(0, 6),
+            row=0, column=3, sticky="w", padx=(0, 6),
         )
         self._magazine_code_entry = ttk.Entry(
-            identifier_frame, textvariable=self._magazine_code_var, width=15,
+            identifier_frame, textvariable=self._magazine_code_var, width=8,
         )
-        self._magazine_code_entry.grid(row=0, column=2, sticky="ew")
+        self._magazine_code_entry.grid(row=0, column=4, padx=(0, 12))
+        self._candidate_search_button = ttk.Button(
+            identifier_frame, text="書籍名・著者名からISBN候補を検索",
+            command=self._on_search_book_candidates,
+        )
+        self._candidate_search_button.grid(row=0, column=5, sticky="w")
 
         ttk.Label(
             form_frame,
@@ -2272,31 +2278,44 @@ class BookManagerApplication:
         )
         isbn_variable.set(fetched_data.isbn)
 
-        if fetched_data.title is not None:
-            self._title_var.set(
-                fetched_data.title,
-            )
+        def has_text(value):
+            return isinstance(value, str) and bool(value.strip())
 
-        if fetched_data.author is not None:
-            self._author_var.set(
-                fetched_data.author,
-            )
+        if not use_reference_isbn:
+            for value, variable in (
+                (fetched_data.title, self._title_var),
+                (fetched_data.author, self._author_var),
+                (fetched_data.publisher, self._publisher_var),
+                (fetched_data.publication_format, self._publication_format_var),
+            ):
+                if has_text(value):
+                    variable.set(value)
 
-        if fetched_data.publisher is not None:
-            self._publisher_var.set(
-                fetched_data.publisher,
-            )
+        if has_text(fetched_data.description):
+            current_description = self._description_text.get("1.0", "end-1c")
+            if not use_reference_isbn or not current_description.strip():
+                self._replace_text(
+                    self._description_text, fetched_data.description,
+                )
 
-        if fetched_data.publication_format is not None:
-            self._publication_format_var.set(
-                fetched_data.publication_format,
+    def _apply_fetched_cover(self, cover_url: str | None) -> None:
+        """取得失敗・URL欠落時は既存書影を保持する。"""
+        if not isinstance(cover_url, str) or not cover_url.strip():
+            return
+        try:
+            cover_path = self._service.fetch_cover_image(cover_url)
+            stored_path = self._service.create_stored_cover_image_path(cover_path)
+            self._display_cover_image(str(cover_path))
+        except Exception:
+            traceback.print_exc()
+            messagebox.showwarning(
+                "表紙画像を表示できません",
+                "新しい表紙画像を表示できなかったため、既存の表紙情報を保持しました。",
+                parent=self._root,
             )
-
-        if fetched_data.description is not None:
-            self._replace_text(
-                self._description_text,
-                fetched_data.description,
-            )
+            return
+        self._current_cover_image_url = cover_url
+        self._current_cover_image_path = stored_path
 
     def _display_cover_image(
         self,
@@ -6097,6 +6116,68 @@ class BookManagerApplication:
                 exc_info=True,
             )
 
+    def _on_search_book_candidates(self) -> None:
+        """登録済みの1冊について検索し、ISBNだけを編集欄へ反映する。"""
+        if self._selected_book_id is None:
+            messagebox.showinfo(
+                "ISBN候補検索", "一覧から登録済みの書籍を1冊選択してください。",
+                parent=self._root,
+            )
+            return
+        task = getattr(self, "_candidate_search_task", None)
+        if task is None:
+            task = CandidateSearchTask()
+            self._candidate_search_task = task
+        if task.busy:
+            messagebox.showinfo(
+                "ISBN候補検索", "前の検索が終了するまでお待ちください。",
+                parent=self._root,
+            )
+            return
+        snapshot = (
+            self._selected_book_id, self._title_var.get(), self._author_var.get(),
+            self._isbn_var.get(), self._reference_isbn_var.get(),
+        )
+        self._candidate_search_button.configure(state="disabled")
+        try:
+            dialog = BookCandidateSearchDialog(
+                self._root, search=self._service.search_book_candidates,
+                task=task, title=snapshot[1], author=snapshot[2],
+            )
+            center_window_on_parent(dialog.window, self._root)
+            result = dialog.show()
+            if result is None or not self._root.winfo_exists():
+                return
+            current = (
+                self._selected_book_id, self._title_var.get(), self._author_var.get(),
+                self._isbn_var.get(), self._reference_isbn_var.get(),
+            )
+            if snapshot != current:
+                messagebox.showwarning(
+                    "ISBN候補検索", "対象または入力内容が変わりました。再検索してください。",
+                    parent=self._root,
+                )
+                return
+            isbn, destination = result
+            variable = (
+                self._reference_isbn_var if destination == "reference"
+                else self._isbn_var
+            )
+            if variable.get().strip() and variable.get().strip() != isbn:
+                if not messagebox.askyesno(
+                    "ISBN変更", "入力済みのISBNを選択したISBNへ変更しますか。",
+                    parent=self._root,
+                ):
+                    return
+            variable.set(isbn)
+            self._edit_status_var.set("ISBNを編集欄へ反映しました。保存するには更新してください。")
+        finally:
+            try:
+                if self._root.winfo_exists():
+                    self._candidate_search_button.configure(state="normal")
+            except tk.TclError:
+                pass  # 親ウィンドウも終了済み。
+
     def _on_fetch_book_metadata(self) -> None:
         """ISBNを優先し、空欄の場合は参照ISBNから書誌情報を取得する。"""
         isbn = self._isbn_var.get().strip()
@@ -6137,44 +6218,7 @@ class BookManagerApplication:
             else:
                 self._apply_fetched_book_data(result)
 
-            if result.cover_image_url is not None:
-                self._current_cover_image_url = (
-                    result.cover_image_url
-                )
-
-                try:
-                    cover_path = self._service.fetch_cover_image(
-                        result.cover_image_url,
-                    )
-
-                    self._current_cover_image_path = (
-                        self._service
-                        .create_stored_cover_image_path(
-                            cover_path,
-                        )
-                    )
-
-                    self._display_cover_image(
-                        str(cover_path),
-                    )
-
-                except Exception:
-                    traceback.print_exc()
-
-                    self._current_cover_image_path = None
-
-                    self._clear_cover_image()
-
-                    messagebox.showwarning(
-                        "表紙画像を表示できません",
-                        (
-                            "書誌情報は取得できましたが、"
-                            "表紙画像を表示できませんでした。"
-                        ),
-                        parent=self._root,
-                    )
-            else:
-                self._clear_cover_state()
+            self._apply_fetched_cover(result.cover_image_url)
 
             self._edit_status_var.set(
                 "書誌情報を取得しました。",

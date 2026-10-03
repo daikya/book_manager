@@ -13,6 +13,7 @@ from book_manager.metadata.exceptions import (
 )
 from book_manager.metadata.protocols import (
     BookMetadataClient,
+    BookCandidateSearchClient,
 )
 from book_manager.models.fetched_book_data import (
     FetchedBookData,
@@ -28,12 +29,17 @@ from book_manager.validators.isbn_validator import (
 )
 
 
+from book_manager.models.book_search_candidate import BookSearchCandidate
+
+
 class BookMetadataService:
     """複数の外部書誌情報取得Clientを制御するService。"""
 
     def __init__(
         self,
         clients: Sequence[BookMetadataClient],
+        *,
+        search_client: BookCandidateSearchClient | None = None,
     ) -> None:
         """Serviceを初期化する。
 
@@ -51,6 +57,40 @@ class BookMetadataService:
             )
 
         self._clients = tuple(clients)
+        self._search_client = search_client
+
+    def search_candidates(
+        self,
+        *,
+        title: str = "",
+        author: str = "",
+        max_results: int = 20,
+    ) -> list[BookSearchCandidate]:
+        """明示的に設定した検索Clientへ委譲する。
+
+        ISBN取得Clientの統合・フォールバックは使用しない。
+        候補なしは空リスト、外部取得エラーはそのまま返す。
+        DB更新や候補確定は行わない。
+        """
+        if not isinstance(title, str) or not isinstance(author, str):
+            raise TypeError("書籍名と著者名は文字列で指定してください。")
+        title = " ".join(title.split())
+        author = " ".join(author.split())
+        if not title and not author:
+            raise ValueError("書籍名または著者名を入力してください。")
+        if type(max_results) is not int:
+            raise TypeError("取得件数は整数で指定してください。")
+        if not 1 <= max_results <= 40:
+            raise ValueError("取得件数は1から40の範囲で指定してください。")
+        if self._search_client is None:
+            raise BookMetadataConfigurationError(
+                "書籍候補検索Clientが設定されていません。"
+            )
+        return self._search_client.search_candidates(
+            title=title,
+            author=author,
+            max_results=max_results,
+        )
 
     def fetch_by_isbn(
         self,

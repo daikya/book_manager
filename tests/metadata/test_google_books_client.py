@@ -736,7 +736,7 @@ def test_search_params():
     client.set_api_key("NEW_KEY")
     assert client.search_candidates(title=" 三体 II ", author=" 劉 慈欣 ") == []
     assert session.calls[0]["params"] == {
-        "q": 'intitle:"三体 II" inauthor:"劉 慈欣"',
+        "q": '三体 II 劉 慈欣',
         "maxResults": 20, "printType": "books", "key": "NEW_KEY",
     }
 
@@ -759,8 +759,7 @@ def test_search_invalid_input(kwargs, error):
 def test_search_single_condition(field):
     client, session = search_client({})
     assert client.search_candidates(**{field: "検索語"}) == []
-    prefix = "intitle" if field == "title" else "inauthor"
-    assert session.calls[0]["params"]["q"] == f'{prefix}:"検索語"'
+    assert session.calls[0]["params"]["q"] == "検索語"
 
 
 def test_search_metadata_isbns_and_missing_isbn():
@@ -879,7 +878,7 @@ def test_search_wrong_identifier_length_and_optional_types():
     assert candidate.is_ebook is None
 
 
-def test_search_quotes_remain_within_field():
+def test_search_removes_quote_and_field_operator():
     client, session = search_client({})
     client.search_candidates(title='本" inauthor:別人')
-    assert session.calls[0]["params"]["q"] == 'intitle:"本 inauthor:別人"'
+    assert session.calls[0]["params"]["q"] == '本 inauthor 別人'
