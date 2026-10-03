@@ -724,3 +724,162 @@ def test_fetch_by_isbn_ignores_invalid_identifiers() -> None:
     )
 
     assert result is None
+
+
+def search_client(payload):
+    session = FakeSession(response=FakeResponse(payload=payload))
+    return GoogleBooksClient(session=session, api_key="TEST_KEY"), session
+
+
+def test_search_params():
+    client, session = search_client({"totalItems": 0})
+    client.set_api_key("NEW_KEY")
+    assert client.search_candidates(title=" 三体 II ", author=" 劉 慈欣 ") == []
+    assert session.calls[0]["params"] == {
+        "q": 'intitle:"三体 II" inauthor:"劉 慈欣"',
+        "maxResults": 20, "printType": "books", "key": "NEW_KEY",
+    }
+
+
+@pytest.mark.parametrize("kwargs,error", [
+    ({}, ValueError), ({"title": "　"}, ValueError),
+    ({"title": None}, TypeError), ({"title": "本", "author": 1}, TypeError),
+    ({"title": "本", "max_results": True}, TypeError),
+    ({"title": "本", "max_results": 0}, ValueError),
+    ({"title": "本", "max_results": 41}, ValueError),
+])
+def test_search_invalid_input(kwargs, error):
+    client, session = search_client({})
+    with pytest.raises(error):
+        client.search_candidates(**kwargs)
+    assert session.calls == []
+
+
+@pytest.mark.parametrize("field", ["title", "author"])
+def test_search_single_condition(field):
+    client, session = search_client({})
+    assert client.search_candidates(**{field: "検索語"}) == []
+    prefix = "intitle" if field == "title" else "inauthor"
+    assert session.calls[0]["params"]["q"] == f'{prefix}:"検索語"'
+
+
+def test_search_metadata_isbns_and_missing_isbn():
+    client, _ = search_client({"items": [
+        {"id": "a", "volumeInfo": {
+            "title": " 書籍 ", "subtitle": " 第二巻 ",
+            "authors": ["著者A", " 著者B "],
+            "publisher": "出版元", "publishedDate": "2020-05",
+            "imageLinks": {"thumbnail": "https://example.com/cover"},
+            "industryIdentifiers": [
+                {"type": "ISBN_10", "identifier": "4101010013"},
+                {"type": "ISBN_13", "identifier": "978-4-10-101001-4"},
+                {"type": "ISBN_13", "identifier": "9784163917733"},
+                {"type": "ISBN_13", "identifier": "9784163917730"},
+                {"type": "OTHER", "identifier": "9784101010014"}, None,
+            ],
+        }, "saleInfo": {"isEbook": True}},
+        {"id": "b", "volumeInfo": {"title": "ISBNなし"}},
+    ]})
+    first, second = client.search_candidates(title="書籍")
+    assert first.title == "書籍"
+    assert first.subtitle == "第二巻"
+    assert first.author == "著者A、著者B"
+    assert first.publisher == "出版元"
+    assert first.publication_date == "2020-05"
+    assert first.cover_image_url == "https://example.com/cover"
+    assert first.isbn_candidates == ("9784101010014", "9784163917733")
+    assert first.is_ebook is True
+    assert second.isbn_candidates == ()
+    assert second.is_ebook is None
+
+
+def test_search_malformed_items_and_duplicate_ids():
+    client, _ = search_client({"items": [
+        None, {}, {"volumeInfo": []}, {"volumeInfo": {"title": " "}},
+        {"id": "a", "volumeInfo": {"title": "第一候補"}},
+        {"id": "a", "volumeInfo": {"title": "重複"}},
+        {"id": "b", "volumeInfo": {"title": "別の版"}},
+    ]})
+    assert [c.title for c in client.search_candidates(title="本")] == [
+        "第一候補", "別の版",
+    ]
+
+
+def test_search_limit_without_pagination():
+    client, session = search_client({"totalItems": 100, "items": [
+        {"id": str(i), "volumeInfo": {"title": str(i)}} for i in range(10)
+    ]})
+    assert len(client.search_candidates(title="本", max_results=3)) == 3
+    assert len(session.calls) == 1
+
+
+@pytest.mark.parametrize("payload", [[], None, "invalid", {"items": None},
+                                     {"items": {}}])
+def test_search_bad_response(payload):
+    client, _ = search_client(payload)
+    with pytest.raises(BookMetadataResponseError):
+        client.search_candidates(title="本")
+
+
+@pytest.mark.parametrize("status,error", [
+    (429, BookMetadataRateLimitError),
+    (403, BookMetadataResponseError), (500, BookMetadataResponseError),
+])
+def test_search_http_error_without_retry(status, error):
+    session = FakeSession(response=FakeResponse(status_code=status, payload={}))
+    with pytest.raises(error):
+        GoogleBooksClient(session=session).search_candidates(title="本")
+    assert len(session.calls) == 1
+
+
+@pytest.mark.parametrize("error", [requests.Timeout(), requests.ConnectionError()])
+def test_search_connection_error(error):
+    session = FakeSession(error=error)
+    with pytest.raises(BookMetadataConnectionError):
+        GoogleBooksClient(session=session).search_candidates(title="本")
+    assert len(session.calls) == 1
+
+
+def test_search_json_error():
+    session = FakeSession(response=FakeResponse(json_error=ValueError("invalid")))
+    with pytest.raises(BookMetadataResponseError):
+        GoogleBooksClient(session=session).search_candidates(title="本")
+
+
+def test_search_key_removed():
+    client, session = search_client({})
+    client.set_api_key(None)
+    client.search_candidates(title="本")
+    assert "key" not in session.calls[0]["params"]
+
+
+def test_search_preserves_volumes_with_same_isbn():
+    client, _ = search_client({"items": [
+        {"id": i, "volumeInfo": {"title": i, "industryIdentifiers": [
+            {"type": "ISBN_13", "identifier": "9784101010014"}
+        ]}} for i in ("a", "b")
+    ]})
+    assert len(client.search_candidates(title="本")) == 2
+
+
+def test_search_wrong_identifier_length_and_optional_types():
+    client, _ = search_client({"items": [{
+        "volumeInfo": {
+            "title": "候補", "authors": "著者", "imageLinks": [],
+            "industryIdentifiers": [
+                {"type": "ISBN_10", "identifier": "9784101010014"},
+                {"type": "ISBN_13", "identifier": "4101010013"},
+            ],
+        }, "saleInfo": {"isEbook": "false"},
+    }]})
+    candidate = client.search_candidates(title="候補")[0]
+    assert candidate.isbn_candidates == ()
+    assert candidate.author is None
+    assert candidate.cover_image_url is None
+    assert candidate.is_ebook is None
+
+
+def test_search_quotes_remain_within_field():
+    client, session = search_client({})
+    client.search_candidates(title='本" inauthor:別人')
+    assert session.calls[0]["params"]["q"] == 'intitle:"本 inauthor:別人"'

@@ -22,6 +22,9 @@ from book_manager.validators.isbn_normalizer import (
     normalize_isbn,
 )
 
+from book_manager.models.book_search_candidate import BookSearchCandidate
+
+
 class GoogleBooksClient:
     """Google Books APIとの通信を担当するClient。"""
 
@@ -54,9 +57,6 @@ class GoogleBooksClient:
         isbn: str,
     ) -> FetchedBookData | None:
         """ISBNに対応する書誌情報を取得する。
-
-        現段階ではHTTP通信とJSON取得までを担当する。
-        書誌情報への変換は次工程で実装する。
 
         Args:
             isbn:
@@ -108,6 +108,122 @@ class GoogleBooksClient:
             payload=payload,
         )
 
+    def search_candidates(
+        self,
+        *,
+        title: str = "",
+        author: str = "",
+        max_results: int = 20,
+    ) -> list[BookSearchCandidate]:
+        """書籍名・著者名から未確認の候補を取得する。
+
+        少なくとも一方を指定する。1回の呼出しで最大40件を要求し、
+        ページ追加取得・自動再試行・DB更新は行わない。
+        ISBNなしの候補も返す。媒体・版は推測しない。
+        GUIからはワーカーで呼び出す。
+        """
+        if not isinstance(title, str) or not isinstance(author, str):
+            raise TypeError("書籍名と著者名は文字列で指定してください。")
+        title = " ".join(title.split())
+        author = " ".join(author.split())
+        if not title and not author:
+            raise ValueError("書籍名または著者名を入力してください。")
+        if type(max_results) is not int:
+            raise TypeError("取得件数は整数で指定してください。")
+        if not 1 <= max_results <= 40:
+            raise ValueError("取得件数は1から40の範囲で指定してください。")
+
+        # 引用符を利用者の検索演算子として解釈させない。
+        parts = []
+        for field, value in (("intitle", title), ("inauthor", author)):
+            if value:
+                value = value.replace('"', " ").replace("\\", " ")
+                value = " ".join(value.split())
+                if not value:
+                    raise ValueError("検索条件に文字を入力してください。")
+                parts.append(f'{field}:"{value}"')
+        params: dict[str, str | int] = {
+            "q": " ".join(parts),
+            "maxResults": max_results,
+            "printType": "books",
+        }
+        if self._api_key:
+            params["key"] = self._api_key
+        payload = self._request_params(params)
+        items = payload.get("items", [])
+        if not isinstance(items, list):
+            raise BookMetadataResponseError(
+                "Google Booksのitemsが配列ではありません。"
+            )
+        if payload.get("totalItems") == 0:
+            return []
+
+        candidates = []
+        seen_ids: set[str] = set()
+        for item in items[:max_results]:
+            if not isinstance(item, dict):
+                continue
+            info = item.get("volumeInfo")
+            if not isinstance(info, dict):
+                continue
+            candidate_title = self._normalize_optional_text(info.get("title"))
+            if candidate_title is None:
+                continue
+            volume_id = self._normalize_optional_text(item.get("id"))
+            if volume_id is not None:
+                if volume_id in seen_ids:
+                    continue
+                seen_ids.add(volume_id)
+            sale_info = item.get("saleInfo")
+            is_ebook = (
+                sale_info.get("isEbook")
+                if isinstance(sale_info, dict) else None
+            )
+            candidates.append(BookSearchCandidate(
+                source=self.source_name,
+                source_id=volume_id,
+                title=candidate_title,
+                subtitle=self._normalize_optional_text(info.get("subtitle")),
+                author=self._extract_authors(info.get("authors")),
+                publisher=self._normalize_optional_text(info.get("publisher")),
+                publication_date=self._normalize_optional_text(
+                    info.get("publishedDate")
+                ),
+                cover_image_url=self._extract_cover_image_url(
+                    info.get("imageLinks")
+                ),
+                isbn_candidates=self._extract_candidate_isbns(
+                    info.get("industryIdentifiers")
+                ),
+                is_ebook=is_ebook if type(is_ebook) is bool else None,
+            ))
+        return candidates
+
+    @staticmethod
+    def _extract_candidate_isbns(value: object) -> tuple[str, ...]:
+        """有効なISBNだけをISBN-13に統一し、重複を除く。"""
+        if not isinstance(value, list):
+            return ()
+        result = []
+        for identifier in value:
+            if not isinstance(identifier, dict):
+                continue
+            kind = identifier.get("type")
+            text = identifier.get("identifier")
+            if kind not in ("ISBN_10", "ISBN_13") or not isinstance(text, str):
+                continue
+            try:
+                normalized = normalize_isbn(text)
+                expected_length = 10 if kind == "ISBN_10" else 13
+                if len(normalized) != expected_length:
+                    continue
+                isbn = to_isbn13(normalized)
+            except (TypeError, ValueError):
+                continue
+            if isbn not in result:
+                result.append(isbn)
+        return tuple(result)
+
     def _build_params(
         self,
         isbn: str,
@@ -128,10 +244,17 @@ class GoogleBooksClient:
         isbn: str,
     ) -> dict[str, Any]:
         """Google Books APIへ接続してJSONを取得する。"""
+        return self._request_params(self._build_params(isbn))
+
+    def _request_params(
+        self,
+        params: dict[str, str | int],
+    ) -> dict[str, Any]:
+        """検索とISBN取得で共通のHTTP・JSON処理を行う。"""
         try:
             response = self._session.get(
                 self.BASE_URL,
-                params=self._build_params(isbn),
+                params=params,
                 timeout=self._timeout,
             )
         except requests.RequestException as exc:
