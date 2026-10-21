@@ -1,5 +1,7 @@
 [CmdletBinding()]
-param()
+param(
+    [switch]$VerificationBuild
+)
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
@@ -112,6 +114,9 @@ try {
 
     $isccPath = Find-InnoSetupCompiler
     $installerName = "BookManager-$version-windows-x64-setup.exe"
+    if ($VerificationBuild) {
+        $installerName = "BookManager-Verification-$version-windows-x64-setup.exe"
+    }
     $installerPath = Join-Path $installerOutputDirectory $installerName
     $checksumPath = "$installerPath.sha256.txt"
 
@@ -124,9 +129,11 @@ try {
         }
     }
 
-    & $isccPath `
-        "--define=AppVersion=$version" `
-        $installerScript
+    $compilerArguments = @("--define=AppVersion=$version")
+    if ($VerificationBuild) {
+        $compilerArguments += "--define=VerificationBuild=1"
+    }
+    & $isccPath @compilerArguments $installerScript
 
     if ($LASTEXITCODE -ne 0) {
         throw "Inno Setupによるインストーラービルドに失敗しました。"
