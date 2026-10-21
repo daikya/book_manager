@@ -123,3 +123,35 @@ def test_successful_cover_updates_url_and_path_together():
     assert displayed == ["new"]
     assert app._current_cover_image_url == "new-url"
     assert app._current_cover_image_path == "new-path"
+
+
+
+def test_explicit_selection_only_updates_selected_field():
+    app = form()
+    data = FetchedBookData(isbn="new", title="新書籍", author="新著者", description="新紹介")
+    method("_apply_fetched_book_data")(app, data, selected_fields=frozenset({"author"}))
+    assert app._author_var.value == "新著者"
+    assert app._title_var.value == "元書籍"
+    assert app._description_text.value == "元の内容紹介\n改行"
+
+
+def test_explicit_reference_selection_can_replace_description():
+    app = form()
+    data = FetchedBookData(isbn="ref", title="紙の版", description="選択した紹介")
+    method("_apply_fetched_book_data")(
+        app, data, use_reference_isbn=True,
+        selected_fields=frozenset({"description", "title"}),
+    )
+    assert app._description_text.value == "選択した紹介"
+    assert app._title_var.value == "元書籍"
+    assert app._isbn_var.value == "old-isbn"
+
+
+def test_isbnless_candidate_preserves_existing_identifiers():
+    app = form()
+    method("_apply_fetched_book_data")(
+        app, FetchedBookData(isbn="", title="新しい本"), selected_fields=frozenset({"title"}),
+    )
+    assert app._isbn_var.value == "old-isbn"
+    assert app._reference_isbn_var.value == "old-ref"
+    assert app._title_var.value == "新しい本"

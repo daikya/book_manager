@@ -33,14 +33,20 @@ class BookMetadataClient(Protocol):
 
 
 class BookCandidateSearchClient(Protocol):
-    """書籍名・著者名から候補を検索するClientのインターフェース。"""
+    """書籍名・著者名・出版社から候補を検索するClientのインターフェース。"""
 
     def search_candidates(
         self,
         *,
         title: str = "",
         author: str = "",
+        publisher: str = "",
         max_results: int = 20,
+        start_index: int = 0,
     ) -> list[BookSearchCandidate]:
         """未確認の候補を返す。候補なしは空リストとする。"""
+        ...
+
+    def fetch_candidate(self, candidate: BookSearchCandidate, *, isbn: str = "") -> FetchedBookData:
+        """候補のIDから詳細情報を取得する。"""
         ...

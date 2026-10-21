@@ -971,16 +971,25 @@ class BookService:
         *,
         title: str = "",
         author: str = "",
+        publisher: str = "",
         max_results: int = 20,
+        start_index: int = 0,
     ) -> list[BookSearchCandidate]:
         """候補検索へ委譲する。Repositoryの読み書きは行わない。"""
         if self._book_metadata_service is None:
             raise BookMetadataConfigurationError(
                 "書誌情報取得Serviceが設定されていません。"
             )
+        options = {"start_index": start_index} if start_index else {}
         return self._book_metadata_service.search_candidates(
-            title=title, author=author, max_results=max_results,
+            **options, title=title, author=author, publisher=publisher, max_results=max_results,
         )
+
+    def fetch_book_candidate(self, candidate: BookSearchCandidate, *, isbn: str = "") -> FetchedBookData:
+        """候補の詳細情報を取得する。DBの読み書きは行わない。"""
+        if self._book_metadata_service is None:
+            raise BookMetadataConfigurationError("候補の取得先が設定されていません。")
+        return self._book_metadata_service.fetch_candidate(candidate, isbn=isbn)
 
     def fetch_book_metadata(
         self,

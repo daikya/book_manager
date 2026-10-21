@@ -100,7 +100,7 @@ def create_metadata_application():
     application._isbn_entry = Mock()
     application._fetch_metadata_button = Mock()
     application._service = Mock()
-    application._confirm_metadata_overwrite = Mock(return_value=True)
+    application._choose_metadata_fields = Mock(return_value=frozenset({"cover_image_url"}))
     application._display_cover_image = Mock()
     application._replace_text = Mock()
     application._service.fetch_book_metadata.return_value = SimpleNamespace(
@@ -125,7 +125,9 @@ def test_reference_fetch_preserves_original_metadata_without_setting_regular_isb
     with patch("book_manager.gui.book_manager_application.messagebox.showinfo"):
         application._on_fetch_book_metadata()
     application._service.fetch_book_metadata.assert_called_once_with("4-10-101001-3")
-    application._confirm_metadata_overwrite.assert_called_once_with()
+    application._choose_metadata_fields.assert_called_once_with(
+        application._service.fetch_book_metadata.return_value, use_reference_isbn=True,
+    )
     assert application._isbn_var.get() == ""
     assert application._reference_isbn_var.get() == "9784101010014"
     assert application._title_var.get() == "元の書籍名"
@@ -149,7 +151,7 @@ def test_reference_fetch_cancel_preserves_original_form_and_cover():
     application._title_var.set("元の書籍名")
     application._current_cover_image_url = "https://example.com/original.jpg"
     application._current_cover_image_path = "original.jpg"
-    application._confirm_metadata_overwrite.return_value = False
+    application._choose_metadata_fields.return_value = None
     application._on_fetch_book_metadata()
     assert application._title_var.get() == "元の書籍名"
     assert application._isbn_var.get() == ""
@@ -176,6 +178,7 @@ def test_reference_fetch_without_cover_preserves_existing_cover():
     application._current_cover_image_url = "https://example.com/original.jpg"
     application._current_cover_image_path = "original.jpg"
     application._service.fetch_book_metadata.return_value.cover_image_url = None
+    application._choose_metadata_fields.return_value = frozenset()
     with patch("book_manager.gui.book_manager_application.messagebox.showinfo"):
         application._on_fetch_book_metadata()
     application._clear_cover_state.assert_not_called()
@@ -191,3 +194,30 @@ def test_fetch_without_both_isbns_does_not_call_service():
         application._on_fetch_book_metadata()
     warning.assert_called_once()
     application._service.fetch_book_metadata.assert_not_called()
+
+
+
+def test_comparison_detects_form_change_before_reflection():
+    application = create_metadata_application()
+    application._reference_isbn_var.set("9784101010014")
+    application._title_var.set("元の書籍名")
+    def choose(*args, **kwargs):
+        application._title_var.set("比較中に編集")
+        return frozenset({"cover_image_url"})
+    application._choose_metadata_fields.side_effect = choose
+    with patch("book_manager.gui.book_manager_application.messagebox.showwarning") as warning:
+        application._on_fetch_book_metadata()
+    warning.assert_called_once()
+    assert application._title_var.get() == "比較中に編集"
+    application._service.fetch_cover_image.assert_not_called()
+    application._replace_text.assert_not_called()
+
+
+def test_comparison_with_no_selection_changes_nothing():
+    application = create_metadata_application()
+    application._reference_isbn_var.set("4-10-101001-3")
+    application._choose_metadata_fields.return_value = frozenset()
+    application._on_fetch_book_metadata()
+    assert application._reference_isbn_var.get() == "4-10-101001-3"
+    application._service.fetch_cover_image.assert_not_called()
+    application._replace_text.assert_not_called()

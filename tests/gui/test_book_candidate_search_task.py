@@ -24,7 +24,7 @@ def test_worker_returns_candidates():
     finish(task)
     assert task.poll() == (["candidate"], None)
     assert task.poll() is None
-    assert calls == [{"title": "本", "author": "著者", "max_results": 20}]
+    assert calls == [{"title": "本", "author": "著者", "publisher": "", "max_results": 20}]
 
 
 def test_worker_rejects_overlapping_search():
@@ -67,3 +67,19 @@ def test_new_search_discards_unconsumed_old_result():
     finish(task)
     assert task.poll() == (["new"], None)
     assert task.poll() is None
+
+
+def test_worker_searches_by_publisher_only():
+    calls = []
+    task = CandidateSearchTask()
+    assert task.start(lambda **kwargs: calls.append(kwargs) or [], title="", author="", publisher="集英社")
+    finish(task)
+    assert calls == [{"title": "", "author": "", "publisher": "集英社", "max_results": 20}]
+    assert task.poll() == ([], None)
+
+
+def test_detail_operation_returns_result_without_search():
+    task = CandidateSearchTask()
+    assert task.start_operation(lambda: "detail")
+    finish(task)
+    assert task.poll() == ("detail", None)

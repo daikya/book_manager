@@ -568,7 +568,7 @@ def test_search_delegates_without_isbn_fetch():
     service = BookMetadataService([isbn_client], search_client=search)
     result = service.search_candidates(title=" 本 ", author=" 著者 ", max_results=5)
     assert result == [candidate]
-    assert search.calls == [{"title": "本", "author": "著者", "max_results": 5}]
+    assert search.calls == [{"title": "本", "author": "著者", "publisher": "", "max_results": 5}]
     assert isbn_client.calls == []
 
 
@@ -614,4 +614,22 @@ def test_search_rejects_input_before_delegation(kwargs, error):
     )
     with pytest.raises(error):
         service.search_candidates(**kwargs)
+    assert search.calls == []
+
+
+def test_publisher_only_delegation_without_isbn_fetch():
+    isbn_client = RecordingBookMetadataClient(source_name="openBD")
+    search = RecordingSearchClient()
+    service = BookMetadataService([isbn_client], search_client=search)
+    assert service.search_candidates(publisher=" 集英社 ") == []
+    assert search.calls == [{"title": "", "author": "", "publisher": "集英社", "max_results": 20}]
+    assert isbn_client.calls == []
+
+
+@pytest.mark.parametrize("publisher", [None, 10])
+def test_invalid_publisher_does_not_delegate(publisher):
+    search = RecordingSearchClient()
+    service = BookMetadataService([FakeBookMetadataClient("openBD")], search_client=search)
+    with pytest.raises(TypeError):
+        service.search_candidates(publisher=publisher)
     assert search.calls == []

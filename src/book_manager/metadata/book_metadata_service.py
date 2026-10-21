@@ -32,6 +32,9 @@ from book_manager.validators.isbn_validator import (
 from book_manager.models.book_search_candidate import BookSearchCandidate
 
 
+from book_manager.metadata.candidate_matching import prepare_search_terms
+
+
 class BookMetadataService:
     """複数の外部書誌情報取得Clientを制御するService。"""
 
@@ -64,7 +67,9 @@ class BookMetadataService:
         *,
         title: str = "",
         author: str = "",
+        publisher: str = "",
         max_results: int = 20,
+        start_index: int = 0,
     ) -> list[BookSearchCandidate]:
         """明示的に設定した検索Clientへ委譲する。
 
@@ -72,12 +77,10 @@ class BookMetadataService:
         候補なしは空リスト、外部取得エラーはそのまま返す。
         DB更新や候補確定は行わない。
         """
-        if not isinstance(title, str) or not isinstance(author, str):
-            raise TypeError("書籍名と著者名は文字列で指定してください。")
+        prepare_search_terms(title=title, author=author, publisher=publisher)
         title = " ".join(title.split())
         author = " ".join(author.split())
-        if not title and not author:
-            raise ValueError("書籍名または著者名を入力してください。")
+        publisher = " ".join(publisher.split())
         if type(max_results) is not int:
             raise TypeError("取得件数は整数で指定してください。")
         if not 1 <= max_results <= 40:
@@ -86,11 +89,21 @@ class BookMetadataService:
             raise BookMetadataConfigurationError(
                 "書籍候補検索Clientが設定されていません。"
             )
+        if type(start_index) is not int or not 0 <= start_index <= 180:
+            raise ValueError("検索位置は0から180の整数で指定してください。")
+        options = {"start_index": start_index} if start_index else {}
         return self._search_client.search_candidates(
-            title=title,
+            **options, title=title,
             author=author,
+            publisher=publisher,
             max_results=max_results,
         )
+
+    def fetch_candidate(self, candidate: BookSearchCandidate, *, isbn: str = "") -> FetchedBookData:
+        """候補の詳細情報を取得する。DBの読み書きは行わない。"""
+        if self._search_client is None:
+            raise BookMetadataConfigurationError("候補の取得先が設定されていません。")
+        return self._search_client.fetch_candidate(candidate, isbn=isbn)
 
     def fetch_by_isbn(
         self,

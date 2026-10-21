@@ -13,6 +13,7 @@ from datetime import datetime
 import ctypes
 import sys
 
+from book_manager.gui.metadata_comparison_dialog import MetadataComparisonDialog
 from book_manager.gui.book_candidate_search_dialog import (
     BookCandidateSearchDialog, CandidateSearchTask,
 )
@@ -1620,7 +1621,7 @@ class BookManagerApplication:
         )
         self._magazine_code_entry.grid(row=0, column=4, padx=(0, 12))
         self._candidate_search_button = ttk.Button(
-            identifier_frame, text="書籍名・著者名からISBN候補を検索",
+            identifier_frame, text="書籍候補を検索",
             command=self._on_search_book_candidates,
         )
         self._candidate_search_button.grid(row=0, column=5, sticky="w")
@@ -2234,66 +2235,71 @@ class BookManagerApplication:
             value or "",
         )
 
-    def _has_metadata_input_values(self) -> bool:
-        """外部書誌情報の反映対象欄に入力があるか確認する。"""
-        values = (
-            self._title_var.get(),
-            self._author_var.get(),
-            self._publisher_var.get(),
-            self._publication_format_var.get(),
-            self._description_text.get(
-                "1.0",
-                tk.END,
-            ),
+    def _metadata_form_snapshot(self) -> tuple:
+        """比較対象と入力値・書影状態を保存し、反映直前に再確認する。"""
+        return (
+            self._selected_book_id,
+            self._isbn_var.get(), self._reference_isbn_var.get(),
+            self._title_var.get(), self._author_var.get(),
+            self._publisher_var.get(), self._publication_format_var.get(),
+            self._description_text.get("1.0", "end-1c"),
+            self._current_cover_image_url, self._current_cover_image_path,
         )
 
-        return any(
-            value.strip()
-            for value in values
+    def _choose_metadata_fields(
+        self, fetched_data: FetchedBookData, *, use_reference_isbn: bool,
+    ) -> frozenset[str] | None:
+        """比較画面を中央へ表示して反映項目を選ぶ。"""
+        current = {
+            "title": self._title_var.get(),
+            "author": self._author_var.get(),
+            "publisher": self._publisher_var.get(),
+            "publication_format": self._publication_format_var.get(),
+            "description": self._description_text.get("1.0", "end-1c"),
+            "cover_image_url": self._current_cover_image_url or "",
+        }
+        dialog = MetadataComparisonDialog(
+            self._root, current=current, fetched=fetched_data,
+            use_reference_isbn=use_reference_isbn,
         )
-
-    def _confirm_metadata_overwrite(self) -> bool:
-        """入力済み書誌情報を上書きするか確認する。"""
-        if not self._has_metadata_input_values():
-            return True
-
-        return messagebox.askyesno(
-            "書誌情報の上書き確認",
-            (
-                "すでに入力されている書誌情報があります。\n"
-                "取得した書誌情報で上書きしますか？"
-            ),
-            parent=self._root,
-        )
+        center_window_on_parent(dialog.window, self._root)
+        return dialog.show()
 
     def _apply_fetched_book_data(
         self,
         fetched_data: FetchedBookData,
         *,
         use_reference_isbn: bool = False,
+        selected_fields: frozenset[str] | None = None,
     ) -> None:
-        """取得した書誌情報を入力フォームへ反映する。"""
+        """選択した書誌情報だけを入力フォームへ反映する。"""
         isbn_variable = (
             self._reference_isbn_var if use_reference_isbn else self._isbn_var
         )
-        isbn_variable.set(fetched_data.isbn)
+        if fetched_data.isbn:
+            isbn_variable.set(fetched_data.isbn)
 
         def has_text(value):
             return isinstance(value, str) and bool(value.strip())
 
         if not use_reference_isbn:
-            for value, variable in (
-                (fetched_data.title, self._title_var),
-                (fetched_data.author, self._author_var),
-                (fetched_data.publisher, self._publisher_var),
-                (fetched_data.publication_format, self._publication_format_var),
+            for key, value, variable in (
+                ("title", fetched_data.title, self._title_var),
+                ("author", fetched_data.author, self._author_var),
+                ("publisher", fetched_data.publisher, self._publisher_var),
+                ("publication_format", fetched_data.publication_format, self._publication_format_var),
             ):
-                if has_text(value):
+                if has_text(value) and (selected_fields is None or key in selected_fields):
                     variable.set(value)
 
         if has_text(fetched_data.description):
             current_description = self._description_text.get("1.0", "end-1c")
-            if not use_reference_isbn or not current_description.strip():
+            should_apply = (
+                "description" in selected_fields
+                if selected_fields is not None
+                else not use_reference_isbn or not current_description.strip()
+            )
+            if should_apply:
                 self._replace_text(
                     self._description_text, fetched_data.description,
                 )
@@ -6117,13 +6123,7 @@ class BookManagerApplication:
             )
 
     def _on_search_book_candidates(self) -> None:
-        """登録済みの1冊について検索し、ISBNだけを編集欄へ反映する。"""
-        if self._selected_book_id is None:
-            messagebox.showinfo(
-                "ISBN候補検索", "一覧から登録済みの書籍を1冊選択してください。",
-                parent=self._root,
-            )
-            return
+        """登録前・登録済みフォームから候補を検索し、比較後に反映する。"""
         task = getattr(self, "_candidate_search_task", None)
         if task is None:
             task = CandidateSearchTask()
@@ -6134,15 +6134,17 @@ class BookManagerApplication:
                 parent=self._root,
             )
             return
+        form_snapshot = self._metadata_form_snapshot()
         snapshot = (
             self._selected_book_id, self._title_var.get(), self._author_var.get(),
-            self._isbn_var.get(), self._reference_isbn_var.get(),
+            self._isbn_var.get(), self._reference_isbn_var.get(), self._publisher_var.get(),
         )
         self._candidate_search_button.configure(state="disabled")
         try:
             dialog = BookCandidateSearchDialog(
                 self._root, search=self._service.search_book_candidates,
-                task=task, title=snapshot[1], author=snapshot[2],
+                task=task, title=snapshot[1], author=snapshot[2], publisher=snapshot[5],
+                fetch=self._service.fetch_book_candidate,
             )
             center_window_on_parent(dialog.window, self._root)
             result = dialog.show()
@@ -6150,7 +6152,7 @@ class BookManagerApplication:
                 return
             current = (
                 self._selected_book_id, self._title_var.get(), self._author_var.get(),
-                self._isbn_var.get(), self._reference_isbn_var.get(),
+                self._isbn_var.get(), self._reference_isbn_var.get(), self._publisher_var.get(),
             )
             if snapshot != current:
                 messagebox.showwarning(
@@ -6158,19 +6160,26 @@ class BookManagerApplication:
                     parent=self._root,
                 )
                 return
-            isbn, destination = result
-            variable = (
-                self._reference_isbn_var if destination == "reference"
-                else self._isbn_var
-            )
-            if variable.get().strip() and variable.get().strip() != isbn:
-                if not messagebox.askyesno(
-                    "ISBN変更", "入力済みのISBNを選択したISBNへ変更しますか。",
-                    parent=self._root,
-                ):
+            fetched, destination = result
+            use_reference = destination == "reference"
+            selected = self._choose_metadata_fields(fetched, use_reference_isbn=use_reference)
+            if selected is None:
+                self._edit_status_var.set("書誌情報の反映をキャンセルしました。")
+                return
+            if self._metadata_form_snapshot() != form_snapshot:
+                messagebox.showwarning("書誌情報の比較", "入力内容が変わったため反映しません。再検索してください。", parent=self._root)
+                return
+            if not selected:
+                self._edit_status_var.set("反映する項目が選択されていません。")
+                return
+            variable = self._reference_isbn_var if use_reference else self._isbn_var
+            if fetched.isbn and variable.get().strip() and variable.get().strip() != fetched.isbn:
+                if not messagebox.askyesno("ISBN変更", "入力済みのISBNを選択候補のISBNへ変更しますか。", parent=self._root):
                     return
-            variable.set(isbn)
-            self._edit_status_var.set("ISBNを編集欄へ反映しました。保存するには更新してください。")
+            self._apply_fetched_book_data(fetched, use_reference_isbn=use_reference, selected_fields=selected)
+            if "cover_image_url" in selected:
+                self._apply_fetched_cover(fetched.cover_image_url)
+            self._edit_status_var.set("候補の書誌情報を反映しました。保存するには登録または更新してください。")
         finally:
             try:
                 if self._root.winfo_exists():
@@ -6203,22 +6212,37 @@ class BookManagerApplication:
             )
             self._root.update_idletasks()
 
+            snapshot = self._metadata_form_snapshot()
             result = self._service.fetch_book_metadata(
                 isbn,
             )
 
-            if not self._confirm_metadata_overwrite():
+            selected_fields = self._choose_metadata_fields(
+                result, use_reference_isbn=use_reference_isbn,
+            )
+            if selected_fields is None:
                 self._edit_status_var.set(
                     "書誌情報の反映をキャンセルしました。",
                 )
                 return
 
-            if use_reference_isbn:
-                self._apply_fetched_book_data(result, use_reference_isbn=True)
-            else:
-                self._apply_fetched_book_data(result)
-
-            self._apply_fetched_cover(result.cover_image_url)
+            if self._metadata_form_snapshot() != snapshot:
+                messagebox.showwarning(
+                    "書誌情報の比較",
+                    "対象または入力内容が変わったため反映しません。もう一度取得・比較してください。",
+                    parent=self._root,
+                )
+                self._edit_status_var.set("入力変更を検出したため反映を中止しました。")
+                return
+            if not selected_fields:
+                self._edit_status_var.set("反映する項目が選択されていません。")
+                return
+            self._apply_fetched_book_data(
+                result, use_reference_isbn=use_reference_isbn,
+                selected_fields=selected_fields,
+            )
+            if "cover_image_url" in selected_fields:
+                self._apply_fetched_cover(result.cover_image_url)
 
             self._edit_status_var.set(
                 "書誌情報を取得しました。",

@@ -736,7 +736,7 @@ def test_search_params():
     client.set_api_key("NEW_KEY")
     assert client.search_candidates(title=" 三体 II ", author=" 劉 慈欣 ") == []
     assert session.calls[0]["params"] == {
-        "q": '三体 II 劉 慈欣',
+        "q": '三体 II 劉慈欣',
         "maxResults": 20, "printType": "books", "key": "NEW_KEY",
     }
 
@@ -882,3 +882,93 @@ def test_search_removes_quote_and_field_operator():
     client, session = search_client({})
     client.search_candidates(title='本" inauthor:別人')
     assert session.calls[0]["params"]["q"] == '本 inauthor 別人'
+
+
+@pytest.mark.parametrize("kwargs,query", [
+    ({"publisher": " 集英社 "}, "集英社"),
+    ({"title": "Ｐｙｔｈｏｎ", "author": " 小路　幸也 ", "publisher": "集英社"}, "Python 小路幸也 集英社"),
+])
+def test_publisher_and_normalized_query(kwargs, query):
+    client, session = search_client({"totalItems": 0})
+    assert client.search_candidates(**kwargs) == []
+    assert session.calls[0]["params"]["q"] == query
+    assert len(session.calls) == 1
+
+
+@pytest.mark.parametrize("publisher,error", [(None, TypeError), (42, TypeError), ("　", ValueError)])
+def test_invalid_publisher_does_not_request(publisher, error):
+    client, session = search_client({})
+    with pytest.raises(error):
+        client.search_candidates(publisher=publisher)
+    assert session.calls == []
+
+
+def test_candidate_order_uses_all_three_conditions_without_dropping_other_editions():
+    client, session = search_client({"items": [
+        {"id": "different", "volumeInfo": {"title": "別の本", "authors": ["別人"]}},
+        {"id": "matching", "volumeInfo": {"title": "イエロー サブマリン", "authors": ["小路 幸也"], "publisher": "株式会社集英社"}},
+    ]})
+    result = client.search_candidates(title="イエロー・サブマリン", author="小路幸也", publisher="集英社")
+    assert [c.source_id for c in result] == ["matching", "different"]
+    assert result[0].publisher == "株式会社集英社"
+    assert len(session.calls) == 1
+
+
+def test_paging_uses_start_index():
+    client, session = search_client({})
+    client.search_candidates(author="小路幸也", start_index=20)
+    assert session.calls[0]["params"]["startIndex"] == 20
+
+
+@pytest.mark.parametrize("offset", [-1, 181, True, "20"])
+def test_invalid_page_does_not_request(offset):
+    client, session = search_client({})
+    with pytest.raises(ValueError):
+        client.search_candidates(title="本", start_index=offset)
+    assert session.calls == []
+
+
+def selected_candidate(isbns=("9784087754537",)):
+    from book_manager.models.book_search_candidate import BookSearchCandidate
+    return BookSearchCandidate(source="Google Books", source_id="ur56zQEACAAJ", title="本", isbn_candidates=isbns)
+
+
+def detail_payload():
+    return {"id": "ur56zQEACAAJ", "volumeInfo": {
+        "title": "イエロー・サブマリン", "authors": ["小路幸也"],
+        "description": "内容紹介", "imageLinks": {"thumbnail": "https://example.com/cover"},
+        "industryIdentifiers": [{"type": "ISBN_13", "identifier": "9784087754537"}],
+    }}
+
+
+def test_fetch_candidate_uses_id_and_returns_description_cover():
+    client, session = search_client(detail_payload())
+    result = client.fetch_candidate(selected_candidate(), isbn="9784087754537")
+    assert session.calls[0]["url"].endswith("/ur56zQEACAAJ")
+    assert "q" not in session.calls[0]["params"]
+    assert result.description == "内容紹介"
+    assert result.cover_image_url == "https://example.com/cover"
+    assert result.isbn == "9784087754537"
+
+
+def test_fetch_isbnless_candidate_does_not_guess_isbn():
+    client, _ = search_client(detail_payload())
+    result = client.fetch_candidate(selected_candidate(()))
+    assert result.isbn == ""
+    assert result.title == "イエロー・サブマリン"
+
+
+@pytest.mark.parametrize("field,value", [("id", "other"), ("volumeInfo", {})])
+def test_detail_identity_or_isbn_mismatch_rejected(field, value):
+    payload = detail_payload()
+    payload[field] = value
+    client, _ = search_client(payload)
+    with pytest.raises(BookMetadataResponseError):
+        client.fetch_candidate(selected_candidate(), isbn="9784087754537")
+
+
+def test_unselected_isbn_rejected_before_detail_request():
+    client, session = search_client({})
+    with pytest.raises(ValueError):
+        client.fetch_candidate(selected_candidate(), isbn="9784101010014")
+    assert session.calls == []

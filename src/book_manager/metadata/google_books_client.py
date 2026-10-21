@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from book_manager.metadata.candidate_matching import prepare_search_terms, rank_candidates
+
 import requests
 from requests import Session
 
@@ -113,36 +115,25 @@ class GoogleBooksClient:
         *,
         title: str = "",
         author: str = "",
+        publisher: str = "",
         max_results: int = 20,
+        start_index: int = 0,
     ) -> list[BookSearchCandidate]:
-        """書籍名・著者名から未確認の候補を取得する。
+        """書籍名・著者名・出版社から未確認の候補を取得する。
 
-        少なくとも一方を指定する。1回の呼出しで最大40件を要求し、
+        少なくとも1項目を指定する。1回の呼出しで最大40件を要求し、
         ページ追加取得・自動再試行・DB更新は行わない。
         ISBNなしの候補も返す。媒体・版は推測しない。
         GUIからはワーカーで呼び出す。
         """
-        if not isinstance(title, str) or not isinstance(author, str):
-            raise TypeError("書籍名と著者名は文字列で指定してください。")
-        title = " ".join(title.split())
-        author = " ".join(author.split())
-        if not title and not author:
-            raise ValueError("書籍名または著者名を入力してください。")
+        conditions = prepare_search_terms(title=title, author=author, publisher=publisher)
         if type(max_results) is not int:
             raise TypeError("取得件数は整数で指定してください。")
         if not 1 <= max_results <= 40:
             raise ValueError("取得件数は1から40の範囲で指定してください。")
-
-        # 通常キーワード検索で候補の取りこぼしを減らす。
-        parts = []
-        for value in (title, author):
-            if value:
-                for character in ('"', "\\", ":"):
-                    value = value.replace(character, " ")
-                value = " ".join(value.split())
-                if not value:
-                    raise ValueError("検索条件に文字を入力してください。")
-                parts.append(value)
+        if type(start_index) is not int or not 0 <= start_index <= 180:
+            raise ValueError("検索位置は0から180の整数で指定してください。")
+        parts = [value for value in conditions.values() if value]
         params: dict[str, str | int] = {
             "q": " ".join(parts),
             "maxResults": max_results,
@@ -150,6 +141,8 @@ class GoogleBooksClient:
         }
         if self._api_key:
             params["key"] = self._api_key
+        if start_index:
+            params["startIndex"] = start_index
         payload = self._request_params(params)
         items = payload.get("items", [])
         if not isinstance(items, list):
@@ -198,7 +191,28 @@ class GoogleBooksClient:
                 ),
                 is_ebook=is_ebook if type(is_ebook) is bool else None,
             ))
-        return candidates
+        return rank_candidates(candidates, title=title, author=author, publisher=publisher)
+
+    def fetch_candidate(self, candidate: BookSearchCandidate, *, isbn: str = "") -> FetchedBookData:
+        """選択されたGoogle IDを直接取得し、ID・選択ISBNを検証する。"""
+        from urllib.parse import quote
+
+        if candidate.source != self.source_name or not candidate.source_id:
+            raise ValueError("Google IDを持つ候補を選択してください。")
+        if isbn and isbn not in candidate.isbn_candidates:
+            raise ValueError("候補に含まれるISBNを選択してください。")
+        params = {"key": self._api_key} if self._api_key else {}
+        payload = self._request_params(
+            params, url=self.BASE_URL + "/" + quote(candidate.source_id, safe=""),
+        )
+        if payload.get("id") != candidate.source_id:
+            raise BookMetadataResponseError("選択したGoogle IDと応答が一致しません。")
+        info = payload.get("volumeInfo")
+        if not isinstance(info, dict):
+            raise BookMetadataResponseError("候補の書誌情報が正しくありません。")
+        if isbn and isbn not in self._extract_candidate_isbns(info.get("industryIdentifiers")):
+            raise BookMetadataResponseError("選択したISBNと詳細情報が一致しません。")
+        return self._create_fetched_book_data(item=payload, isbn=isbn, payload=payload)
 
     @staticmethod
     def _extract_candidate_isbns(value: object) -> tuple[str, ...]:
@@ -250,11 +264,12 @@ class GoogleBooksClient:
     def _request_params(
         self,
         params: dict[str, str | int],
+        *, url: str | None = None,
     ) -> dict[str, Any]:
         """検索とISBN取得で共通のHTTP・JSON処理を行う。"""
         try:
             response = self._session.get(
-                self.BASE_URL,
+                url or self.BASE_URL,
                 params=params,
                 timeout=self._timeout,
             )
