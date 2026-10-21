@@ -56,7 +56,7 @@ ISBNなしの候補もGoogle IDがあれば詳細取得でき、入力済みISBN
 
 2026年10月2日に全1971件とサブテスト13件が成功しました。Windowsソース版の検証用空DBへ、書籍2件・タグ2件・関連3件・履歴2件を取り込み、年月・タグ・感想の保持、取消、エラー時の登録禁止、DB整合性と通常利用DBの保護を確認しました。
 
-実利用Excel全体の照合、拡張した候補検索のWindows実機確認、Windows配布版の検証とVersion 2.7の公開は未完了です。詳細は[Excel移行・書誌情報補完設計](docs/excel_import_metadata_design.md)を参照してください。
+候補検索・詳細取得・比較反映はWindowsソース版で実機確認済みです。実利用Excel全体の照合、Windows配布版の検証とVersion 2.7の公開は未完了です。詳細は[Excel移行・書誌情報補完設計](docs/excel_import_metadata_design.md)を参照してください。
 
 ---
 
