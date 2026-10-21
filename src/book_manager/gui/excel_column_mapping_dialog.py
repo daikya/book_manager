@@ -1,4 +1,7 @@
 """Excelの列と書籍・読書履歴の項目を対応付ける画面。"""
+from book_manager.config.window_state_store import WindowStateStore
+from book_manager.gui.dialog_window_state import restore_dialog_window
+
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -51,7 +54,8 @@ def parse_excluded_rows(text: str) -> tuple[int, ...]:
 class ExcelColumnMappingDialog:
     """割り当て結果を返す。DB登録やAPI検索は行わない。"""
 
-    def __init__(self, parent: tk.Misc, sheet: ExcelSheetData):
+    def __init__(self, parent: tk.Misc, sheet: ExcelSheetData,
+                 *, state_store: WindowStateStore | None = None):
         self._sheet = sheet
         self.result: ExcelImportOptions | None = None
         self._window = tk.Toplevel(parent)
@@ -112,6 +116,8 @@ class ExcelColumnMappingDialog:
         ttk.Button(buttons, text="キャンセル", command=self._cancel).pack(side="right")
         ttk.Button(buttons, text="事前検査へ", command=self._confirm).pack(side="right", padx=8)
         self._window.bind("<Escape>", lambda _event: self._cancel())
+        restore_dialog_window(self._window, parent, state_store,
+                              default_size=(760, 700))
 
     @staticmethod
     def _display(value: object) -> str:

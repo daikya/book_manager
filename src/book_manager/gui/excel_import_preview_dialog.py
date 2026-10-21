@@ -1,4 +1,7 @@
 """Excel取込の登録予定と検査結果を確認する画面。"""
+from book_manager.config.window_state_store import WindowStateStore
+from book_manager.gui.dialog_window_state import restore_dialog_window
+
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -42,7 +45,8 @@ def preview_summary(preview: ExcelImportPreview) -> str:
 class ExcelImportPreviewDialog:
     """利用者の承認だけを返す。登録処理は呼び出し元が実行する。"""
 
-    def __init__(self, parent: tk.Misc, preview: ExcelImportPreview):
+    def __init__(self, parent: tk.Misc, preview: ExcelImportPreview,
+                 *, state_store: WindowStateStore | None = None):
         self._preview = preview
         self.result = False
         self._window = tk.Toplevel(parent)
@@ -115,6 +119,8 @@ class ExcelImportPreviewDialog:
         self._import_button = ttk.Button(buttons, text="取り込む", command=self._confirm, state="disabled")
         self._import_button.pack(side="right", padx=8)
         self._window.bind("<Escape>", lambda _event: self._cancel())
+        restore_dialog_window(self._window, parent, state_store,
+                              default_size=(900, 720))
 
     @staticmethod
     def _table(parent: tk.Misc, columns: tuple) -> ttk.Treeview:

@@ -5722,6 +5722,13 @@ class BookManagerApplication:
             "_excel_workbook_reader_service", "_excel_import_preflight_service", "_excel_import_service",
         ))
 
+    def _excel_dialog_state_store(self, name: str) -> WindowStateStore | None:
+        """Excel子画面ごとの配置を、利用者設定と同じ保存先で管理する。"""
+        store = getattr(self, "_window_state_store", None)
+        if store is None:
+            return None
+        return WindowStateStore(store.path.with_name(f"{name}_window_state.json"))
+
     def _on_import_excel(self) -> None:
         """Excel選択、列割り当て、全行検査、承認、登録を順に行う。"""
         if not self._has_excel_import_services():
@@ -5736,11 +5743,17 @@ class BookManagerApplication:
         try:
             sheet = self._excel_workbook_reader_service.read_sheet(Path(filename))
             while True:
-                options = ExcelColumnMappingDialog(self._root, sheet).show()
+                options = ExcelColumnMappingDialog(
+                    self._root, sheet,
+                    state_store=self._excel_dialog_state_store("excel_column_mapping"),
+                ).show()
                 if options is None:
                     return
                 preview = self._excel_import_preflight_service.preview_sheet(sheet, options=options)
-                if ExcelImportPreviewDialog(self._root, preview).show():
+                if ExcelImportPreviewDialog(
+                    self._root, preview,
+                    state_store=self._excel_dialog_state_store("excel_import_preview"),
+                ).show():
                     result = self._excel_import_service.import_preview(preview)
                     break
                 # 確認画面から戻った場合は、列割り当てから再確認する。
