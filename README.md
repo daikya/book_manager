@@ -12,7 +12,7 @@ Google Books APIおよびopenBDを利用して書誌情報を取得し、SQLite�
 
 ## Version 2.7の開発状況
 
-正式公開版はVersion 2.6.0です。以下は開発中のソース版で実装・確認した機能であり、Version 2.6.0の配布物には含まれません。
+正式公開版はVersion 2.6.0です。このソースの版番号は2.7.0ですが、正式成果物のビルド・最終実機確認は完了し、GitHub Releaseでの公開は未完了です。以下の新機能はVersion 2.6.0の配布物には含まれません。
 
 ### Excel読書記録の取込
 
@@ -60,7 +60,7 @@ Schema 7の移行前バックアップをコピーし、EXE版によるSchema 8�
 
 検証専用AppIdのインストーラーでインストール・起動・全660件照合に成功し、アンインストール後も通常版EXEと検証用DBが残ることを確認しました。この検証は通常版への上書きインストールの確認とは区別します。
 
-Version 2.7はまだ未公開です。残作業は正式版番号への更新、正式成果物の再ビルド・最終確認、公開です。詳細は[Excel移行・書誌情報補完設計](docs/excel_import_metadata_design.md)と[インストーラー検証](docs/installer_verification.md)を参照してください。
+Version 2.7.0の正式成果物を生成し、通常版への上書き更新前後で利用者データ50ファイルのSHA-256一致を確認しました。FileVersion・ProductVersionは2.7.0で一致し、既存データ・設定・候補検索・比較画面と通常ショートカットからの再起動を実機確認済みです。GitHub Releaseでの公開は未完了です。詳細は[Excel移行・書誌情報補完設計](docs/excel_import_metadata_design.md)と[インストーラー検証](docs/installer_verification.md)を参照してください。
 
 ---
 
