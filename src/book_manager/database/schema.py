@@ -1,6 +1,6 @@
 """SQLite schema definitions."""
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 CREATE_BOOK_ITEMS_TABLE = """
@@ -163,6 +163,44 @@ MIGRATE_VERSION_6_TO_7 = (
     CREATE_READING_HISTORIES_BOOK_ITEM_ID_INDEX,
 )
 
+
+CREATE_AUTHORS_TABLE = """
+CREATE TABLE IF NOT EXISTS authors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 200),
+    name_key TEXT NOT NULL CHECK (length(name_key) > 0),
+    disambiguation_note TEXT CHECK (length(disambiguation_note) <= 2000),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)
+"""
+CREATE_AUTHORS_NAME_KEY_INDEX = "CREATE INDEX IF NOT EXISTS idx_authors_name_key ON authors(name_key)"
+CREATE_AUTHOR_ALIASES_TABLE = """
+CREATE TABLE IF NOT EXISTS author_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    author_id INTEGER NOT NULL REFERENCES authors(id) ON DELETE CASCADE,
+    name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 200),
+    name_key TEXT NOT NULL CHECK (length(name_key) > 0),
+    UNIQUE (author_id, name)
+)
+"""
+CREATE_AUTHOR_ALIASES_NAME_KEY_INDEX = "CREATE INDEX IF NOT EXISTS idx_author_aliases_name_key ON author_aliases(name_key)"
+CREATE_BOOK_ITEM_AUTHORS_TABLE = """
+CREATE TABLE IF NOT EXISTS book_item_authors (
+    book_item_id INTEGER NOT NULL REFERENCES book_items(id) ON DELETE CASCADE,
+    author_id INTEGER NOT NULL REFERENCES authors(id) ON DELETE RESTRICT,
+    position INTEGER NOT NULL CHECK (typeof(position) = 'integer' AND position >= 0),
+    PRIMARY KEY (book_item_id, author_id),
+    UNIQUE (book_item_id, position)
+)
+"""
+CREATE_BOOK_ITEM_AUTHORS_AUTHOR_INDEX = "CREATE INDEX IF NOT EXISTS idx_book_item_authors_author_id ON book_item_authors(author_id)"
+AUTHOR_SCHEMA_STATEMENTS = (
+    CREATE_AUTHORS_TABLE, CREATE_AUTHORS_NAME_KEY_INDEX,
+    CREATE_AUTHOR_ALIASES_TABLE, CREATE_AUTHOR_ALIASES_NAME_KEY_INDEX,
+    CREATE_BOOK_ITEM_AUTHORS_TABLE, CREATE_BOOK_ITEM_AUTHORS_AUTHOR_INDEX,
+)
+
 SCHEMA_STATEMENTS = (
     CREATE_BOOK_ITEMS_TABLE,
     CREATE_BOOK_ITEMS_TITLE_INDEX,
@@ -174,3 +212,5 @@ SCHEMA_STATEMENTS = (
     CREATE_READING_HISTORIES_TABLE,
     CREATE_READING_HISTORIES_BOOK_ITEM_ID_INDEX,
 )
+
+SCHEMA_STATEMENTS += AUTHOR_SCHEMA_STATEMENTS

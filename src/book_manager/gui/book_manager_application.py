@@ -5826,7 +5826,9 @@ class BookManagerApplication:
                     "書籍タグ関連: "
                     f"{result.book_item_tag_count}件\n"
                     "読書履歴: "
-                    f"{result.reading_history_count}件"
+                    f"{result.reading_history_count}件\n"
+                    f"管理著者: {result.author_count}件／別名: {result.author_alias_count}件\n"
+                    f"書籍著者関連: {result.book_item_author_count}件"
                 ),
                 parent=self._root,
             )
@@ -5912,7 +5914,9 @@ class BookManagerApplication:
                     "書籍タグ関連: "
                     f"{result.book_item_tag_count}件\n"
                     "読書履歴: "
-                    f"{result.reading_history_count}件\n\n"
+                    f"{result.reading_history_count}件\n"
+                    f"管理著者: {result.author_count}件／別名: {result.author_alias_count}件\n"
+                    f"書籍著者関連: {result.book_item_author_count}件\n\n"
                     f"実行前バックアップ: {result.backup_path}"
                 ),
                 parent=self._root,
@@ -5950,6 +5954,8 @@ class BookManagerApplication:
                 f"{manifest.book_item_tag_count}件",
                 "読書履歴: "
                 f"{manifest.reading_history_count}件",
+                f"管理著者: {manifest.author_count}件／別名: {manifest.author_alias_count}件",
+                f"書籍著者関連: {manifest.book_item_author_count}件",
             ]
 
         cls._append_csv_data_package_issues(

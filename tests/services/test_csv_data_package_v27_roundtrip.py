@@ -47,7 +47,7 @@ def test_version_2_database_roundtrip(tmp_path: Path) -> None:
         CsvDataPackageArchiveValidator(),
     ).preview(package)
     assert preview.can_import
-    assert preview.manifest.format_version == 2
+    assert preview.manifest.format_version == 3
     assert preview.book_items[0].reference_isbn == "9784101010014"
     assert preview.reading_histories[0].completed_on == "2026-09"
     with create_connection(target) as connection:

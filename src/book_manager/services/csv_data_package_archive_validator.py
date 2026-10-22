@@ -9,7 +9,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 from book_manager.models.csv_data_package import (
-    REQUIRED_FILE_NAMES,
+    REQUIRED_FILE_NAMES, CURRENT_REQUIRED_FILE_NAMES,
     CsvDataPackageArchiveFingerprint,
 )
 
@@ -17,7 +17,7 @@ from book_manager.models.csv_data_package import (
 class CsvDataPackageArchiveValidator:
     """ZIPを展開せず構造と安全性を検査する。"""
 
-    DEFAULT_MAX_ENTRY_COUNT = len(REQUIRED_FILE_NAMES)
+    DEFAULT_MAX_ENTRY_COUNT = len(CURRENT_REQUIRED_FILE_NAMES)
     DEFAULT_MAX_ENTRY_SIZE = 64 * 1024 * 1024
     DEFAULT_MAX_TOTAL_SIZE = 128 * 1024 * 1024
     DEFAULT_MAX_COMPRESSION_RATIO = 200.0
@@ -131,7 +131,9 @@ class CsvDataPackageArchiveValidator:
             )
 
         actual_names = set(names)
-        required_names = set(REQUIRED_FILE_NAMES)
+        required_names = (set(CURRENT_REQUIRED_FILE_NAMES)
+                          if actual_names & (set(CURRENT_REQUIRED_FILE_NAMES) - set(REQUIRED_FILE_NAMES))
+                          else set(REQUIRED_FILE_NAMES))
         missing_names = required_names - actual_names
         extra_names = actual_names - required_names
 

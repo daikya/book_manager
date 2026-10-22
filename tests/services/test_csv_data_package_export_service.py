@@ -18,7 +18,7 @@ from book_manager.models.csv_data_package import (
     MANIFEST_HEADERS,
     PACKAGE_FORMAT,
     READING_HISTORIES_FILE_NAME,
-    REQUIRED_FILE_NAMES,
+    CURRENT_REQUIRED_FILE_NAMES as REQUIRED_FILE_NAMES,
     TAGS_FILE_NAME,
     CsvDataPackageBookItem,
     CsvDataPackageBookItemTag,
@@ -166,7 +166,7 @@ def test_export_writes_manifest_from_actual_counts(
     assert rows[0] == list(MANIFEST_HEADERS)
     assert dict(rows[1:]) == {
         "package_format": PACKAGE_FORMAT,
-        "format_version": "2",
+        "format_version": "3",
         "application_version": "2.6.0",
         "database_schema_version": "7",
         "exported_at": "2026-09-30 12:34:56",
@@ -174,6 +174,7 @@ def test_export_writes_manifest_from_actual_counts(
         "tag_count": "1",
         "book_item_tag_count": "1",
         "reading_history_count": "1",
+        "author_count": "0", "author_alias_count": "0", "book_item_author_count": "0",
     }
 
 

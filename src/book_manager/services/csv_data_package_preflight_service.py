@@ -26,7 +26,7 @@ from book_manager.models.csv_data_package import (
     HISTORY_KEY_PREFIX,
     MANIFEST_FILE_NAME,
     MANIFEST_HEADERS,
-    MANIFEST_REQUIRED_KEYS,
+    MANIFEST_REQUIRED_KEYS, AUTHOR_MANIFEST_COUNT_KEYS,
     PACKAGE_FORMAT,
     PACKAGE_FORMAT_VERSION,
     READING_HISTORIES_FILE_NAME,
@@ -47,6 +47,8 @@ from book_manager.models.csv_data_package import (
 from book_manager.services.csv_data_package_archive_validator import (
     CsvDataPackageArchiveValidator,
 )
+from book_manager.services.csv_data_package_authors import parse_author_csvs
+
 from book_manager.validators.reading_history_validator import (
     validate_reading_date, validate_reading_history_dates,
 )
@@ -69,7 +71,7 @@ class _CsvContent:
 
 
 class CsvDataPackagePreflightService:
-    """安全検査済みZIP内の5つのCSVを全件検査する。"""
+    """安全検査済みZIP内のCSVを全件検査する。"""
 
     READING_STATUS_VALUES = {
         "未読": "unread",
@@ -164,6 +166,8 @@ class CsvDataPackagePreflightService:
             issues=issues,
         )
 
+        with zipfile.ZipFile(fingerprint.source_path, 'r') as archive:
+            authors, aliases, author_relations = parse_author_csvs(self, archive, manifest, book_items, issues)
         return CsvDataPackagePreview(
             source_path=fingerprint.source_path,
             source_size=fingerprint.source_size,
@@ -175,6 +179,7 @@ class CsvDataPackagePreflightService:
             book_item_tags=tuple(relations),
             reading_histories=tuple(histories),
             issues=tuple(issues),
+            authors=authors, author_aliases=aliases, book_item_authors=author_relations,
         )
 
     @staticmethod
@@ -282,7 +287,7 @@ class CsvDataPackagePreflightService:
                 )
                 continue
             values[key] = value
-            if key not in MANIFEST_REQUIRED_KEYS:
+            if key not in MANIFEST_REQUIRED_KEYS + AUTHOR_MANIFEST_COUNT_KEYS:
                 issues.append(
                     CsvDataPackageIssue(
                         level=CsvDataPackageIssueLevel.WARNING,
@@ -378,6 +383,16 @@ class CsvDataPackagePreflightService:
                 "reading_history_count",
             )
         }
+        author_counts = {}
+        for key in AUTHOR_MANIFEST_COUNT_KEYS:
+            if format_version == 3:
+                if key not in values:
+                    self._add_error(issues, MANIFEST_FILE_NAME, None, key, None, 'manifestの必須keyがありません。')
+                    continue
+                author_counts[key] = self._parse_non_negative_integer(values[key], minimum=0,
+                    file_name=MANIFEST_FILE_NAME, column_name=key, issues=issues)
+            elif key in values and values[key] != '0':
+                self._add_error(issues, MANIFEST_FILE_NAME, None, key, values[key], '旧形式には著者管理の件数を指定できません。')
         current_error_count = sum(
             issue.level is CsvDataPackageIssueLevel.ERROR
             for issue in issues
@@ -389,6 +404,7 @@ class CsvDataPackagePreflightService:
         assert all(value is not None for value in counts.values())
 
         return CsvDataPackageManifest(
+            **author_counts,
             package_format=values["package_format"],
             format_version=format_version,
             application_version=values["application_version"],

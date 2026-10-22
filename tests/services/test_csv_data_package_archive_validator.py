@@ -97,7 +97,7 @@ def test_validate_rejects_extra_file(tmp_path: Path) -> None:
 def test_validate_rejects_too_many_entries(tmp_path: Path) -> None:
     """エントリ数上限を超えるZIPを拒否する。"""
     path = tmp_path / "package.zip"
-    create_archive(path, names=REQUIRED_FILE_NAMES + ("extra.csv",))
+    create_archive(path, names=REQUIRED_FILE_NAMES + ("extra1.csv", "extra2.csv", "extra3.csv", "extra4.csv"))
 
     with pytest.raises(ValueError, match="ファイル数"):
         CsvDataPackageArchiveValidator().validate(path)

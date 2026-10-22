@@ -76,7 +76,7 @@ def create_preview(
 def test_package_format_constants() -> None:
     """パッケージ形式の識別値を固定する。"""
     assert PACKAGE_FORMAT == "book_manager_csv_package"
-    assert PACKAGE_FORMAT_VERSION == 2
+    assert PACKAGE_FORMAT_VERSION == 3
     assert CSV_ENCODING == "utf-8-sig"
     assert DATE_FORMAT == "%Y-%m-%d"
     assert DATETIME_FORMAT == "%Y-%m-%d %H:%M:%S"
@@ -241,7 +241,7 @@ def test_manifest_accepts_zero_counts() -> None:
     ("field", "value", "message"),
     [
         ("package_format", "other", "パッケージ形式"),
-        ("format_version", 3, "形式Version"),
+        ("format_version", 4, "形式Version"),
         ("application_version", "  ", "アプリケーションVersion"),
         ("database_schema_version", 0, "DBスキーマVersion"),
         ("exported_at", "", "エクスポート日時"),

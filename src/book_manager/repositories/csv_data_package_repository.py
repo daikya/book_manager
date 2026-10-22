@@ -5,6 +5,7 @@ from pathlib import Path
 
 from book_manager.database.connection import create_connection
 from book_manager.models.csv_data_package import (
+    AUTHOR_KEY_PREFIX, CsvDataPackageAuthor, CsvDataPackageAuthorAlias, CsvDataPackageBookItemAuthor,
     BOOK_KEY_PREFIX,
     HISTORY_KEY_PREFIX,
     TAG_KEY_PREFIX,
@@ -100,6 +101,9 @@ class CsvDataPackageRepository:
                 tag_rows=tag_rows,
                 relation_rows=relation_rows,
                 history_rows=history_rows,
+                author_rows=connection.execute('SELECT * FROM authors ORDER BY id').fetchall(),
+                alias_rows=connection.execute('SELECT * FROM author_aliases ORDER BY id').fetchall(),
+                author_relation_rows=connection.execute('SELECT * FROM book_item_authors ORDER BY book_item_id,position').fetchall(),
             )
         finally:
             if connection.in_transaction:
@@ -113,6 +117,7 @@ class CsvDataPackageRepository:
         tag_rows: list[sqlite3.Row],
         relation_rows: list[sqlite3.Row],
         history_rows: list[sqlite3.Row],
+        author_rows=(), alias_rows=(), author_relation_rows=(),
     ) -> CsvDataPackageSnapshot:
         """DB行をパッケージ用Modelへ変換する。"""
         book_keys = {
@@ -196,11 +201,25 @@ class CsvDataPackageRepository:
             for sequence, row in enumerate(history_rows, start=1)
         )
 
+        author_keys = {row['id']: create_package_key(AUTHOR_KEY_PREFIX, number)
+                       for number, row in enumerate(author_rows, 1)}
+        authors = tuple(CsvDataPackageAuthor(author_key=author_keys[row['id']], name=row['name'],
+                        disambiguation_note=row['disambiguation_note'],
+                        created_at=row['created_at'], updated_at=row['updated_at']) for row in author_rows)
+        aliases = tuple(CsvDataPackageAuthorAlias(
+            CsvDataPackageRepository._resolve_key(author_keys, row['author_id'], '別名の著者'), row['name'])
+            for row in alias_rows)
+        author_relations = tuple(CsvDataPackageBookItemAuthor(
+            CsvDataPackageRepository._resolve_key(book_keys, row['book_item_id'], '著者関連の書籍'),
+            CsvDataPackageRepository._resolve_key(author_keys, row['author_id'], '書籍関連の著者'), row['position'])
+            for row in author_relation_rows)
+
         return CsvDataPackageSnapshot(
             book_items=book_items,
             tags=tags,
             book_item_tags=book_item_tags,
             reading_histories=reading_histories,
+            authors=authors, author_aliases=aliases, book_item_authors=author_relations,
         )
 
     @staticmethod

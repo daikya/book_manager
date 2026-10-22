@@ -481,7 +481,7 @@ def test_preview_rejects_manifest_count_mismatch(tmp_path: Path) -> None:
     ("key", "value"),
     [
         ("package_format", "other"),
-        ("format_version", "3"),
+        ("format_version", "4"),
         ("application_version", ""),
         ("database_schema_version", "0"),
         ("exported_at", "2026/09/30"),

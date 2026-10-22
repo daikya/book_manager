@@ -91,6 +91,7 @@ def initialize_database(database_path: Path | str) -> None:
     """新規DBを初期化する。旧DBはバックアップ後、1トランザクションで移行する。
 
     移行前バックアップはDBと同じディレクトリのschema_backupsに残す。
+    Version 8→9では既存の著者名を保持し、著者・別名・関連を空で追加する。
     バックアップ失敗・移行失敗時は処理を中止する。
     """
     path = Path(database_path)

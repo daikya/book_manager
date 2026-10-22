@@ -101,6 +101,8 @@ class CsvDataPackageImportService:
             book_item_tag_count=len(preview.book_item_tags),
             reading_history_count=len(preview.reading_histories),
             backup_path=backup_path,
+            author_count=len(preview.authors), author_alias_count=len(preview.author_aliases),
+            book_item_author_count=len(preview.book_item_authors),
         )
 
     @staticmethod
@@ -127,6 +129,8 @@ class CsvDataPackageImportService:
             "tags": len(preview.tags),
             "book_item_tags": len(preview.book_item_tags),
             "reading_histories": len(preview.reading_histories),
+            "authors": len(preview.authors), "author_aliases": len(preview.author_aliases),
+            "book_item_authors": len(preview.book_item_authors),
         }
         for table_name, expected_count in expected_counts.items():
             row = connection.execute(

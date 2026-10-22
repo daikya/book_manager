@@ -9,8 +9,8 @@ from pathlib import Path
 
 
 PACKAGE_FORMAT = "book_manager_csv_package"
-PACKAGE_FORMAT_VERSION = 2
-SUPPORTED_PACKAGE_FORMAT_VERSIONS = (1, 2)
+PACKAGE_FORMAT_VERSION = 3
+SUPPORTED_PACKAGE_FORMAT_VERSIONS = (1, 2, 3)
 
 MANIFEST_FILE_NAME = "manifest.csv"
 BOOK_ITEMS_FILE_NAME = "book_items.csv"
@@ -25,6 +25,17 @@ REQUIRED_FILE_NAMES = (
     BOOK_ITEM_TAGS_FILE_NAME,
     READING_HISTORIES_FILE_NAME,
 )
+
+AUTHORS_FILE_NAME = "authors.csv"
+AUTHOR_ALIASES_FILE_NAME = "author_aliases.csv"
+BOOK_ITEM_AUTHORS_FILE_NAME = "book_item_authors.csv"
+AUTHOR_FILE_NAMES = (AUTHORS_FILE_NAME, AUTHOR_ALIASES_FILE_NAME, BOOK_ITEM_AUTHORS_FILE_NAME)
+CURRENT_REQUIRED_FILE_NAMES = REQUIRED_FILE_NAMES + AUTHOR_FILE_NAMES
+AUTHOR_HEADERS = ("author_key", "表示名", "識別メモ", "登録日時", "更新日時")
+AUTHOR_ALIAS_HEADERS = ("author_key", "別名")
+BOOK_ITEM_AUTHOR_HEADERS = ("book_key", "author_key", "表示順")
+AUTHOR_MANIFEST_COUNT_KEYS = ("author_count", "author_alias_count", "book_item_author_count")
+AUTHOR_KEY_PREFIX = "A"
 
 MANIFEST_HEADERS = ("key", "value")
 BOOK_ITEM_HEADERS_VERSION_1 = (
@@ -91,7 +102,7 @@ TAG_KEY_PREFIX = "T"
 HISTORY_KEY_PREFIX = "H"
 PACKAGE_KEY_MINIMUM_DIGITS = 6
 
-_KEY_PATTERN = re.compile(r"^(?P<prefix>[BTH])(?P<number>[0-9]{6,})$")
+_KEY_PATTERN = re.compile(r"^(?P<prefix>[BTHA])(?P<number>[0-9]{6,})$")
 
 
 def create_package_key(prefix: str, sequence: int) -> str:
@@ -100,6 +111,7 @@ def create_package_key(prefix: str, sequence: int) -> str:
         BOOK_KEY_PREFIX,
         TAG_KEY_PREFIX,
         HISTORY_KEY_PREFIX,
+        AUTHOR_KEY_PREFIX,
     }:
         raise ValueError("未対応のパッケージキー種別です。")
     if sequence < 1:
@@ -119,6 +131,7 @@ def is_valid_package_key(value: str, expected_prefix: str) -> bool:
         BOOK_KEY_PREFIX,
         TAG_KEY_PREFIX,
         HISTORY_KEY_PREFIX,
+        AUTHOR_KEY_PREFIX,
     }:
         return False
 
@@ -141,6 +154,9 @@ class CsvDataPackageManifest:
     reading_history_count: int
     package_format: str = PACKAGE_FORMAT
     format_version: int = PACKAGE_FORMAT_VERSION
+    author_count: int = 0
+    author_alias_count: int = 0
+    book_item_author_count: int = 0
 
     def __post_init__(self) -> None:
         """manifestの基本的な整合性を検証する。"""
@@ -162,6 +178,7 @@ class CsvDataPackageManifest:
             self.tag_count,
             self.book_item_tag_count,
             self.reading_history_count,
+            self.author_count, self.author_alias_count, self.book_item_author_count,
         )
         if any(count < 0 for count in counts):
             raise ValueError("データ件数を負の値にはできません。")
@@ -222,6 +239,28 @@ class CsvDataPackageReadingHistory:
 
 
 @dataclass(frozen=True, slots=True)
+class CsvDataPackageAuthor:
+    author_key: str
+    name: str
+    created_at: str
+    updated_at: str
+    disambiguation_note: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CsvDataPackageAuthorAlias:
+    author_key: str
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class CsvDataPackageBookItemAuthor:
+    book_key: str
+    author_key: str
+    position: int
+
+
+@dataclass(frozen=True, slots=True)
 class CsvDataPackageSnapshot:
     """DBから取得した完全データの一貫したスナップショット。"""
 
@@ -229,6 +268,9 @@ class CsvDataPackageSnapshot:
     tags: tuple[CsvDataPackageTag, ...] = ()
     book_item_tags: tuple[CsvDataPackageBookItemTag, ...] = ()
     reading_histories: tuple[CsvDataPackageReadingHistory, ...] = ()
+    authors: tuple[CsvDataPackageAuthor, ...] = ()
+    author_aliases: tuple[CsvDataPackageAuthorAlias, ...] = ()
+    book_item_authors: tuple[CsvDataPackageBookItemAuthor, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -274,6 +316,9 @@ class CsvDataPackagePreview:
     book_item_tags: tuple[CsvDataPackageBookItemTag, ...] = ()
     reading_histories: tuple[CsvDataPackageReadingHistory, ...] = ()
     issues: tuple[CsvDataPackageIssue, ...] = ()
+    authors: tuple[CsvDataPackageAuthor, ...] = ()
+    author_aliases: tuple[CsvDataPackageAuthorAlias, ...] = ()
+    book_item_authors: tuple[CsvDataPackageBookItemAuthor, ...] = ()
 
     @property
     def errors(self) -> tuple[CsvDataPackageIssue, ...]:
@@ -308,6 +353,9 @@ class CsvDataPackageImportResult:
     book_item_tag_count: int
     reading_history_count: int
     backup_path: Path
+    author_count: int = 0
+    author_alias_count: int = 0
+    book_item_author_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,3 +367,6 @@ class CsvDataPackageExportResult:
     tag_count: int
     book_item_tag_count: int
     reading_history_count: int
+    author_count: int = 0
+    author_alias_count: int = 0
+    book_item_author_count: int = 0

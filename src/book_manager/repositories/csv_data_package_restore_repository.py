@@ -2,6 +2,8 @@
 
 import sqlite3
 
+from book_manager.validators.author_name_normalizer import author_search_key
+
 from book_manager.models.csv_data_package import CsvDataPackagePreview
 
 
@@ -13,6 +15,7 @@ class CsvDataPackageRestoreRepository:
         "tags",
         "book_item_tags",
         "reading_histories",
+        "authors", "author_aliases", "book_item_authors",
     )
 
     @classmethod
@@ -20,17 +23,9 @@ class CsvDataPackageRestoreRepository:
         cls,
         connection: sqlite3.Connection,
     ) -> bool:
-        """移行対象4テーブルがすべて空か返す。"""
-        row = connection.execute(
-            """
-            SELECT
-                (SELECT COUNT(*) FROM book_items)
-                + (SELECT COUNT(*) FROM tags)
-                + (SELECT COUNT(*) FROM book_item_tags)
-                + (SELECT COUNT(*) FROM reading_histories)
-                AS total_count
-            """
-        ).fetchone()
+        """移行対象7テーブルがすべて空か返す。"""
+        row = connection.execute('SELECT ' + ' + '.join(
+            f'(SELECT COUNT(*) FROM {table})' for table in cls.TABLE_NAMES)).fetchone()
         if row is None:
             raise sqlite3.DatabaseError(
                 "移行対象テーブルの件数を取得できませんでした。"
@@ -42,7 +37,7 @@ class CsvDataPackageRestoreRepository:
         connection: sqlite3.Connection,
         preview: CsvDataPackagePreview,
     ) -> None:
-        """検査済みデータを新しい主キーで4テーブルへ登録する。"""
+        """検査済みデータを新しい主キーで7テーブルへ登録する。"""
         if not preview.can_import:
             raise ValueError(
                 "事前検査に成功していないデータは"
@@ -67,6 +62,20 @@ class CsvDataPackageRestoreRepository:
             preview,
             book_ids=book_ids,
         )
+
+        author_ids = {}
+        for author in preview.authors:
+            cursor = connection.execute(
+                'INSERT INTO authors(name,name_key,disambiguation_note,created_at,updated_at) VALUES (?,?,?,?,?)',
+                (author.name, author_search_key(author.name), author.disambiguation_note, author.created_at, author.updated_at))
+            author_ids[author.author_key] = cursor.lastrowid
+        for alias in preview.author_aliases:
+            connection.execute('INSERT INTO author_aliases(author_id,name,name_key) VALUES (?,?,?)',
+                               (self._resolve_id(author_ids, alias.author_key, '別名の著者'), alias.name, author_search_key(alias.name)))
+        for relation in preview.book_item_authors:
+            connection.execute('INSERT INTO book_item_authors(book_item_id,author_id,position) VALUES (?,?,?)',
+                               (self._resolve_id(book_ids, relation.book_key, '著者関連の書籍'),
+                                self._resolve_id(author_ids, relation.author_key, '書籍関連の著者'), relation.position))
 
     @staticmethod
     def _insert_books(

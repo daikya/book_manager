@@ -1,19 +1,8 @@
 """著者の表記違いを検索する。ID統合・DB更新・名前の自動分割は行わない。"""
 from collections.abc import Iterable
-import unicodedata
 
 from book_manager.models.author import Author, AuthorCandidate
-
-
-def author_search_key(value: str) -> str:
-    """NFKC・大文字小文字・空白を検索時だけ吸収する。
-
-    中点・カンマ・ハイフン・生年等は除去しない。この値で人物を確定しない。
-    """
-    if not isinstance(value, str):
-        raise TypeError('著者の検索語は文字列で指定してください。')
-    normalized = unicodedata.normalize('NFKC', value).casefold()
-    return ''.join(character for character in normalized if not character.isspace())
+from book_manager.validators.author_name_normalizer import author_search_key
 
 
 def find_author_candidates(authors: Iterable[Author], query: str) -> list[AuthorCandidate]:

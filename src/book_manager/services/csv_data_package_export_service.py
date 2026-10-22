@@ -28,7 +28,9 @@ from book_manager.models.csv_data_package import (
     PACKAGE_FORMAT_VERSION,
     READING_HISTORIES_FILE_NAME,
     READING_HISTORY_HEADERS,
-    REQUIRED_FILE_NAMES,
+    CURRENT_REQUIRED_FILE_NAMES as REQUIRED_FILE_NAMES,
+    AUTHORS_FILE_NAME, AUTHOR_ALIASES_FILE_NAME, BOOK_ITEM_AUTHORS_FILE_NAME,
+    AUTHOR_HEADERS, AUTHOR_ALIAS_HEADERS, BOOK_ITEM_AUTHOR_HEADERS, AUTHOR_MANIFEST_COUNT_KEYS,
     TAG_HEADERS,
     TAGS_FILE_NAME,
     CsvDataPackageBookItem,
@@ -43,7 +45,7 @@ from book_manager.repositories.csv_data_package_repository import (
 
 
 class CsvDataPackageExportService:
-    """完全データを5つのCSVを含むZIPへ出力する。"""
+    """完全データを8つのCSVを含むZIPへ出力する。"""
 
     FILE_NAME_DATETIME_FORMAT = "%Y%m%d_%H%M%S"
     EXPORTED_AT_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -124,6 +126,8 @@ class CsvDataPackageExportService:
             tag_count=len(snapshot.tags),
             book_item_tag_count=len(snapshot.book_item_tags),
             reading_history_count=len(snapshot.reading_histories),
+            author_count=len(snapshot.authors), author_alias_count=len(snapshot.author_aliases),
+            book_item_author_count=len(snapshot.book_item_authors),
         )
 
     def _create_manifest(
@@ -141,6 +145,8 @@ class CsvDataPackageExportService:
             tag_count=len(snapshot.tags),
             book_item_tag_count=len(snapshot.book_item_tags),
             reading_history_count=len(snapshot.reading_histories),
+            author_count=len(snapshot.authors), author_alias_count=len(snapshot.author_aliases),
+            book_item_author_count=len(snapshot.book_item_authors),
         )
 
     def _write_csv_files(
@@ -150,7 +156,7 @@ class CsvDataPackageExportService:
         manifest: CsvDataPackageManifest,
         snapshot: CsvDataPackageSnapshot,
     ) -> None:
-        """一時ディレクトリへ必須5ファイルを書き込む。"""
+        """一時ディレクトリへ必須8ファイルを書き込む。"""
         self._write_csv(
             directory / MANIFEST_FILE_NAME,
             MANIFEST_HEADERS,
@@ -194,6 +200,13 @@ class CsvDataPackageExportService:
             ),
         )
 
+        self._write_csv(directory / AUTHORS_FILE_NAME, AUTHOR_HEADERS,
+                        ((a.author_key, a.name, a.disambiguation_note or '', a.created_at, a.updated_at) for a in snapshot.authors))
+        self._write_csv(directory / AUTHOR_ALIASES_FILE_NAME, AUTHOR_ALIAS_HEADERS,
+                        ((a.author_key, a.name) for a in snapshot.author_aliases))
+        self._write_csv(directory / BOOK_ITEM_AUTHORS_FILE_NAME, BOOK_ITEM_AUTHOR_HEADERS,
+                        ((a.book_key, a.author_key, str(a.position)) for a in snapshot.book_item_authors))
+
     @staticmethod
     def _write_csv(
         path: Path,
@@ -232,10 +245,9 @@ class CsvDataPackageExportService:
                 manifest.reading_history_count
             ),
         }
-        return tuple(
-            (key, values[key])
-            for key in MANIFEST_REQUIRED_KEYS
-        )
+        values.update({key: str(getattr(manifest, key)) for key in AUTHOR_MANIFEST_COUNT_KEYS})
+        keys = MANIFEST_REQUIRED_KEYS + (AUTHOR_MANIFEST_COUNT_KEYS if manifest.format_version >= 3 else ())
+        return tuple((key, values[key]) for key in keys)
 
     @classmethod
     def _book_item_row(
@@ -284,7 +296,7 @@ class CsvDataPackageExportService:
         directory: Path,
         archive_path: Path,
     ) -> None:
-        """必須5ファイルだけをZIP直下へ格納する。"""
+        """必須8ファイルだけをZIP直下へ格納する。"""
         with zipfile.ZipFile(
             archive_path,
             "w",
@@ -300,6 +312,9 @@ class CsvDataPackageExportService:
     def _validate_archive(archive_path: Path) -> None:
         """作成したZIPの構成とCSVヘッダーを自己検査する。"""
         expected_headers = {
+            AUTHORS_FILE_NAME: AUTHOR_HEADERS,
+            AUTHOR_ALIASES_FILE_NAME: AUTHOR_ALIAS_HEADERS,
+            BOOK_ITEM_AUTHORS_FILE_NAME: BOOK_ITEM_AUTHOR_HEADERS,
             MANIFEST_FILE_NAME: MANIFEST_HEADERS,
             BOOK_ITEMS_FILE_NAME: BOOK_ITEM_HEADERS,
             TAGS_FILE_NAME: TAG_HEADERS,
