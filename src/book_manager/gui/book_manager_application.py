@@ -981,6 +981,22 @@ class BookManagerApplication:
             pady=(8, 0),
         )
 
+        self._search_managed_author_var = tk.StringVar(search_frame, "すべて")
+        self._search_managed_author_options = {}
+        ttk.Label(search_frame, text="管理著者").grid(
+            row=2, column=4, sticky="w", pady=(8, 0), padx=(0, 6),
+        )
+        self._search_managed_author_combobox = ttk.Combobox(
+            search_frame, textvariable=self._search_managed_author_var,
+            state="readonly" if self._author_service is not None else "disabled",
+            width=28, postcommand=self._refresh_search_managed_authors,
+        )
+        self._search_managed_author_combobox.grid(
+            row=2, column=5, columnspan=5, sticky="ew", pady=(8, 0),
+        )
+        self._search_managed_author_combobox.bind("<<ComboboxSelected>>", self._on_search)
+        self._refresh_search_managed_authors()
+
         sort_frame = ttk.Frame(
             search_frame,
         )
@@ -2023,15 +2039,18 @@ class BookManagerApplication:
                 self._get_sort_settings()
             )
 
-            books = self._service.get_sorted_books(
-                sort_by=sort_by,
-                descending=descending,
-            )
-
-            self._display_books(
-                books,
-                status_prefix="全",
-            )
+            if self._search_managed_author_id() is not None:
+                books = self._service.sort_books(
+                    self._get_filtered_books(), sort_by=sort_by,
+                    descending=descending,
+                )
+                prefix = "検索結果"
+            else:
+                books = self._service.get_sorted_books(
+                    sort_by=sort_by, descending=descending,
+                )
+                prefix = "全"
+            self._display_books(books, status_prefix=prefix)
 
         except Exception:
             traceback.print_exc()
@@ -2711,6 +2730,8 @@ class BookManagerApplication:
             rating_filter=rating_filter,
             tag_name=tag_name,
             untagged_only=untagged_only,
+            **({"managed_author_id": self._search_managed_author_id()}
+               if self._search_managed_author_id() is not None else {}),
         )
 
     def _has_search_conditions(
@@ -2741,7 +2762,35 @@ class BookManagerApplication:
         return (
             has_text_condition
             or has_filter_condition
+            or self._search_managed_author_id() is not None
         )
+
+    def _search_managed_author_id(self) -> int | None:
+        variable = getattr(self, "_search_managed_author_var", None)
+        if variable is None:
+            return None
+        return self._search_managed_author_options.get(variable.get())
+
+    def _refresh_search_managed_authors(self) -> None:
+        """表示名を更新しても選択中の人物IDを維持する。"""
+        selected_id = self._search_managed_author_id()
+        options = {}
+        try:
+            service = getattr(self, "_author_service", None)
+            for author in service.list_authors() if service is not None else ():
+                note = " ".join((author.disambiguation_note or "").split())
+                label = f"{author.name} [ID:{author.id}]" + (f" — {note}" if note else "")
+                options[label] = author.id
+            selected = next((label for label, ident in options.items()
+                             if ident == selected_id), "すべて")
+            if selected_id is not None and selected == "すべて":
+                selected = f"削除された著者 [ID:{selected_id}]"
+                options[selected] = selected_id
+            self._search_managed_author_options = options
+            self._search_managed_author_combobox.configure(values=("すべて", *options))
+            self._search_managed_author_var.set(selected)
+        except Exception as error:
+            messagebox.showerror("管理著者の読込エラー", str(error), parent=self._root)
 
     def _refresh_tag_options(self) -> None:
         """検索用タグ選択肢を最新状態へ更新する。"""
@@ -5142,6 +5191,10 @@ class BookManagerApplication:
         self._search_tag_var.set(
             self.SEARCH_TAG_ALL
         )
+
+        variable = getattr(self, "_search_managed_author_var", None)
+        if variable is not None:
+            variable.set("すべて")
 
         self._load_all_books()
 

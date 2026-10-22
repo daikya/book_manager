@@ -418,6 +418,7 @@ class BookRepository:
         rating_filter: str | int | None = None,
         tag_name: str | None = None,
         untagged_only: bool = False,
+        managed_author_id: int | None = None,
     ) -> list[BookItem]:
         """複数条件によるAND検索を行う。"""
         if tag_name is not None and untagged_only:
@@ -531,6 +532,15 @@ class BookRepository:
                 )
                 """
             )
+
+        if managed_author_id is not None:
+            if type(managed_author_id) is not int or managed_author_id <= 0:
+                raise ValueError("管理著者IDは正の整数で指定してください。")
+            conditions.append(
+                "EXISTS (SELECT 1 FROM book_item_authors AS bia "
+                "WHERE bia.book_item_id = book_items.id AND bia.author_id = ?)"
+            )
+            parameters.append(managed_author_id)
 
         if not conditions:
             return self.get_all()

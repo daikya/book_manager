@@ -547,8 +547,13 @@ class BookService:
         rating_filter: str | int | None = None,
         tag_name: str | None = None,
         untagged_only: bool = False,
+        managed_author_id: int | None = None,
     ) -> list[BookItem]:
         """複数条件によるAND検索を行う。"""
+        if managed_author_id is not None:
+            if type(managed_author_id) is not int or managed_author_id <= 0:
+                raise ValueError("管理著者IDは正の整数で指定してください。")
+
         normalized_title = self._normalize_optional_text(
             title,
         )
@@ -641,6 +646,7 @@ class BookService:
                     favorite_filter,
                     rating_filter,
                     normalized_tag_name,
+                    managed_author_id,
                 )
             )
         ):
@@ -657,6 +663,8 @@ class BookService:
             rating_filter=rating_filter,
             tag_name=normalized_tag_name,
             untagged_only=untagged_only,
+            **({"managed_author_id": managed_author_id}
+               if managed_author_id is not None else {}),
         )
 
     def update_book(
