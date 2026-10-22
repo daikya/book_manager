@@ -97,7 +97,7 @@ class AuthorManagementDialog:
                                       ('note', '識別メモ', 260), ('count', '書籍数', 65)))
         self._tree.bind('<Double-1>', lambda e:self._edit())
         buttons = ttk.Frame(body);buttons.pack(fill='x', pady=10)
-        for label, command in [('新規登録', self._new), ('編集', self._edit), ('削除', self._delete), ('関連書籍を表示', self._show_books)]:
+        for label, command in [('新規登録', self._new), ('編集', self._edit), ('削除', self._delete), ('関連書籍を表示', self._show_books), ('重複著者を統合', self._merge)]:
             ttk.Button(buttons, text=label, command=command).pack(side='left', padx=(0, 6))
         ttk.Button(buttons, text='閉じる', command=self.window.destroy).pack(side='right')
         ttk.Label(body, text='著者の登録・編集は保存すると確定します。同じ名前の別人はID・識別メモで区別してください。', wraplength=880).pack(anchor='w')
@@ -147,6 +147,23 @@ class AuthorManagementDialog:
             if messagebox.askyesno('著者削除', f'ID {author.id}：{author.name}\nこの著者と別名を削除しますか？', parent=self.window):
                 self._service.delete(author.id);self._refresh()
         except Exception as error:show_error(self.window, error)
+
+    def _merge(self):
+        from book_manager.gui.author_merge_dialog import AuthorMergeDialog
+        author = self._selected()
+        if author is None:
+            return
+        try:
+            result = AuthorMergeDialog(self.window, self._service, source=author,
+                window_state_store=self._base_store).show()
+            self.window.grab_set()
+            if result:
+                self._query.set('')
+                self._refresh()
+                self._tree.selection_set(str(result.id))
+                self._tree.see(str(result.id))
+        except Exception as error:
+            show_error(self.window, error)
 
     def _show_books(self):
         author = self._selected()
