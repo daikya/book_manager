@@ -169,7 +169,7 @@ class AuthorManagementDialog:
 
 
 class AuthorSelectionDialog:
-    def __init__(self, parent, service, *, selected_ids=(), query='', get_book, window_state_store=None):
+    def __init__(self, parent, service, *, selected_ids=(), query='', get_book, window_state_store=None, apply_help=None):
         self._service = service;self._get_book = get_book;self._base_store = window_state_store
         self._selected_ids = list(selected_ids);self.result = None
         self.window = tk.Toplevel(parent);self.window.transient(parent);self.window.title('管理著者の選択')
@@ -194,7 +194,7 @@ class AuthorSelectionDialog:
         for label, command in [('上へ',lambda:self._move(-1)),('下へ',lambda:self._move(1)),('選択から外す',self._remove)]:
             ttk.Button(order, text=label, command=command).pack(side='left', padx=(0, 4))
         self._candidates.bind('<Double-1>', lambda e:self._add())
-        ttk.Label(body, text='「選択を反映」は入力フォームへ反映します。関連付けの保存は書籍の「登録」「更新」で確定します。\n著者管理で保存した著者情報は、この画面をキャンセルしても保持されます。', wraplength=930).pack(anchor='w', pady=8)
+        ttk.Label(body, text=apply_help or '「選択を反映」は入力フォームへ反映します。関連付けの保存は書籍の「登録」「更新」で確定します。\n著者管理で保存した著者情報は、この画面をキャンセルしても保持されます。', wraplength=930).pack(anchor='w', pady=8)
         buttons = ttk.Frame(body);buttons.pack(fill='x')
         ttk.Button(buttons, text='キャンセル', command=self.window.destroy).pack(side='right')
         ttk.Button(buttons, text='選択を反映', command=self._apply).pack(side='right', padx=8)

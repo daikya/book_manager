@@ -108,3 +108,19 @@ class AuthorRepository:
     def usage_counts(self) -> dict[int, int]:
         return {row[0]: row[1] for row in self._read(
             'SELECT author_id,COUNT(*) FROM book_item_authors GROUP BY author_id')}
+
+    def unlinked_books(self):
+        return [dict(row) for row in self._read(
+            'SELECT id,title,author FROM book_items AS b '
+            'WHERE NOT EXISTS (SELECT 1 FROM book_item_authors AS a '
+            'WHERE a.book_item_id=b.id) ORDER BY b.id')]
+
+    def link_unassigned_book(self, book_id, author_ids, *, expected_title, expected_author):
+        """未関連・表示値を同一トランザクションで再確認する。"""
+        with self.transaction() as conn:
+            row = conn.execute('SELECT title,author FROM book_items WHERE id=?', (book_id,)).fetchone()
+            if row is None or row['title'] != expected_title or row['author'] != expected_author:
+                raise ValueError('書籍が変更または削除されました。一覧を更新して確認してください。')
+            if self.book_author_ids(book_id, connection=conn):
+                raise ValueError('既に管理著者が関連付けられています。一覧を更新してください。')
+            self.set_book_authors(book_id, author_ids, connection=conn)

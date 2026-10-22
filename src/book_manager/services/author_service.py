@@ -74,3 +74,16 @@ class AuthorService:
 
     def usage_counts(self) -> dict[int, int]:
         return self._repository.usage_counts()
+
+    def unlinked_books(self):
+        return self._repository.unlinked_books()
+
+    def link_unassigned_book(self, book_id, author_ids, *, expected_title, expected_author):
+        book_id = self._id(book_id)
+        if not isinstance(author_ids, (tuple, list)):
+            raise TypeError('著者IDはタプルまたはリストで指定してください。')
+        ids = tuple(self._id(value) for value in author_ids)
+        if not ids or len(ids) != len(set(ids)):
+            raise ValueError('管理著者を重複なく1人以上選択してください。')
+        self._repository.link_unassigned_book(book_id, ids,
+            expected_title=expected_title, expected_author=expected_author)

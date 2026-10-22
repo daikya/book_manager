@@ -17,6 +17,7 @@ from book_manager.gui.metadata_comparison_dialog import MetadataComparisonDialog
 from book_manager.gui.book_candidate_search_dialog import (
     BookCandidateSearchDialog, CandidateSearchTask,
 )
+from book_manager.gui.author_link_review_dialog import AuthorLinkReviewDialog
 from book_manager.gui.author_dialogs import AuthorSelectionDialog
 from book_manager.services.author_service import AuthorService
 from book_manager.gui.excel_column_mapping_dialog import ExcelColumnMappingDialog
@@ -986,14 +987,18 @@ class BookManagerApplication:
         ttk.Label(search_frame, text="管理著者").grid(
             row=2, column=4, sticky="w", pady=(8, 0), padx=(0, 6),
         )
+        author_filter_frame = ttk.Frame(search_frame)
+        author_filter_frame.grid(row=2, column=5, columnspan=5, sticky="ew", pady=(8, 0))
         self._search_managed_author_combobox = ttk.Combobox(
-            search_frame, textvariable=self._search_managed_author_var,
+            author_filter_frame, textvariable=self._search_managed_author_var,
             state="readonly" if self._author_service is not None else "disabled",
             width=28, postcommand=self._refresh_search_managed_authors,
         )
-        self._search_managed_author_combobox.grid(
-            row=2, column=5, columnspan=5, sticky="ew", pady=(8, 0),
-        )
+        self._search_managed_author_combobox.pack(side="left", fill="x", expand=True)
+        ttk.Button(author_filter_frame, text="未関連書籍の整理",
+            command=self._on_review_author_links,
+            state="normal" if self._author_service is not None else "disabled",
+        ).pack(side="left", padx=(6, 0))
         self._search_managed_author_combobox.bind("<<ComboboxSelected>>", self._on_search)
         self._refresh_search_managed_authors()
 
@@ -2764,6 +2769,35 @@ class BookManagerApplication:
             or has_filter_condition
             or self._search_managed_author_id() is not None
         )
+
+    def _on_review_author_links(self) -> None:
+        if self._author_service is None:
+            return
+        has_input = any(
+            getattr(self, name).get().strip()
+            for name in ("_title_var", "_author_var", "_publisher_var", "_isbn_var",
+                         "_reference_isbn_var", "_magazine_code_var", "_tags_var",
+                         "_publication_format_var", "_completion_month_var")
+        )
+        has_input = has_input or any(
+            widget.get("1.0", "end-1c").strip()
+            for widget in (self._description_text, self._notes_text)
+        ) or bool(self._managed_author_ids) or self._is_favorite_var.get() or (
+            self._reading_status_var.get() != "未設定"
+            or self._rating_var.get() != "未評価"
+        )
+        if self._selected_book_id is not None or has_input:
+            if not messagebox.askyesno("著者整理", "入力フォームをクリアして著者整理を開きます。未保存の入力は失われます。続けますか？", parent=self._root):
+                return
+        self._clear_form()
+        try:
+            AuthorLinkReviewDialog(self._root, self._author_service,
+                get_book=self._service.get_book,
+                window_state_store=getattr(self, "_window_state_store", None)).show()
+            self._refresh_search_managed_authors()
+            self._load_all_books()
+        except Exception as error:
+            messagebox.showerror("著者整理エラー", str(error), parent=self._root)
 
     def _search_managed_author_id(self) -> int | None:
         variable = getattr(self, "_search_managed_author_var", None)
