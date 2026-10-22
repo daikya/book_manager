@@ -37,7 +37,7 @@ def show_error(window, error):
 
 
 class AuthorEditDialog:
-    def __init__(self, parent, service, *, author=None, window_state_store=None):
+    def __init__(self, parent, service, *, author=None, window_state_store=None, initial_name=""):
         self._service = service;self._author = author;self.result = None
         self.window = tk.Toplevel(parent);self.window.transient(parent)
         self.window.title('著者の編集' if author else '著者の新規登録')
@@ -45,7 +45,7 @@ class AuthorEditDialog:
         body = ttk.Frame(self.window, padding=12);body.pack(fill='both', expand=True)
         ttk.Label(body, text='同姓同名でも別の著者として登録できます。識別メモには分野・所属・生年などを記入できます。', wraplength=610).pack(anchor='w')
         ttk.Label(body, text='表示名（必須・200文字以内）').pack(anchor='w', pady=(10, 0))
-        self._name = tk.StringVar(self.window, author.name if author else '')
+        self._name = tk.StringVar(self.window, author.name if author else initial_name)
         entry = ttk.Entry(body, textvariable=self._name);entry.pack(fill='x')
         ttk.Label(body, text='別名（1行に1つ。カンマでは分割しません）').pack(anchor='w', pady=(10, 0))
         self._aliases = tk.Text(body, height=5, wrap='word');self._aliases.pack(fill='both', expand=True)
@@ -82,8 +82,9 @@ class AuthorEditDialog:
 
 
 class AuthorManagementDialog:
-    def __init__(self, parent, service, *, get_book, window_state_store=None):
+    def __init__(self, parent, service, *, get_book, window_state_store=None, initial_name=""):
         self._service = service;self._get_book = get_book;self._base_store = window_state_store
+        self._initial_name = initial_name
         self.window = tk.Toplevel(parent);self.window.transient(parent);self.window.title('著者管理')
         self.window.geometry('960x620');self.window.minsize(740, 460)
         body = ttk.Frame(self.window, padding=12);body.pack(fill='both', expand=True)
@@ -133,7 +134,8 @@ class AuthorManagementDialog:
         if author:self._open_editor(author)
 
     def _open_editor(self, author):
-        result = AuthorEditDialog(self.window, self._service, author=author, window_state_store=self._base_store).show()
+        result = AuthorEditDialog(self.window, self._service, author=author, window_state_store=self._base_store,
+            initial_name=getattr(self, "_initial_name", "") if author is None else "").show()
         self.window.grab_set()
         if result:
             self._query.set('');self._refresh();self._tree.selection_set(str(result.id));self._tree.see(str(result.id))
@@ -188,6 +190,7 @@ class AuthorManagementDialog:
 class AuthorSelectionDialog:
     def __init__(self, parent, service, *, selected_ids=(), query='', get_book, window_state_store=None, apply_help=None):
         self._service = service;self._get_book = get_book;self._base_store = window_state_store
+        self._initial_name = query
         self._selected_ids = list(selected_ids);self.result = None
         self.window = tk.Toplevel(parent);self.window.transient(parent);self.window.title('管理著者の選択')
         self.window.geometry('1000x650');self.window.minsize(780, 480)
@@ -260,7 +263,8 @@ class AuthorSelectionDialog:
         self._render_selected();self._selected.selection_set(str(author_id))
 
     def _manage(self):
-        AuthorManagementDialog(self.window, self._service, get_book=self._get_book, window_state_store=self._base_store).show()
+        AuthorManagementDialog(self.window, self._service, get_book=self._get_book,
+            window_state_store=self._base_store, initial_name=self._initial_name).show()
         self.window.grab_set();self._refresh()
 
     def _apply(self):

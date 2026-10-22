@@ -1812,17 +1812,15 @@ class BookManagerApplication:
             pady=4,
         )
 
+        # 画像の要求サイズで表示枠が広がらないよう、独立した領域を設ける。
+        self._cover_viewport = ttk.Frame(cover_frame, width=170, height=240)
+        self._cover_viewport.grid(row=0, column=0, sticky="nsew")
+        self._cover_viewport.grid_propagate(False)
         self._cover_image_label = ttk.Label(
-            cover_frame,
-            text="画像なし",
-            anchor="center",
-            width=22,
+            self._cover_viewport, text="画像なし", anchor="center",
         )
-        self._cover_image_label.grid(
-            row=0,
-            column=0,
-            sticky="nsew",
-        )
+        self._cover_image_label.place(x=0, y=0, relwidth=1, relheight=1)
+        self._cover_viewport.bind("<Configure>", self._on_cover_viewport_resize)
 
         cover_frame.rowconfigure(
             0,
@@ -2354,27 +2352,43 @@ class BookManagerApplication:
         self,
         image_path: str,
     ) -> None:
-        """表紙画像ファイルを読み込んでGUIへ表示する。"""
+        """元画像を保持し、表示領域に収まる画像を作成する。"""
         with Image.open(image_path) as image:
-            display_image = image.copy()
+            source = image.copy()
+        self._render_cover_image(source)
 
+    def _render_cover_image(self, source=None) -> None:
+        if source is None:
+            source = getattr(self, "_cover_source_image", None)
+        if source is None:
+            return
+        viewport = getattr(self, "_cover_viewport", None)
+        width, height = (170, 240) if viewport is None else (
+            viewport.winfo_width(), viewport.winfo_height(),
+        )
+        # 初回レイアウト前は仮サイズで描画し、Configureで実寸へ合わせる。
+        if width <= 1 or height <= 1:
+            width, height = 170, 240
+        display_image = source.copy()
         display_image.thumbnail(
-            (170, 240),
+            (max(1, width - 4), max(1, height - 4)),
             Image.Resampling.LANCZOS,
         )
+        photo = ImageTk.PhotoImage(display_image)
+        self._cover_image_label.configure(image=photo, text="")
+        self._cover_photo = photo
+        self._cover_source_image = source
 
-        self._cover_photo = ImageTk.PhotoImage(
-            display_image,
-        )
-
-        self._cover_image_label.configure(
-            image=self._cover_photo,
-            text="",
-        )
+    def _on_cover_viewport_resize(self, _event=None) -> None:
+        try:
+            self._render_cover_image()
+        except Exception:
+            logger.exception("表紙画像の表示サイズを更新できませんでした。")
 
     def _clear_cover_image(self) -> None:
         """表紙画像表示を初期状態へ戻す。"""
         self._cover_photo = None
+        self._cover_source_image = None
 
         self._cover_image_label.configure(
             image="",
