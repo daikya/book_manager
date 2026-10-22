@@ -104,3 +104,7 @@ class AuthorRepository:
             if self.linked_book_ids(author_id, connection=conn):
                 raise ValueError('書籍に関連付けられた著者は削除できません。')
             return conn.execute('DELETE FROM authors WHERE id=?', (author_id,)).rowcount == 1
+
+    def usage_counts(self) -> dict[int, int]:
+        return {row[0]: row[1] for row in self._read(
+            'SELECT author_id,COUNT(*) FROM book_item_authors GROUP BY author_id')}

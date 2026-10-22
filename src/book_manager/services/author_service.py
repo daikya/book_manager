@@ -71,3 +71,6 @@ class AuthorService:
 
     def delete(self, author_id):
         return self._repository.delete(self._id(author_id))
+
+    def usage_counts(self) -> dict[int, int]:
+        return self._repository.usage_counts()

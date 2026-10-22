@@ -75,6 +75,9 @@ from book_manager.services.backup_service import (
 from book_manager.services.application_settings_service import (
     ApplicationSettingsService,
 )
+from book_manager.repositories.author_repository import AuthorRepository
+from book_manager.services.author_service import AuthorService
+
 from book_manager.services.book_service import (
     BookService,
 )
@@ -254,6 +257,7 @@ def _run_application(
             metadata_service=metadata_service,
             cover_image_service=cover_image_service,
         )
+        author_service = AuthorService(AuthorRepository(database_path))
         csv_export_service = CsvExportService()
         csv_import_service = CsvImportService(
             book_service=book_service,
@@ -349,6 +353,7 @@ def _run_application(
             reading_history_service,
             application_settings_service,
             google_books_client.set_api_key,
+            author_service=author_service,
             excel_workbook_reader_service=excel_workbook_reader_service,
             excel_import_preflight_service=excel_import_preflight_service,
             excel_import_service=excel_import_service,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+from contextlib import ExitStack
 import sys
 from pathlib import Path
 from unittest.mock import Mock, call, patch
@@ -506,6 +507,8 @@ def test_run_application_injects_new_paths(
     root = Mock()
     session = Mock()
     repository = Mock()
+    author_repository_class = Mock()
+    author_service_class = Mock()
     reading_history_repository = Mock()
     backup_service = Mock()
     cover_service = Mock()
@@ -543,54 +546,56 @@ def test_run_application_injects_new_paths(
         return_value=package_import_service,
     )
 
-    with (
-        patch.object(
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(main_module, "AuthorRepository", author_repository_class))
+        stack.enter_context(patch.object(main_module, "AuthorService", author_service_class))
+        initialize_database = stack.enter_context(patch.object(
             main_module,
             "initialize_database",
-        ) as initialize_database,
-        patch.object(
+        ))
+        backup_class = stack.enter_context(patch.object(
             main_module,
             "BackupService",
             return_value=backup_service,
-        ) as backup_class,
-        patch.object(
+        ))
+        stack.enter_context(patch.object(
             main_module,
             "try_create_backup",
             return_value=None,
-        ),
-        patch.object(
+        ))
+        repository_class = stack.enter_context(patch.object(
             main_module,
             "BookRepository",
             return_value=repository,
-        ) as repository_class,
-        patch.object(
+        ))
+        reading_repository_class = stack.enter_context(patch.object(
             main_module,
             "ReadingHistoryRepository",
             return_value=reading_history_repository,
-        ) as reading_repository_class,
-        patch.object(
+        ))
+        stack.enter_context(patch.object(
             main_module.requests,
             "Session",
             return_value=session,
-        ),
-        patch.object(
+        ))
+        stack.enter_context(patch.object(
             main_module,
             "GoogleBooksClient",
             return_value=google_books_client,
-        ),
-        patch.object(main_module, "OpenBdClient"),
-        patch.object(main_module, "BookMetadataService"),
-        patch.object(
+        ))
+        stack.enter_context(patch.object(main_module, "OpenBdClient"))
+        stack.enter_context(patch.object(main_module, "BookMetadataService"))
+        cover_class = stack.enter_context(patch.object(
             main_module,
             "CoverImageService",
             return_value=cover_service,
-        ) as cover_class,
-        patch.object(
+        ))
+        stack.enter_context(patch.object(
             main_module,
             "BookService",
             return_value=book_service,
-        ),
-        patch.multiple(
+        ))
+        stack.enter_context(patch.multiple(
             main_module,
             ExcelWorkbookReaderService=excel_reader_class,
             ExcelImportPreflightService=excel_preflight_class,
@@ -614,38 +619,37 @@ def test_run_application_injects_new_paths(
             CsvDataPackageImportService=(
                 package_import_service_class
             ),
-        ),
-        patch.object(main_module, "ReadingHistoryService"),
-        patch.object(
+        ))
+        stack.enter_context(patch.object(main_module, "ReadingHistoryService"))
+        stack.enter_context(patch.object(
             main_module,
             "WindowsUserEnvironmentStore",
             return_value=user_environment_store,
-        ),
-        patch.object(
+        ))
+        stack.enter_context(patch.object(
             main_module,
             "get_application_version",
             return_value="2.1.0",
-        ),
-        patch.object(
+        ))
+        settings_service_class = stack.enter_context(patch.object(
             main_module,
             "ApplicationSettingsService",
             return_value=application_settings_service,
-        ) as settings_service_class,
-        patch.object(
+        ))
+        window_state_store_class = stack.enter_context(patch.object(
             main_module,
             "WindowStateStore",
             return_value=window_state_store,
-        ) as window_state_store_class,
-        patch.object(
+        ))
+        stack.enter_context(patch.object(
             main_module.tk,
             "Tk",
             return_value=root,
-        ),
-        patch.object(
+        ))
+        application_class = stack.enter_context(patch.object(
             main_module,
             "BookManagerApplication",
-        ) as application_class,
-    ):
+        ))
         main_module._run_application(paths, None)
 
     initialize_database.assert_called_once_with(
@@ -711,7 +715,10 @@ def test_run_application_injects_new_paths(
         preflight_service=excel_preflight_class.return_value,
         repository=excel_repository_class.return_value,
     )
+    author_repository_class.assert_called_once_with(paths.database_path)
+    author_service_class.assert_called_once_with(author_repository_class.return_value)
     assert application_keyword_arguments == {
+        "author_service": author_service_class.return_value,
         "excel_workbook_reader_service": excel_reader_class.return_value,
         "excel_import_preflight_service": excel_preflight_class.return_value,
         "excel_import_service": excel_import_class.return_value,

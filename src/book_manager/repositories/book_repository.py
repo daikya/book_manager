@@ -7,6 +7,7 @@ from pathlib import Path
 from book_manager.database.connection import create_connection
 from book_manager.models.book_item import BookItem
 from book_manager.models.tag import Tag
+from book_manager.repositories.author_repository import AuthorRepository
 
 
 BOOK_ITEM_COLUMNS = """
@@ -64,9 +65,18 @@ class BookRepository:
         """データベースファイルのパスを保持する。"""
         self._database_path = Path(database_path)
 
-    def add(self, book_item: BookItem) -> BookItem:
+    def add(self, book_item: BookItem, *, author_ids: tuple[int, ...] | None = None) -> BookItem:
         """書籍情報を登録し、自動採番されたIDを持つモデルを返す。"""
-        return self.add_many((book_item,))[0]
+        if author_ids is None:
+            return self.add_many((book_item,))[0]
+        connection = create_connection(self._database_path)
+        try:
+            with connection:
+                added = self._add_with_connection(connection, book_item)
+                AuthorRepository(self._database_path).set_book_authors(added.id, author_ids, connection=connection)
+                return added
+        finally:
+            connection.close()
 
     def add_many(self, books: tuple[BookItem, ...]) -> tuple[BookItem, ...]:
         """全書籍とタグを登録し、途中の例外では全件を取り消す。"""
@@ -557,6 +567,7 @@ class BookRepository:
     def update(
         self,
         book_item: BookItem,
+        *, author_ids: tuple[int, ...] | None = None,
     ) -> bool:
         """既存の書籍情報を更新する。"""
         if book_item.id is None:
@@ -623,6 +634,8 @@ class BookRepository:
                     tag_names=book_item.tags,
                     timestamp=book_item.updated_at,
                 )
+                if author_ids is not None:
+                    AuthorRepository(self._database_path).set_book_authors(book_item.id, author_ids, connection=connection)
 
             return True
         finally:

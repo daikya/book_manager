@@ -17,6 +17,8 @@ from book_manager.gui.metadata_comparison_dialog import MetadataComparisonDialog
 from book_manager.gui.book_candidate_search_dialog import (
     BookCandidateSearchDialog, CandidateSearchTask,
 )
+from book_manager.gui.author_dialogs import AuthorSelectionDialog
+from book_manager.services.author_service import AuthorService
 from book_manager.gui.excel_column_mapping_dialog import ExcelColumnMappingDialog
 from book_manager.gui.excel_import_preview_dialog import ExcelImportPreviewDialog
 from book_manager.models.book_item import BookItem
@@ -290,6 +292,7 @@ class BookManagerApplication:
         excel_workbook_reader_service: ExcelWorkbookReaderService | None = None,
         excel_import_preflight_service: ExcelImportPreflightService | None = None,
         excel_import_service: ExcelImportService | None = None,
+        author_service: AuthorService | None = None,
     ) -> None:
         """GUIを初期化する。
 
@@ -341,6 +344,8 @@ class BookManagerApplication:
         self._list_view_state_save_suppressed = False
         self._last_normal_rectangle: WindowRectangle | None = None
         self._window_state_save_suppressed = False
+        self._author_service = author_service
+        self._managed_author_ids: tuple[int, ...] | None = ()
         self._selected_book_id: int | None = None
         self._cover_photo: tk.PhotoImage | None = None
         self._current_cover_image_url: str | None = None
@@ -1447,17 +1452,14 @@ class BookManagerApplication:
             pady=4,
         )
 
-        self._author_entry = ttk.Entry(
-            form_frame,
-            textvariable=self._author_var,
-        )
-        self._author_entry.grid(
-            row=1,
-            column=1,
-            sticky="ew",
-            padx=(0, 12),
-            pady=4,
-        )
+        author_frame = ttk.Frame(form_frame)
+        author_frame.grid(row=1, column=1, sticky="ew", padx=(0, 12), pady=4)
+        author_frame.columnconfigure(0, weight=1)
+        self._author_entry = ttk.Entry(author_frame, textvariable=self._author_var, width=15)
+        self._author_entry.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self._managed_author_button = ttk.Button(author_frame, text="著者選択(0)",
+            command=self._on_select_authors, state="normal" if self._author_service is not None else "disabled")
+        self._managed_author_button.grid(row=0, column=1)
 
         ttk.Label(
             form_frame,
@@ -2205,6 +2207,7 @@ class BookManagerApplication:
         )
 
         self._selected_book_id = book_item.id
+        self._load_managed_authors(book_item.id)
         self._edit_status_var.set(
             f"編集中：ID {book_item.id}",
         )
@@ -2459,6 +2462,8 @@ class BookManagerApplication:
         self._reference_isbn_var.set("")
         self._magazine_code_var.set("")
         self._author_var.set("")
+        self._managed_author_ids = ()
+        self._refresh_managed_author_caption()
         self._publisher_var.set("")
         self._publication_format_var.set("")
         self._completion_month_var.set("")
@@ -2754,6 +2759,51 @@ class BookManagerApplication:
 
         if current_value not in options:
             self._search_tag_var.set(self.SEARCH_TAG_ALL)
+
+    def _refresh_managed_author_caption(self) -> None:
+        button = getattr(self, "_managed_author_button", None)
+        if button is not None:
+            ids = getattr(self, "_managed_author_ids", None)
+            button.configure(text="著者選択(読込失敗)" if ids is None else f"著者選択({len(ids)})")
+
+    def _load_managed_authors(self, book_id: int) -> None:
+        service = getattr(self, "_author_service", None)
+        if service is None:
+            return
+        try:
+            self._managed_author_ids = tuple(author.id for author in service.get_book_authors(book_id))
+        except Exception as error:
+            self._managed_author_ids = None
+            logger.exception("管理著者を読み込めませんでした。")
+            messagebox.showerror("著者読込エラー", f"管理著者を読み込めませんでした。関連は変更せず保持します。\n{error}", parent=self._root)
+        self._refresh_managed_author_caption()
+
+    def _managed_author_save_arguments(self) -> dict:
+        if getattr(self, "_author_service", None) is None:
+            return {}
+        ids = getattr(self, "_managed_author_ids", None)
+        return {} if ids is None else {"author_ids": tuple(ids)}
+
+    def _on_select_authors(self) -> None:
+        service = getattr(self, "_author_service", None)
+        if service is None:
+            return
+        book_id = self._selected_book_id
+        try:
+            result = AuthorSelectionDialog(self._root, service,
+                selected_ids=getattr(self, "_managed_author_ids", ()) or (),
+                query=self._author_var.get(), get_book=self._service.get_book,
+                window_state_store=getattr(self, "_window_state_store", None)).show()
+            if result is None:
+                return
+            if book_id != self._selected_book_id:
+                messagebox.showwarning("著者選択", "編集中の書籍が変わったため、再度選択してください。", parent=self._root)
+                return
+            self._managed_author_ids = tuple(result)
+            self._refresh_managed_author_caption()
+        except Exception as error:
+            logger.exception("著者選択に失敗しました。")
+            messagebox.showerror("著者選択エラー", str(error), parent=self._root)
 
     def _on_select_tags(self) -> None:
         """登録済みタグからフォームへ設定するタグを選択する。"""
@@ -5261,6 +5311,7 @@ class BookManagerApplication:
                 rating=values["rating"],
                 tags=values["tags"],
                 notes=values["notes"],
+                **self._managed_author_save_arguments(),
             )
 
             if registered_book.id is None:
@@ -5346,6 +5397,7 @@ class BookManagerApplication:
 
             updated = self._service.update_book(
                 book_item,
+                **self._managed_author_save_arguments(),
             )
 
             if not updated:

@@ -53,7 +53,7 @@ def restore_dialog_window(window, parent, store: WindowStateStore | None,
         try:
             store.save(last_state)
         except (WindowStateStoreError, OSError):
-            logger.warning("Excel子画面の配置を保存できませんでした。", exc_info=True)
+            logger.warning("子画面の配置を保存できませんでした。", exc_info=True)
 
     capture()
     window.bind("<Configure>", capture, add="+")

@@ -80,9 +80,10 @@ class BookService:
         rating: int | None = None,
         notes: str | None = None,
         tags: tuple[str, ...] | list[str] = (),
+        author_ids: tuple[int, ...] | list[int] | None = None,
     ) -> BookItem:
         """入力値を検証し、書籍情報を登録する。"""
-        return self._repository.add(self.prepare_book(
+        prepared = self.prepare_book(
             title=title,
             isbn=isbn,
             reference_isbn=reference_isbn,
@@ -99,7 +100,10 @@ class BookService:
             rating=rating,
             notes=notes,
             tags=tags,
-        ))
+        )
+        if author_ids is None:
+            return self._repository.add(prepared)
+        return self._repository.add(prepared, author_ids=self._validate_author_ids(author_ids))
 
     def prepare_book(
         self,
@@ -658,6 +662,7 @@ class BookService:
     def update_book(
         self,
         book_item: BookItem,
+        *, author_ids: tuple[int, ...] | list[int] | None = None,
     ) -> bool:
         """既存の書籍情報を更新する。
 
@@ -774,9 +779,19 @@ class BookService:
             tags=normalized_tags,
         )
 
-        return self._repository.update(
-            normalized_book_item
-        )
+        if author_ids is None:
+            return self._repository.update(normalized_book_item)
+        return self._repository.update(normalized_book_item, author_ids=self._validate_author_ids(author_ids))
+
+    @staticmethod
+    def _validate_author_ids(author_ids) -> tuple[int, ...]:
+        if not isinstance(author_ids, (tuple, list)):
+            raise TypeError('管理著者IDはタプルまたはリストで指定してください。')
+        if any(type(value) is not int or value < 1 for value in author_ids):
+            raise ValueError('管理著者IDは1以上の整数で指定してください。')
+        if len(author_ids) != len(set(author_ids)):
+            raise ValueError('同じ管理著者を重複して指定できません。')
+        return tuple(author_ids)
 
     def delete_book(
         self,
