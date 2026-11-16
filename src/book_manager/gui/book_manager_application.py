@@ -1,6 +1,9 @@
 """書籍管理アプリケーションのメインGUI。"""
 
+
 from __future__ import annotations
+
+from book_manager.validators.magazine_code_validator import format_magazine_code
 
 import tkinter as tk
 import traceback
@@ -110,7 +113,7 @@ class BookManagerApplication:
     WINDOW_TITLE = "書籍管理"
     WINDOW_SIZE = "1350x800"
     MINIMUM_WIDTH = 1150
-    MINIMUM_HEIGHT = 650
+    MINIMUM_HEIGHT = 600
 
     SORT_TYPES = (
         "登録順",
@@ -527,7 +530,7 @@ class BookManagerApplication:
         """互換性のため従来どおり主画面中央へ配置する。"""
 
         window_width = 1350
-        window_height = 800
+        window_height = 700
 
         screen_width, screen_height = (
             self._get_available_screen_size()
@@ -560,7 +563,7 @@ class BookManagerApplication:
 
         if saved_state is None:
             width = min(1350, primary_area.width)
-            height = min(800, primary_area.height)
+            height = min(700, primary_area.height)
             candidate = WindowRectangle(
                 x=primary_area.right + 1,
                 y=primary_area.bottom + 1,
@@ -579,7 +582,7 @@ class BookManagerApplication:
             candidate,
             work_areas,
             default_width=1350,
-            default_height=800,
+            default_height=700,
             minimum_width=self.MINIMUM_WIDTH,
             minimum_height=self.MINIMUM_HEIGHT,
         )
@@ -647,7 +650,7 @@ class BookManagerApplication:
         """メインウィンドウ内のウィジェットを作成する。"""
         main_frame = ttk.Frame(
             self._root,
-            padding=10,
+            padding=6,
         )
         main_frame.grid(
             row=0,
@@ -659,7 +662,7 @@ class BookManagerApplication:
             0,
             weight=1,
         )
-        main_frame.rowconfigure(1, weight=1, minsize=160)
+        main_frame.rowconfigure(1, weight=1, minsize=100)
         main_frame.rowconfigure(2, weight=0)
 
         self._create_search_frame(
@@ -703,13 +706,13 @@ class BookManagerApplication:
         search_frame = ttk.LabelFrame(
             parent,
             text="検索",
-            padding=8,
+            padding=4,
         )
         search_frame.grid(
             row=0,
             column=0,
             sticky="ew",
-            pady=(0, 8),
+            pady=(0, 4),
         )
 
         for column in (
@@ -861,7 +864,7 @@ class BookManagerApplication:
             column=0,
             sticky="w",
             padx=(0, 6),
-            pady=(8, 0),
+            pady=(4, 0),
         )
 
         self._search_reading_status_combobox = ttk.Combobox(
@@ -876,7 +879,7 @@ class BookManagerApplication:
             column=1,
             sticky="w",
             padx=(0, 10),
-            pady=(8, 0),
+            pady=(4, 0),
         )
 
         ttk.Label(
@@ -887,7 +890,7 @@ class BookManagerApplication:
             column=2,
             sticky="w",
             padx=(0, 6),
-            pady=(8, 0),
+            pady=(4, 0),
         )
 
         self._search_favorite_combobox = ttk.Combobox(
@@ -902,7 +905,7 @@ class BookManagerApplication:
             column=3,
             sticky="w",
             padx=(0, 10),
-            pady=(8, 0),
+            pady=(4, 0),
         )
 
         ttk.Label(
@@ -913,7 +916,7 @@ class BookManagerApplication:
             column=4,
             sticky="w",
             padx=(0, 6),
-            pady=(8, 0),
+            pady=(4, 0),
         )
 
         self._search_rating_combobox = ttk.Combobox(
@@ -928,7 +931,7 @@ class BookManagerApplication:
             column=5,
             sticky="w",
             padx=(0, 10),
-            pady=(8, 0),
+            pady=(4, 0),
         )
 
         ttk.Label(
@@ -939,7 +942,7 @@ class BookManagerApplication:
             column=6,
             sticky="w",
             padx=(0, 6),
-            pady=(8, 0),
+            pady=(4, 0),
         )
 
         self._search_tag_combobox = ttk.Combobox(
@@ -957,7 +960,7 @@ class BookManagerApplication:
             column=7,
             sticky="w",
             padx=(0, 10),
-            pady=(8, 0),
+            pady=(4, 0),
         )
 
         self._search_button = ttk.Button(
@@ -969,7 +972,7 @@ class BookManagerApplication:
             row=1,
             column=8,
             padx=(0, 6),
-            pady=(8, 0),
+            pady=(4, 0),
         )
 
         self._clear_search_button = ttk.Button(
@@ -981,16 +984,16 @@ class BookManagerApplication:
             row=1,
             column=9,
             sticky="w",
-            pady=(8, 0),
+            pady=(4, 0),
         )
 
         self._search_managed_author_var = tk.StringVar(search_frame, "すべて")
         self._search_managed_author_options = {}
         ttk.Label(search_frame, text="管理著者").grid(
-            row=2, column=4, sticky="w", pady=(8, 0), padx=(0, 6),
+            row=2, column=4, sticky="w", pady=(4, 0), padx=(0, 6),
         )
         author_filter_frame = ttk.Frame(search_frame)
-        author_filter_frame.grid(row=2, column=5, columnspan=5, sticky="ew", pady=(8, 0))
+        author_filter_frame.grid(row=2, column=5, columnspan=5, sticky="ew", pady=(4, 0))
         self._search_managed_author_combobox = ttk.Combobox(
             author_filter_frame, textvariable=self._search_managed_author_var,
             state="readonly" if self._author_service is not None else "disabled",
@@ -1012,7 +1015,7 @@ class BookManagerApplication:
             column=0,
             columnspan=4,
             sticky="w",
-            pady=(8, 0),
+            pady=(4, 0),
         )
 
         ttk.Label(
@@ -1415,13 +1418,13 @@ class BookManagerApplication:
         form_frame = ttk.LabelFrame(
             parent,
             text="書籍情報",
-            padding=8,
+            padding=4,
         )
         form_frame.grid(
             row=2,
             column=0,
             sticky="nsew",
-            pady=(0, 8),
+            pady=(0, 4),
         )
 
         form_frame.columnconfigure(
@@ -1435,9 +1438,11 @@ class BookManagerApplication:
         form_frame.columnconfigure(
             4,
             weight=0,
-            minsize=190,
+            minsize=120,
         )
-        form_frame.rowconfigure(5, weight=0)
+        # 書影の高さを六行へ分配して行間が広がることを防ぐ。
+        for row in range(6):
+            form_frame.rowconfigure(row, weight=0)
 
         ttk.Label(
             form_frame,
@@ -1447,7 +1452,7 @@ class BookManagerApplication:
             column=0,
             sticky="w",
             padx=(0, 6),
-            pady=4,
+            pady=1,
         )
 
         self._title_entry = ttk.Entry(
@@ -1459,7 +1464,7 @@ class BookManagerApplication:
             column=1,
             columnspan=3,
             sticky="ew",
-            pady=4,
+            pady=1,
         )
 
         ttk.Label(
@@ -1470,11 +1475,11 @@ class BookManagerApplication:
             column=0,
             sticky="w",
             padx=(0, 6),
-            pady=4,
+            pady=1,
         )
 
         author_frame = ttk.Frame(form_frame)
-        author_frame.grid(row=1, column=1, sticky="ew", padx=(0, 12), pady=4)
+        author_frame.grid(row=1, column=1, sticky="ew", padx=(0, 12), pady=1)
         author_frame.columnconfigure(0, weight=1)
         self._author_entry = ttk.Entry(author_frame, textvariable=self._author_var, width=15)
         self._author_entry.grid(row=0, column=0, sticky="ew", padx=(0, 6))
@@ -1490,7 +1495,7 @@ class BookManagerApplication:
             column=2,
             sticky="w",
             padx=(0, 6),
-            pady=4,
+            pady=1,
         )
 
         self._publisher_entry = ttk.Entry(
@@ -1501,7 +1506,7 @@ class BookManagerApplication:
             row=1,
             column=3,
             sticky="ew",
-            pady=4,
+            pady=1,
         )
 
         ttk.Label(
@@ -1512,7 +1517,7 @@ class BookManagerApplication:
             column=0,
             sticky="w",
             padx=(0, 6),
-            pady=4,
+            pady=1,
         )
 
         self._publication_format_combobox = ttk.Combobox(
@@ -1525,7 +1530,7 @@ class BookManagerApplication:
             column=1,
             sticky="ew",
             padx=(0, 12),
-            pady=4,
+            pady=1,
         )
 
         ttk.Label(
@@ -1536,7 +1541,7 @@ class BookManagerApplication:
             column=2,
             sticky="w",
             padx=(0, 6),
-            pady=4,
+            pady=1,
         )
 
         completion_month_frame = ttk.Frame(
@@ -1546,7 +1551,7 @@ class BookManagerApplication:
             row=2,
             column=3,
             sticky="ew",
-            pady=4,
+            pady=1,
         )
 
         completion_month_frame.columnconfigure(
@@ -1619,11 +1624,11 @@ class BookManagerApplication:
             padx=(12, 0),
         )
         ttk.Label(form_frame, text="ISBN").grid(
-            row=3, column=0, sticky="w", padx=(0, 6), pady=4,
+            row=3, column=0, sticky="w", padx=(0, 6), pady=1,
         )
         identifier_frame = ttk.Frame(form_frame)
         identifier_frame.grid(
-            row=3, column=1, columnspan=3, sticky="ew", pady=4,
+            row=3, column=1, columnspan=3, sticky="ew", pady=1,
         )
         self._isbn_entry = ttk.Entry(
             identifier_frame, textvariable=self._isbn_var, width=15,
@@ -1640,7 +1645,7 @@ class BookManagerApplication:
             row=0, column=3, sticky="w", padx=(0, 6),
         )
         self._magazine_code_entry = ttk.Entry(
-            identifier_frame, textvariable=self._magazine_code_var, width=8,
+            identifier_frame, textvariable=self._magazine_code_var, width=12,
         )
         self._magazine_code_entry.grid(row=0, column=4, padx=(0, 12))
         self._candidate_search_button = ttk.Button(
@@ -1657,7 +1662,7 @@ class BookManagerApplication:
             column=0,
             sticky="w",
             padx=(0, 6),
-            pady=4,
+            pady=1,
         )
 
         tag_frame = ttk.Frame(form_frame)
@@ -1666,7 +1671,7 @@ class BookManagerApplication:
             column=1,
             columnspan=3,
             sticky="ew",
-            pady=4,
+            pady=1,
         )
         tag_frame.columnconfigure(0, weight=1)
         self._tags_entry = ttk.Entry(
@@ -1692,7 +1697,7 @@ class BookManagerApplication:
         self._description_text = FormTextValue()
         self._notes_text = FormTextValue()
         text_buttons = ttk.Frame(form_frame)
-        text_buttons.grid(row=5, column=0, columnspan=4, sticky="w", pady=4)
+        text_buttons.grid(row=5, column=0, columnspan=4, sticky="w", pady=1)
         ttk.Button(text_buttons, text="内容紹介を表示・編集",
             command=lambda:self._on_edit_long_text("description")).pack(side="left")
         ttk.Button(text_buttons, text="備考を表示・編集",
@@ -1703,7 +1708,7 @@ class BookManagerApplication:
         cover_frame = ttk.LabelFrame(
             form_frame,
             text="表紙画像",
-            padding=8,
+            padding=4,
         )
         cover_frame.grid(
             row=0,
@@ -1711,11 +1716,11 @@ class BookManagerApplication:
             rowspan=6,
             sticky="ns",
             padx=(12, 0),
-            pady=4,
+            pady=1,
         )
 
         # 画像の要求サイズで表示枠が広がらないよう、独立した領域を設ける。
-        self._cover_viewport = ttk.Frame(cover_frame, width=170, height=240)
+        self._cover_viewport = ttk.Frame(cover_frame, width=100, height=140)
         self._cover_viewport.grid(row=0, column=0, sticky="nsew")
         self._cover_viewport.grid_propagate(False)
         self._cover_image_label = ttk.Label(
@@ -2076,7 +2081,7 @@ class BookManagerApplication:
                     book.publisher or "",
                     book.publication_format or "",
                     book.isbn or "",
-                    book.magazine_code or "",
+                    format_magazine_code(book.magazine_code),
                     book.completion_month or "",
                     self.READING_STATUS_LABELS.get(
                         book.reading_status,
@@ -2125,7 +2130,7 @@ class BookManagerApplication:
         )
         self._reference_isbn_var.set(book_item.reference_isbn or "")
         self._magazine_code_var.set(
-            book_item.magazine_code or "",
+            format_magazine_code(book_item.magazine_code),
         )
         self._author_var.set(
             book_item.author or "",
@@ -2622,7 +2627,7 @@ class BookManagerApplication:
             )
             title = candidate.title or "書籍名なし"
             isbn = candidate.isbn or "-"
-            magazine_code = candidate.magazine_code or "-"
+            magazine_code = format_magazine_code(candidate.magazine_code) or "-"
 
             candidate_lines.append(
                 (

@@ -1,6 +1,9 @@
 """Complete CSV data package export service."""
 
+
 from __future__ import annotations
+
+from book_manager.validators.magazine_code_validator import format_magazine_code
 
 import csv
 import os
@@ -259,7 +262,7 @@ class CsvDataPackageExportService:
             book.book_key,
             book.isbn or "",
             book.reference_isbn or "",
-            book.magazine_code or "",
+            format_magazine_code(book.magazine_code),
             book.title,
             book.author or "",
             book.publisher or "",

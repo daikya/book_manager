@@ -1120,7 +1120,7 @@ def test_find_duplicate_candidates_by_isbn(
     assert results == [registered]
 
 
-def test_find_duplicate_candidates_by_magazine_code(
+def test_find_duplicate_candidates_ignores_magazine_code(
     service: BookService,
 ) -> None:
     registered = add_sample_book(
@@ -1133,7 +1133,7 @@ def test_find_duplicate_candidates_by_magazine_code(
         magazine_code=" 12345 ",
     )
 
-    assert results == [registered]
+    assert results == []
 
 
 def test_find_duplicate_candidates_removes_duplicate_ids(

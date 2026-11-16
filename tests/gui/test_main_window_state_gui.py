@@ -74,7 +74,7 @@ def test_configure_root_uses_centered_default_without_saved_state() -> None:
     ):
         application._configure_root()
 
-    root.geometry.assert_called_once_with("1350x800+285+120")
+    root.geometry.assert_called_once_with("1350x700+285+170")
 
 
 def test_configure_root_uses_effective_minimum_on_small_screen() -> None:

@@ -1,6 +1,9 @@
 """書籍情報のCSVエクスポート処理。"""
 
+
 from __future__ import annotations
+
+from book_manager.validators.magazine_code_validator import format_magazine_code
 
 import csv
 from pathlib import Path
@@ -86,7 +89,7 @@ class CsvExportService:
             book.title,
             book.isbn or "",
             book.reference_isbn or "",
-            book.magazine_code or "",
+            format_magazine_code(book.magazine_code),
             book.author or "",
             book.publisher or "",
             book.publication_format or "",

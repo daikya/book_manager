@@ -30,7 +30,7 @@ def test_configure_root_centers_window() -> None:
         application._configure_root()
 
     application._root.geometry.assert_called_once_with(
-        "1350x800+285+120"
+        "1350x700+285+170"
     )
 
 
@@ -46,7 +46,7 @@ def test_configure_root_does_not_use_negative_position() -> None:
         application._configure_root()
 
     application._root.geometry.assert_called_once_with(
-        "1350x800+0+0"
+        "1350x700+0+0"
     )
 
 
@@ -63,7 +63,7 @@ def test_configure_root_sets_minimum_size() -> None:
 
     application._root.minsize.assert_called_once_with(
         1150,
-        650,
+        600,
     )
 
 

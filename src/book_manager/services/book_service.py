@@ -13,7 +13,7 @@ from book_manager.validators.completion_month_validator import (
 )
 from book_manager.validators.isbn_validator import validate_isbn
 from book_manager.validators.magazine_code_validator import (
-    validate_magazine_code,
+    validate_magazine_code, normalize_magazine_code,
 )
 from book_manager.metadata.book_metadata_service import (
     BookMetadataService,
@@ -155,7 +155,7 @@ class BookService:
         normalized_isbn = self._normalize_isbn(isbn)
         normalized_reference_isbn = self._normalize_reference_isbn(reference_isbn)
         normalized_magazine_code = (
-            self._normalize_optional_text(
+            normalize_magazine_code(
                 magazine_code
             )
         )
@@ -251,7 +251,7 @@ class BookService:
         isbn: str | None = None,
         magazine_code: str | None = None,
     ) -> list[BookItem]:
-        """書籍名、ISBN、雑誌コードが一致する重複候補を取得する。
+        """書籍名、ISBNが一致する重複候補を取得する。
 
         Args:
             title: 書籍名。
@@ -271,7 +271,7 @@ class BookService:
             isbn,
         )
         normalized_magazine_code = (
-            self._normalize_optional_text(
+            normalize_magazine_code(
                 magazine_code,
             )
         )
@@ -302,13 +302,6 @@ class BookService:
             candidates.extend(
                 self._repository.find_by_isbn(
                     normalized_isbn,
-                )
-            )
-
-        if normalized_magazine_code is not None:
-            candidates.extend(
-                self._repository.find_by_magazine_code(
-                    normalized_magazine_code,
                 )
             )
 
@@ -518,7 +511,7 @@ class BookService:
     ) -> list[BookItem]:
         """雑誌コードによる完全一致検索を行う。"""
         normalized_magazine_code = (
-            self._normalize_optional_text(
+            normalize_magazine_code(
                 magazine_code
             )
         )
@@ -567,7 +560,7 @@ class BookService:
             isbn,
         )
         normalized_magazine_code = (
-            self._normalize_optional_text(
+            normalize_magazine_code(
                 magazine_code,
             )
         )
@@ -703,7 +696,7 @@ class BookService:
         )
         normalized_reference_isbn = self._normalize_reference_isbn(book_item.reference_isbn)
         normalized_magazine_code = (
-            self._normalize_optional_text(
+            normalize_magazine_code(
                 book_item.magazine_code
             )
         )

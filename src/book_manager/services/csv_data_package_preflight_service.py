@@ -57,7 +57,7 @@ from book_manager.validators.completion_month_validator import (
 )
 from book_manager.validators.isbn_validator import validate_isbn
 from book_manager.validators.magazine_code_validator import (
-    validate_magazine_code,
+    validate_magazine_code, normalize_magazine_code,
 )
 from book_manager.validators.tag_validator import validate_tag_name
 
@@ -470,7 +470,7 @@ class CsvDataPackagePreflightService:
                     row_number, "参照ISBN", issues,
                 )
 
-            magazine_code = self._optional(values["雑誌コード"])
+            magazine_code = normalize_magazine_code(values["雑誌コード"])
             if magazine_code is not None:
                 self._validate_with(
                     validate_magazine_code,

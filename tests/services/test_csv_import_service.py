@@ -643,10 +643,10 @@ def test_import_file_skips_existing_isbn(
     )
 
 
-def test_import_file_skips_existing_magazine_code(
+def test_import_file_accepts_existing_magazine_code(
     tmp_path: Path,
 ) -> None:
-    """既存雑誌コードと重複する行をスキップすることを確認する。"""
+    """同じ雑誌コードでも登録することを確認する。"""
     book_service = Mock(spec=BookService)
     book_service.find_books_by_magazine_code.return_value = [
         Mock(),
@@ -686,23 +686,11 @@ def test_import_file_skips_existing_magazine_code(
 
     result = service.import_file(input_path)
 
-    book_service.find_books_by_magazine_code.assert_called_once_with(
-        "12345-01",
-    )
-    book_service.add_book.assert_not_called()
-
-    assert result == CsvImportResult(
-        imported_count=0,
-        skipped_count=1,
-        error_count=0,
-        skipped=(
-            CsvImportIssue(
-                row_number=2,
-                message="雑誌コードが既存データと重複しています。",
-            ),
-        ),
-        errors=(),
-    )
+    book_service.find_books_by_magazine_code.assert_not_called()
+    book_service.add_book.assert_called_once()
+    assert result.imported_count == 1
+    assert result.skipped_count == 0
+    assert result.error_count == 0
 
 
 def test_import_file_does_not_check_duplicate_when_identifiers_are_empty(
@@ -1079,12 +1067,12 @@ def test_import_file_records_isbn_lookup_value_error(
     )
 
 
-def test_import_file_records_magazine_code_lookup_value_error(
+def test_import_file_records_invalid_magazine_code(
     tmp_path: Path,
 ) -> None:
     """雑誌コード重複確認時の入力値エラーを行エラーとして記録することを確認する。"""
     book_service = Mock(spec=BookService)
-    book_service.find_books_by_magazine_code.side_effect = ValueError(
+    book_service.add_book.side_effect = ValueError(
         "雑誌コードの形式が不正です。",
     )
     service = CsvImportService(
@@ -1122,7 +1110,7 @@ def test_import_file_records_magazine_code_lookup_value_error(
 
     result = service.import_file(input_path)
 
-    book_service.add_book.assert_not_called()
+    book_service.add_book.assert_called_once()
 
     assert result == CsvImportResult(
         imported_count=0,
@@ -1330,10 +1318,10 @@ def test_import_file_skips_duplicate_isbn_with_real_database(
     assert books[0].author == "著者A"
 
 
-def test_import_file_skips_duplicate_magazine_code_with_real_database(
+def test_import_file_accepts_duplicate_magazine_code_with_real_database(
     tmp_path: Path,
 ) -> None:
-    """実DB上でCSV内の重複雑誌コードがスキップされることを確認する。"""
+    """実DB上でCSV内の同じ雑誌コードを持つ2冊を登録できる。"""
     database_path = tmp_path / "test_book_manager.db"
     initialize_database(database_path)
 
@@ -1403,28 +1391,12 @@ def test_import_file_skips_duplicate_magazine_code_with_real_database(
 
     result = service.import_file(input_path)
 
-    assert result == CsvImportResult(
-        imported_count=1,
-        skipped_count=1,
-        error_count=0,
-        skipped=(
-            CsvImportIssue(
-                row_number=3,
-                message=(
-                    "雑誌コードが既存データと重複しています。"
-                ),
-            ),
-        ),
-        errors=(),
-    )
-
-    books = book_service.find_books_by_magazine_code(
-        "12345",
-    )
-
-    assert len(books) == 1
-    assert books[0].title == "雑誌1冊目"
-    assert books[0].author == "著者A"
+    assert result.imported_count == 2
+    assert result.skipped_count == 0
+    assert result.error_count == 0
+    books = book_service.find_books_by_magazine_code("12345")
+    assert len(books) == 2
+    assert {book.title for book in books} == {"雑誌1冊目", "雑誌2冊目"}
 
 
 def test_import_file_uses_logical_csv_record_number(

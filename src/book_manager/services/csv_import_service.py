@@ -135,7 +135,6 @@ class CsvImportService:
         skipped: list[CsvImportIssue] = []
         errors: list[CsvImportIssue] = []
         seen_isbns: set[str] = set()
-        seen_magazine_codes: set[str] = set()
         for row_number, row in enumerate(rows[1:], start=2):
             if len(row) != len(header):
                 errors.append(CsvImportIssue(row_number, "列数が不正です。"))
@@ -164,11 +163,6 @@ class CsvImportService:
                         message = "ISBNが既存データと重複しています。"
                     elif book.isbn in seen_isbns:
                         message = "ISBNがCSV内の登録予定データと重複しています。"
-                if message is None and book.magazine_code:
-                    if self._book_service.find_books_by_magazine_code(book.magazine_code):
-                        message = "雑誌コードが既存データと重複しています。"
-                    elif book.magazine_code in seen_magazine_codes:
-                        message = "雑誌コードがCSV内の登録予定データと重複しています。"
                 if message is not None:
                     skipped.append(CsvImportIssue(row_number, message))
                     continue
@@ -178,8 +172,6 @@ class CsvImportService:
             books.append(book)
             if book.isbn:
                 seen_isbns.add(book.isbn)
-            if book.magazine_code:
-                seen_magazine_codes.add(book.magazine_code)
         return CsvImportPreview(
             input_path=input_path,
             source_sha256=source_sha256,
@@ -340,33 +332,6 @@ class CsvImportService:
                             row_number=row_number,
                             message=(
                                 "ISBNが既存データと重複しています。"
-                            ),
-                        )
-                    )
-                    continue
-
-            if magazine_code:
-                try:
-                    existing_books = (
-                        self._book_service.find_books_by_magazine_code(
-                            magazine_code,
-                        )
-                    )
-                except ValueError as exc:
-                    errors.append(
-                        CsvImportIssue(
-                            row_number=row_number,
-                            message=str(exc),
-                        )
-                    )
-                    continue
-
-                if existing_books:
-                    skipped.append(
-                        CsvImportIssue(
-                            row_number=row_number,
-                            message=(
-                                "雑誌コードが既存データと重複しています。"
                             ),
                         )
                     )

@@ -386,7 +386,7 @@ class BookRepository:
             SELECT
                 {BOOK_ITEM_COLUMNS}
             FROM book_items
-            WHERE magazine_code = ?
+            WHERE REPLACE(magazine_code, '-', '') = ?
             ORDER BY id DESC
         """
 
@@ -463,7 +463,7 @@ class BookRepository:
 
         if magazine_code is not None:
             conditions.append(
-                "magazine_code = ?",
+                "REPLACE(magazine_code, '-', '') = ?",
             )
             parameters.append(
                 magazine_code,
