@@ -321,8 +321,8 @@ def test_display_books_clears_old_thumbnail_photos() -> None:
     application._service.fetch_cover_image.assert_not_called()
 
 
-def test_display_books_keeps_created_thumbnail_photo() -> None:
-    """生成したサムネイルをBookID単位で保持する。"""
+def test_display_books_loads_visible_thumbnail_after_rows_are_created() -> None:
+    """一覧作成後に可視行だけ画像を生成し、BookID単位で保持する。"""
     application = create_application()
 
     application._book_tree.get_children.return_value = []
@@ -344,14 +344,14 @@ def test_display_books_keeps_created_thumbnail_photo() -> None:
         status_prefix="全",
     )
 
-    assert application._thumbnail_photos == {
-        1: thumbnail_photo,
-    }
-    call_kwargs = (
-        application._book_tree.insert.call_args.kwargs
-    )
+    application._create_thumbnail_photo.assert_not_called()
+    assert application._book_tree.insert.call_args.kwargs["image"] == ""
+    application._book_tree.winfo_height.return_value = 100
+    application._book_tree.identify_row.return_value = "1"
+    application._load_visible_thumbnails()
+    assert application._thumbnail_photos == {1: thumbnail_photo}
+    application._book_tree.item.assert_called_once_with("1", image=thumbnail_photo)
 
-    assert call_kwargs["image"] is thumbnail_photo
 
 def test_display_books_inserts_book_without_cover() -> None:
     """表紙なし書籍もTreeviewへ追加できる。"""

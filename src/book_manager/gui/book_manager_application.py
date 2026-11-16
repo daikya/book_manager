@@ -18,6 +18,10 @@ from book_manager.gui.book_candidate_search_dialog import (
     BookCandidateSearchDialog, CandidateSearchTask,
 )
 from book_manager.gui.author_link_review_dialog import AuthorLinkReviewDialog
+from collections import OrderedDict
+from time import perf_counter
+from book_manager.gui.long_text_dialog import FormTextValue, LongTextDialog, text_dialog_store
+from book_manager.gui.cover_url_dialog import CoverUrlDialog
 from book_manager.gui.author_dialogs import AuthorSelectionDialog
 from book_manager.services.author_service import AuthorService
 from book_manager.gui.excel_column_mapping_dialog import ExcelColumnMappingDialog
@@ -316,6 +320,7 @@ class BookManagerApplication:
                 一覧表示状態の保存処理。未指定時は既定の列幅と
                 並び順を使用する。
         """
+        startup_started = perf_counter()
         self._root = root
         self._service = service
         self._csv_export_service = csv_export_service
@@ -355,6 +360,9 @@ class BookManagerApplication:
             int,
             ImageTk.PhotoImage,
         ] = {}
+        self._thumbnail_cache = OrderedDict()
+        self._thumbnail_books = {}
+        self._thumbnail_job = None
         self._search_title_var = tk.StringVar(
             master=self._root,
         )
@@ -448,6 +456,7 @@ class BookManagerApplication:
         self._restore_list_view_state()
         self._refresh_tag_options()
         self._load_all_books()
+        logger.info("performance startup_ui_ms=%.1f", (perf_counter() - startup_started) * 1000)
 
         self._title_entry.focus_set()
 
@@ -650,15 +659,8 @@ class BookManagerApplication:
             0,
             weight=1,
         )
-        main_frame.rowconfigure(
-            1,
-            weight=3,
-            minsize=330,
-        )
-        main_frame.rowconfigure(
-            2,
-            weight=2,
-        )
+        main_frame.rowconfigure(1, weight=1, minsize=160)
+        main_frame.rowconfigure(2, weight=0)
 
         self._create_search_frame(
             main_frame,
@@ -1184,6 +1186,7 @@ class BookManagerApplication:
         )
 
         self._configure_tree_columns()
+        self._book_tree.bind("<Configure>", lambda event:self._schedule_visible_thumbnails(), add="+")
 
         vertical_scrollbar = ttk.Scrollbar(
             list_frame,
@@ -1196,8 +1199,12 @@ class BookManagerApplication:
             command=self._book_tree.xview,
         )
 
+        def on_vertical_scroll(first, last):
+            vertical_scrollbar.set(first, last)
+            self._schedule_visible_thumbnails()
+
         self._book_tree.configure(
-            yscrollcommand=vertical_scrollbar.set,
+            yscrollcommand=on_vertical_scroll,
             xscrollcommand=horizontal_scrollbar.set,
         )
 
@@ -1430,14 +1437,7 @@ class BookManagerApplication:
             weight=0,
             minsize=190,
         )
-        form_frame.rowconfigure(
-            5,
-            weight=1,
-        )
-        form_frame.rowconfigure(
-            6,
-            weight=1,
-        )
+        form_frame.rowconfigure(5, weight=0)
 
         ttk.Label(
             form_frame,
@@ -1689,115 +1689,17 @@ class BookManagerApplication:
             column=1,
         )
 
-        ttk.Label(
-            form_frame,
-            text="内容紹介",
-        ).grid(
-            row=5,
-            column=0,
-            sticky="nw",
-            padx=(0, 6),
-            pady=4,
-        )
+        self._description_text = FormTextValue()
+        self._notes_text = FormTextValue()
+        text_buttons = ttk.Frame(form_frame)
+        text_buttons.grid(row=5, column=0, columnspan=4, sticky="w", pady=4)
+        ttk.Button(text_buttons, text="内容紹介を表示・編集",
+            command=lambda:self._on_edit_long_text("description")).pack(side="left")
+        ttk.Button(text_buttons, text="備考を表示・編集",
+            command=lambda:self._on_edit_long_text("notes")).pack(side="left", padx=8)
+        ttk.Button(text_buttons, text="書影URLを編集",
+            command=self._on_edit_cover_url).pack(side="left")
 
-        description_frame = ttk.Frame(
-            form_frame,
-        )
-        description_frame.grid(
-            row=5,
-            column=1,
-            columnspan=3,
-            sticky="nsew",
-            pady=4,
-        )
-        description_frame.rowconfigure(
-            0,
-            weight=1,
-        )
-        description_frame.columnconfigure(
-            0,
-            weight=1,
-        )
-
-        self._description_text = tk.Text(
-            description_frame,
-            height=4,
-            wrap="word",
-        )
-        description_scrollbar = ttk.Scrollbar(
-            description_frame,
-            orient="vertical",
-            command=self._description_text.yview,
-        )
-        self._description_text.configure(
-            yscrollcommand=description_scrollbar.set,
-        )
-
-        self._description_text.grid(
-            row=0,
-            column=0,
-            sticky="nsew",
-        )
-        description_scrollbar.grid(
-            row=0,
-            column=1,
-            sticky="ns",
-        )
-
-        ttk.Label(
-            form_frame,
-            text="備考",
-        ).grid(
-            row=6,
-            column=0,
-            sticky="nw",
-            padx=(0, 6),
-            pady=4,
-        )
-
-        notes_frame = ttk.Frame(
-            form_frame,
-        )
-        notes_frame.grid(
-            row=6,
-            column=1,
-            columnspan=3,
-            sticky="nsew",
-            pady=4,
-        )
-        notes_frame.rowconfigure(
-            0,
-            weight=1,
-        )
-        notes_frame.columnconfigure(
-            0,
-            weight=1,
-        )
-
-        self._notes_text = tk.Text(
-            notes_frame,
-            height=4,
-            wrap="word",
-        )
-        notes_scrollbar = ttk.Scrollbar(
-            notes_frame,
-            orient="vertical",
-            command=self._notes_text.yview,
-        )
-        self._notes_text.configure(
-            yscrollcommand=notes_scrollbar.set,
-        )
-
-        self._notes_text.grid(
-            row=0,
-            column=0,
-            sticky="nsew",
-        )
-        notes_scrollbar.grid(
-            row=0,
-            column=1,
-            sticky="ns",
-        )
         cover_frame = ttk.LabelFrame(
             form_frame,
             text="表紙画像",
@@ -1806,7 +1708,7 @@ class BookManagerApplication:
         cover_frame.grid(
             row=0,
             column=4,
-            rowspan=7,
+            rowspan=6,
             sticky="ns",
             padx=(12, 0),
             pady=4,
@@ -2037,6 +1939,7 @@ class BookManagerApplication:
 
     def _load_all_books(self) -> None:
         """全書籍を取得して一覧へ表示する。"""
+        started = perf_counter()
         try:
             sort_by, descending = (
                 self._get_sort_settings()
@@ -2053,6 +1956,7 @@ class BookManagerApplication:
                     sort_by=sort_by, descending=descending,
                 )
                 prefix = "全"
+            logger.info("performance query_sort_ms=%.1f rows=%d", (perf_counter()-started)*1000, len(books))
             self._display_books(books, status_prefix=prefix)
 
         except Exception:
@@ -2079,21 +1983,59 @@ class BookManagerApplication:
             return None
 
         try:
+            stat = image_path.stat()
+            key = (str(image_path), stat.st_mtime_ns, stat.st_size)
+            cache = getattr(self, "_thumbnail_cache", None)
+            if cache is None:
+                cache = self._thumbnail_cache = OrderedDict()
+            if key in cache:
+                cache.move_to_end(key)
+                return cache[key]
             with Image.open(image_path) as image:
                 thumbnail_image = image.copy()
-
-            thumbnail_image.thumbnail(
-                (40, 52),
-                Image.Resampling.LANCZOS,
-            )
-
-            return ImageTk.PhotoImage(
-                thumbnail_image,
-            )
-
+            thumbnail_image.thumbnail((40, 52), Image.Resampling.LANCZOS)
+            photo = ImageTk.PhotoImage(thumbnail_image)
+            cache[key] = photo
+            if len(cache) > 256:
+                cache.popitem(last=False)
+            return photo
         except Exception:
-            traceback.print_exc()
+            logger.warning("一覧の書影を表示できませんでした。", exc_info=True)
             return None
+
+    def _schedule_visible_thumbnails(self):
+        root = getattr(self, "_root", None)
+        if root is not None and getattr(self, "_thumbnail_job", None) is None:
+            self._thumbnail_job = root.after_idle(self._load_visible_thumbnails)
+
+    def _load_visible_thumbnails(self):
+        self._thumbnail_job = None
+        started = perf_counter()
+        loaded = 0
+        try:
+            height = self._book_tree.winfo_height()
+            if not isinstance(height, int) or height <= 1:
+                return
+            visible = dict.fromkeys(self._book_tree.identify_row(y) for y in range(0, height, 28))
+            for iid in visible:
+                if not iid:
+                    continue
+                book_id = int(iid)
+                if book_id in self._thumbnail_photos:
+                    continue
+                path = getattr(self, "_thumbnail_books", {}).get(book_id)
+                if not path:
+                    continue
+                photo = self._create_thumbnail_photo(path)
+                if photo is not None:
+                    self._thumbnail_photos[book_id] = photo
+                    self._book_tree.item(iid, image=photo)
+                    loaded += 1
+        except tk.TclError:
+            return
+        finally:
+            if loaded:
+                logger.info("performance visible_thumbnails=%d image_ms=%.1f", loaded, (perf_counter()-started)*1000)
 
     def _display_books(
         self,
@@ -2107,6 +2049,8 @@ class BookManagerApplication:
             books: 表示する書籍一覧。
             status_prefix: 件数表示の先頭文字列。
         """
+        started = perf_counter()
+        self._thumbnail_books = {book.id:book.cover_image_path for book in books if book.id is not None}
         for item_id in self._book_tree.get_children():
             self._book_tree.delete(
                 item_id,
@@ -2120,20 +2064,11 @@ class BookManagerApplication:
             if book.id is None:
                 continue
 
-            thumbnail_photo = self._create_thumbnail_photo(
-                book.cover_image_path,
-            )
-
-            if thumbnail_photo is not None:
-                self._thumbnail_photos[book.id] = (
-                    thumbnail_photo
-                )
-
             self._book_tree.insert(
                 "",
                 "end",
                 iid=str(book.id),
-                image=thumbnail_photo or "",
+                image="",
                 values=(
                     book.id,
                     book.title,
@@ -2164,6 +2099,9 @@ class BookManagerApplication:
         self._count_status_var.set(
             f"{status_prefix} {displayed_count}件",
         )
+
+        logger.info("performance list_rows=%d list_ms=%.1f", displayed_count, (perf_counter()-started)*1000)
+        self._schedule_visible_thumbnails()
 
     def _display_book_in_form(
         self,
@@ -2259,6 +2197,42 @@ class BookManagerApplication:
             "1.0",
             value or "",
         )
+
+    def _on_edit_long_text(self, field):
+        title, value = ("内容紹介", self._description_text) if field == "description" else ("備考", self._notes_text)
+        book_id = self._selected_book_id
+        original = value.get("1.0", "end-1c")
+        result = LongTextDialog(self._root, title=title, value=original,
+            state_store=text_dialog_store(getattr(self, "_window_state_store", None), field)).show()
+        if result is None:
+            return
+        if self._selected_book_id != book_id or value.get("1.0", "end-1c") != original:
+            messagebox.showwarning("編集内容の確認", "編集中の書籍情報が変わりました。もう一度開いて確認してください。", parent=self._root)
+            return
+        self._replace_text(value, result)
+
+    def _on_edit_cover_url(self):
+        before = self._metadata_form_snapshot()
+        result = CoverUrlDialog(self._root, url=self._current_cover_image_url,
+            fetch=self._service.fetch_cover_image,
+            state_store=text_dialog_store(getattr(self, "_window_state_store", None), "cover_url")).show()
+        if result is None:
+            return
+        if self._metadata_form_snapshot() != before:
+            messagebox.showwarning("書影URL", "編集中の書籍情報が変わりました。もう一度確認してください。", parent=self._root)
+            return
+        url, path = result
+        if not url:
+            self._clear_cover_state()
+            return
+        try:
+            stored = self._service.create_stored_cover_image_path(path)
+            self._display_cover_image(str(path))
+        except Exception as error:
+            messagebox.showerror("書影URL", str(error), parent=self._root)
+            return
+        self._current_cover_image_url = url
+        self._current_cover_image_path = stored
 
     def _metadata_form_snapshot(self) -> tuple:
         """比較対象と入力値・書影状態を保存し、反映直前に再確認する。"""
@@ -5496,10 +5470,13 @@ class BookManagerApplication:
                 book_id=book_id,
             )
 
+            update_started = perf_counter()
             updated = self._service.update_book(
                 book_item,
                 **self._managed_author_save_arguments(),
             )
+
+            logger.info("performance update_db_ms=%.1f", (perf_counter()-update_started)*1000)
 
             if not updated:
                 messagebox.showwarning(
@@ -6210,6 +6187,11 @@ class BookManagerApplication:
         """アプリケーションを終了する。"""
         self._save_list_view_state_on_exit()
         self._save_window_state_on_exit()
+        job = getattr(self, "_thumbnail_job", None)
+        if job is not None:
+            try:self._root.after_cancel(job)
+            except tk.TclError:pass
+            self._thumbnail_job = None
         self._root.destroy()
 
     def _save_list_view_state_on_exit(self) -> None:
