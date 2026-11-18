@@ -1943,14 +1943,14 @@ class BookManagerApplication:
         )
 
     def _load_all_books(self) -> None:
-        """全書籍を取得して一覧へ表示する。"""
+        """現在の検索条件・並び順を維持して一覧を再取得する。"""
         started = perf_counter()
         try:
             sort_by, descending = (
                 self._get_sort_settings()
             )
 
-            if self._search_managed_author_id() is not None:
+            if self._has_search_conditions():
                 books = self._service.sort_books(
                     self._get_filtered_books(), sort_by=sort_by,
                     descending=descending,

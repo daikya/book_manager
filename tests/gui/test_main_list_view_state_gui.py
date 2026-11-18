@@ -242,6 +242,7 @@ def test_load_all_books_uses_restored_sort_settings() -> None:
     application._root = Mock()
     application._service = Mock()
     application._service.get_sorted_books.return_value = []
+    application._has_search_conditions = Mock(return_value=False)
     application._sort_type_var = Mock()
     application._sort_type_var.get.return_value = "評価"
     application._sort_direction_var = Mock()

@@ -63,6 +63,7 @@ def test_selected_id_is_passed_with_other_conditions():
 
 def test_reload_after_edit_preserves_author_filter():
     app = application()
+    app._has_search_conditions = Mock(return_value=True)
     app._get_sort_settings = Mock(return_value=('title', False))
     app._get_filtered_books = Mock(return_value=['filtered'])
     app._service = Mock()
