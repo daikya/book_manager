@@ -105,4 +105,5 @@ def test_each_dialog_has_independent_persistent_store(tmp_path):
     base=WindowStateStore(tmp_path/'window_state.json')
     assert state_store(base,'author_edit').path==tmp_path/'author_edit_window_state.json'
     assert state_store(base,'author_management').path!=state_store(base,'author_selection').path
+    assert state_store(base,'author_search_selection').path != state_store(base,'author_selection').path
     assert state_store(None,'author_edit') is None

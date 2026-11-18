@@ -1,6 +1,8 @@
 """Repository for book items."""
 
 import sqlite3
+from book_manager.validators.managed_author_filter import normalize_managed_author_filter
+
 from dataclasses import replace
 from pathlib import Path
 
@@ -419,6 +421,8 @@ class BookRepository:
         tag_name: str | None = None,
         untagged_only: bool = False,
         managed_author_id: int | None = None,
+        managed_author_ids: tuple[int, ...] = (),
+        managed_author_mode: str = "any",
     ) -> list[BookItem]:
         """複数条件によるAND検索を行う。"""
         if tag_name is not None and untagged_only:
@@ -533,14 +537,27 @@ class BookRepository:
                 """
             )
 
-        if managed_author_id is not None:
-            if type(managed_author_id) is not int or managed_author_id <= 0:
-                raise ValueError("管理著者IDは正の整数で指定してください。")
-            conditions.append(
-                "EXISTS (SELECT 1 FROM book_item_authors AS bia "
-                "WHERE bia.book_item_id = book_items.id AND bia.author_id = ?)"
-            )
-            parameters.append(managed_author_id)
+        author_ids = normalize_managed_author_filter(
+            author_id=managed_author_id, author_ids=managed_author_ids,
+            mode=managed_author_mode,
+        )
+        if author_ids:
+            placeholders = ",".join("?" for _ in author_ids)
+            if managed_author_mode == "all":
+                conditions.append(
+                    "(SELECT COUNT(DISTINCT bia.author_id) FROM book_item_authors AS bia "
+                    "WHERE bia.book_item_id = book_items.id "
+                    f"AND bia.author_id IN ({placeholders})) = ?"
+                )
+                parameters.extend(author_ids)
+                parameters.append(len(author_ids))
+            else:
+                conditions.append(
+                    "EXISTS (SELECT 1 FROM book_item_authors AS bia "
+                    "WHERE bia.book_item_id = book_items.id "
+                    f"AND bia.author_id IN ({placeholders}))"
+                )
+                parameters.extend(author_ids)
 
         if not conditions:
             return self.get_all()

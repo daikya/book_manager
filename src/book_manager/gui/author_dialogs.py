@@ -188,14 +188,14 @@ class AuthorManagementDialog:
 
 
 class AuthorSelectionDialog:
-    def __init__(self, parent, service, *, selected_ids=(), query='', get_book, window_state_store=None, apply_help=None):
+    def __init__(self, parent, service, *, selected_ids=(), query='', get_book, window_state_store=None, apply_help=None, search_mode=False):
         self._service = service;self._get_book = get_book;self._base_store = window_state_store
         self._initial_name = query
         self._selected_ids = list(selected_ids);self.result = None
-        self.window = tk.Toplevel(parent);self.window.transient(parent);self.window.title('管理著者の選択')
+        self.window = tk.Toplevel(parent);self.window.transient(parent);self.window.title('検索する管理著者の選択' if search_mode else '管理著者の選択')
         self.window.geometry('1000x650');self.window.minsize(780, 480)
         body = ttk.Frame(self.window, padding=12);body.pack(fill='both', expand=True)
-        ttk.Label(body, text='著者名欄の原表記は保持します。候補のID・識別メモを確認して選択してください。', wraplength=930).pack(anchor='w')
+        ttk.Label(body, text='候補を検索し、右側へ検索対象の著者を追加してください。同姓同名はID・識別メモで確認してください。' if search_mode else '著者名欄の原表記は保持します。候補のID・識別メモを確認して選択してください。', wraplength=930).pack(anchor='w')
         top = ttk.Frame(body);top.pack(fill='x', pady=8)
         self._query = tk.StringVar(self.window, query)
         entry = ttk.Entry(top, textvariable=self._query);entry.pack(side='left', fill='x', expand=True)
@@ -205,13 +205,13 @@ class AuthorSelectionDialog:
         ttk.Button(top, text='著者管理', command=self._manage).pack(side='right', padx=6)
         panes = ttk.Panedwindow(body, orient='horizontal');panes.pack(fill='both', expand=True)
         left = ttk.LabelFrame(panes, text='登録済み著者の候補', padding=6)
-        right = ttk.LabelFrame(panes, text='この書籍の管理著者（上から表示順）', padding=6)
+        right = ttk.LabelFrame(panes, text='検索対象の管理著者' if search_mode else 'この書籍の管理著者（上から表示順）', padding=6)
         panes.add(left, weight=3);panes.add(right, weight=2)
         self._candidates = make_table(left, (('id','ID',55),('name','表示名',140),('note','識別メモ',210),('match','一致の目安',110)))
         ttk.Button(left, text='選択へ追加 →', command=self._add).pack(anchor='e', pady=6)
         self._selected = make_table(right, (('id','ID',55),('name','表示名',130),('note','識別メモ',180)))
         order = ttk.Frame(right);order.pack(fill='x', pady=6)
-        for label, command in [('上へ',lambda:self._move(-1)),('下へ',lambda:self._move(1)),('選択から外す',self._remove)]:
+        for label, command in (([('上へ',lambda:self._move(-1)),('下へ',lambda:self._move(1))] if not search_mode else []) + [('選択から外す',self._remove)]):
             ttk.Button(order, text=label, command=command).pack(side='left', padx=(0, 4))
         self._candidates.bind('<Double-1>', lambda e:self._add())
         ttk.Label(body, text=apply_help or '「選択を反映」は入力フォームへ反映します。関連付けの保存は書籍の「登録」「更新」で確定します。\n著者管理で保存した著者情報は、この画面をキャンセルしても保持されます。', wraplength=930).pack(anchor='w', pady=8)
@@ -220,7 +220,7 @@ class AuthorSelectionDialog:
         ttk.Button(buttons, text='選択を反映', command=self._apply).pack(side='right', padx=8)
         self.window.bind('<Escape>', lambda e:self.window.destroy())
         self._refresh()
-        restore_dialog_window(self.window, parent, state_store(window_state_store, 'author_selection'), default_size=(1000, 650))
+        restore_dialog_window(self.window, parent, state_store(window_state_store, 'author_search_selection' if search_mode else 'author_selection'), default_size=(1000, 650))
 
     def _all(self):self._query.set('');self._refresh()
 

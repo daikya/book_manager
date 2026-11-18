@@ -1,5 +1,7 @@
 """Application service for book management."""
 
+from book_manager.validators.managed_author_filter import normalize_managed_author_filter
+
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -541,11 +543,14 @@ class BookService:
         tag_name: str | None = None,
         untagged_only: bool = False,
         managed_author_id: int | None = None,
+        managed_author_ids: tuple[int, ...] = (),
+        managed_author_mode: str = "any",
     ) -> list[BookItem]:
         """複数条件によるAND検索を行う。"""
-        if managed_author_id is not None:
-            if type(managed_author_id) is not int or managed_author_id <= 0:
-                raise ValueError("管理著者IDは正の整数で指定してください。")
+        author_ids = normalize_managed_author_filter(
+            author_id=managed_author_id, author_ids=managed_author_ids,
+            mode=managed_author_mode,
+        )
 
         normalized_title = self._normalize_optional_text(
             title,
@@ -627,6 +632,7 @@ class BookService:
 
         if (
             not untagged_only
+            and not author_ids
             and all(
                 value is None
                 for value in (
@@ -656,8 +662,8 @@ class BookService:
             rating_filter=rating_filter,
             tag_name=normalized_tag_name,
             untagged_only=untagged_only,
-            **({"managed_author_id": managed_author_id}
-               if managed_author_id is not None else {}),
+            **({"managed_author_ids": author_ids, "managed_author_mode": managed_author_mode}
+               if author_ids else {}),
         )
 
     def update_book(

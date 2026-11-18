@@ -987,24 +987,27 @@ class BookManagerApplication:
             pady=(4, 0),
         )
 
+        self._search_managed_author_ids_value = ()
         self._search_managed_author_var = tk.StringVar(search_frame, "すべて")
-        self._search_managed_author_options = {}
+        self._search_managed_author_mode_var = tk.StringVar(search_frame, "いずれか（OR）")
         ttk.Label(search_frame, text="管理著者").grid(
             row=2, column=4, sticky="w", pady=(4, 0), padx=(0, 6),
         )
         author_filter_frame = ttk.Frame(search_frame)
         author_filter_frame.grid(row=2, column=5, columnspan=5, sticky="ew", pady=(4, 0))
-        self._search_managed_author_combobox = ttk.Combobox(
-            author_filter_frame, textvariable=self._search_managed_author_var,
-            state="readonly" if self._author_service is not None else "disabled",
-            width=28, postcommand=self._refresh_search_managed_authors,
-        )
-        self._search_managed_author_combobox.pack(side="left", fill="x", expand=True)
+        ttk.Entry(author_filter_frame, textvariable=self._search_managed_author_var,
+            state="readonly", width=20).pack(side="left", fill="x", expand=True)
+        ttk.Button(author_filter_frame, text="著者を選択", command=self._on_select_search_authors,
+            state="normal" if self._author_service is not None else "disabled").pack(side="left", padx=(6, 0))
+        mode = ttk.Combobox(author_filter_frame, textvariable=self._search_managed_author_mode_var,
+            values=("いずれか（OR）", "全員（AND）"), state="readonly", width=14)
+        mode.pack(side="left", padx=(6, 0))
+        mode.bind("<<ComboboxSelected>>", self._on_search)
+        ttk.Button(author_filter_frame, text="解除", command=self._on_clear_search_authors).pack(side="left", padx=(6, 0))
         ttk.Button(author_filter_frame, text="未関連書籍の整理",
             command=self._on_review_author_links,
             state="normal" if self._author_service is not None else "disabled",
         ).pack(side="left", padx=(6, 0))
-        self._search_managed_author_combobox.bind("<<ComboboxSelected>>", self._on_search)
         self._refresh_search_managed_authors()
 
         sort_frame = ttk.Frame(
@@ -2728,8 +2731,9 @@ class BookManagerApplication:
             rating_filter=rating_filter,
             tag_name=tag_name,
             untagged_only=untagged_only,
-            **({"managed_author_id": self._search_managed_author_id()}
-               if self._search_managed_author_id() is not None else {}),
+            **({"managed_author_ids": self._search_managed_author_ids(),
+                "managed_author_mode": self._search_managed_author_mode()}
+               if self._search_managed_author_ids() else {}),
         )
 
     def _has_search_conditions(
@@ -2760,7 +2764,7 @@ class BookManagerApplication:
         return (
             has_text_condition
             or has_filter_condition
-            or self._search_managed_author_id() is not None
+            or bool(self._search_managed_author_ids())
         )
 
     def _on_review_author_links(self) -> None:
@@ -2792,32 +2796,54 @@ class BookManagerApplication:
         except Exception as error:
             messagebox.showerror("著者整理エラー", str(error), parent=self._root)
 
-    def _search_managed_author_id(self) -> int | None:
-        variable = getattr(self, "_search_managed_author_var", None)
-        if variable is None:
-            return None
-        return self._search_managed_author_options.get(variable.get())
+    def _search_managed_author_ids(self) -> tuple[int, ...]:
+        return getattr(self, "_search_managed_author_ids_value", ())
+
+    def _search_managed_author_mode(self) -> str:
+        variable = getattr(self, "_search_managed_author_mode_var", None)
+        return "all" if variable is not None and variable.get() == "全員（AND）" else "any"
 
     def _refresh_search_managed_authors(self) -> None:
-        """表示名を更新しても選択中の人物IDを維持する。"""
-        selected_id = self._search_managed_author_id()
-        options = {}
+        """名前変更・削除後も選択したIDを保持し、条件の無断解除を防ぐ。"""
+        ids = self._search_managed_author_ids()
+        variable = getattr(self, "_search_managed_author_var", None)
+        if variable is None:
+            return
+        if not ids:
+            variable.set("すべて")
+            return
         try:
-            service = getattr(self, "_author_service", None)
-            for author in service.list_authors() if service is not None else ():
-                note = " ".join((author.disambiguation_note or "").split())
-                label = f"{author.name} [ID:{author.id}]" + (f" — {note}" if note else "")
-                options[label] = author.id
-            selected = next((label for label, ident in options.items()
-                             if ident == selected_id), "すべて")
-            if selected_id is not None and selected == "すべて":
-                selected = f"削除された著者 [ID:{selected_id}]"
-                options[selected] = selected_id
-            self._search_managed_author_options = options
-            self._search_managed_author_combobox.configure(values=("すべて", *options))
-            self._search_managed_author_var.set(selected)
+            authors = {author.id: author for author in self._author_service.list_authors()}
+            labels = [f"{authors[ident].name} [ID:{ident}]" if ident in authors
+                      else f"削除された著者 [ID:{ident}]" for ident in ids]
+            variable.set(f"{len(ids)}人：" + "／".join(labels))
         except Exception as error:
             messagebox.showerror("管理著者の読込エラー", str(error), parent=self._root)
+
+    def _on_select_search_authors(self) -> None:
+        if self._author_service is None:
+            return
+        try:
+            result = AuthorSelectionDialog(self._root, self._author_service,
+                selected_ids=self._search_managed_author_ids(),
+                get_book=self._service.get_book,
+                window_state_store=getattr(self, "_window_state_store", None),
+                search_mode=True,
+                apply_help="選択を反映すると管理著者の検索条件を変更して再検索します。書籍との関連は変更しません。\n著者管理で保存した著者情報は、キャンセルしても保持されます。",
+            ).show()
+            self._refresh_search_managed_authors()
+            if result is None:
+                return
+            self._search_managed_author_ids_value = tuple(result)
+            self._refresh_search_managed_authors()
+            self._on_search()
+        except Exception as error:
+            messagebox.showerror("管理著者の検索", str(error), parent=self._root)
+
+    def _on_clear_search_authors(self) -> None:
+        self._search_managed_author_ids_value = ()
+        self._refresh_search_managed_authors()
+        self._on_search()
 
     def _refresh_tag_options(self) -> None:
         """検索用タグ選択肢を最新状態へ更新する。"""
@@ -5219,9 +5245,11 @@ class BookManagerApplication:
             self.SEARCH_TAG_ALL
         )
 
-        variable = getattr(self, "_search_managed_author_var", None)
-        if variable is not None:
-            variable.set("すべて")
+        self._search_managed_author_ids_value = ()
+        mode = getattr(self, "_search_managed_author_mode_var", None)
+        if mode is not None:
+            mode.set("いずれか（OR）")
+        self._refresh_search_managed_authors()
 
         self._load_all_books()
 
