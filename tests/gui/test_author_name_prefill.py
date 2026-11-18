@@ -42,9 +42,9 @@ def test_management_passes_prefill_only_for_new_author():
     (Author('編集対象',id=5),'書籍の名前','編集対象'),
 ])
 def test_editor_initial_value_can_be_reviewed_before_save(author,initial,expected):
-    with patch(f'{MODULE}.tk') as tk,patch(f'{MODULE}.ttk'),patch(f'{MODULE}.restore_dialog_window'):
+    with patch(f'{MODULE}.tk') as tk,patch(f'{MODULE}.ttk'),patch(f'{MODULE}.restore_dialog_window'),patch(f'{MODULE}.ScrolledText'):
         service=Mock()
         dialog=AuthorEditDialog(Mock(),service,author=author,initial_name=initial)
-        assert tk.StringVar.call_args.args[1]==expected
+        assert tk.StringVar.call_args_list[0].args[1]==expected
         assert dialog.result is None
         service.create.assert_not_called();service.update.assert_not_called()

@@ -1,7 +1,14 @@
 """管理著者の選択・管理・編集。書籍との関連は親画面の保存時に確定する。"""
 import logging
+import webbrowser
 import tkinter as tk
 from tkinter import ttk, messagebox
+from tkinter.scrolledtext import ScrolledText
+
+from book_manager.services.author_research import (
+    research_author_name, amazon_author_search_url, validate_author_source_url,
+    append_author_note, append_author_source, author_source_from_note,
+)
 
 from book_manager.config.window_state_store import WindowStateStore
 from book_manager.gui.dialog_window_state import restore_dialog_window
@@ -38,34 +45,115 @@ def show_error(window, error):
 
 class AuthorEditDialog:
     def __init__(self, parent, service, *, author=None, window_state_store=None, initial_name=""):
-        self._service = service;self._author = author;self.result = None
-        self.window = tk.Toplevel(parent);self.window.transient(parent)
+        self._service = service
+        self._author = author
+        self.result = None
+        self.window = tk.Toplevel(parent)
+        self.window.transient(parent)
         self.window.title('著者の編集' if author else '著者の新規登録')
-        self.window.geometry('660x540');self.window.minsize(520, 440)
-        body = ttk.Frame(self.window, padding=12);body.pack(fill='both', expand=True)
-        ttk.Label(body, text='同姓同名でも別の著者として登録できます。識別メモには分野・所属・生年などを記入できます。', wraplength=610).pack(anchor='w')
-        ttk.Label(body, text='表示名（必須・200文字以内）').pack(anchor='w', pady=(10, 0))
+        self.window.geometry('760x640')
+        self.window.minsize(640, 580)
+        body = ttk.Frame(self.window, padding=12)
+        body.pack(fill='both', expand=True)
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(8, weight=1)
+        body.rowconfigure(11, weight=3)
+        ttk.Label(body, text='同姓同名はID・識別メモで区別します。外部ページはブラウザーで確認し、必要な情報をメモへ追記してください。', wraplength=610).grid(row=0, column=0, sticky='w')
+        ttk.Label(body, text='表示名（必須・200文字以内）').grid(row=1, column=0, sticky='w', pady=(6, 0))
         self._name = tk.StringVar(self.window, author.name if author else initial_name)
-        entry = ttk.Entry(body, textvariable=self._name);entry.pack(fill='x')
-        ttk.Label(body, text='別名（1行に1つ。カンマでは分割しません）').pack(anchor='w', pady=(10, 0))
-        self._aliases = tk.Text(body, height=5, wrap='word');self._aliases.pack(fill='both', expand=True)
-        if author:self._aliases.insert('1.0', '\n'.join(author.aliases))
-        ttk.Label(body, text='識別メモ（任意・2000文字以内）').pack(anchor='w', pady=(10, 0))
-        self._note = tk.Text(body, height=5, wrap='word');self._note.pack(fill='both', expand=True)
-        if author:self._note.insert('1.0', author.disambiguation_note or '')
-        ttk.Label(body, text='保存すると著者情報が確定します。既存書籍の著者名欄は書き換えません。', wraplength=610).pack(anchor='w', pady=8)
-        buttons = ttk.Frame(body);buttons.pack(fill='x')
+        entry = ttk.Entry(body, textvariable=self._name)
+        entry.grid(row=2, column=0, sticky='ew')
+        research_buttons = ttk.Frame(body)
+        research_buttons.grid(row=3, column=0, sticky='ew', pady=4)
+        ttk.Button(research_buttons, text='著者名をコピー', command=self._copy_name).pack(side='left')
+        ttk.Button(research_buttons, text='Amazonで書籍検索', command=self._search_amazon).pack(side='left', padx=6)
+        ttk.Label(body, text='情報元URL（保存時に識別メモへ追加）').grid(row=4, column=0, sticky='w')
+        self._source_url = tk.StringVar(self.window, author_source_from_note(author.disambiguation_note or '') if author else '')
+        ttk.Entry(body, textvariable=self._source_url).grid(row=5, column=0, sticky='ew')
+        source_buttons = ttk.Frame(body)
+        source_buttons.grid(row=6, column=0, sticky='ew', pady=4)
+        ttk.Button(source_buttons, text='情報元を開く', command=self._open_source).pack(side='left')
+        ttk.Button(source_buttons, text='メモにURLを追加', command=self._append_source).pack(side='left', padx=6)
+        ttk.Label(body, text='別名（1行に1つ。カンマでは分割しません）').grid(row=7, column=0, sticky='w')
+        self._aliases = ScrolledText(body, height=3, wrap='word', undo=True)
+        self._aliases.grid(row=8, column=0, sticky='nsew')
+        if author:
+            self._aliases.insert('1.0', '\n'.join(author.aliases))
+        ttk.Label(body, text='識別メモ（URLを含め2000文字以内）').grid(row=9, column=0, sticky='w', pady=(6, 0))
+        ttk.Button(body, text='クリップボードをメモ末尾へ追記', command=self._paste_note).grid(row=10, column=0, sticky='w', pady=4)
+        self._note = ScrolledText(body, height=6, wrap='word', undo=True)
+        self._note.grid(row=11, column=0, sticky='nsew')
+        if author:
+            self._note.insert('1.0', author.disambiguation_note or '')
+        self._research_status = tk.StringVar(self.window, '')
+        ttk.Label(body, textvariable=self._research_status, wraplength=610).grid(row=12, column=0, sticky='w')
+        ttk.Label(body, text='保存すると著者情報が確定します。既存書籍の著者名欄は書き換えません。', wraplength=610).grid(row=13, column=0, sticky='w', pady=4)
+        buttons = ttk.Frame(body)
+        buttons.grid(row=14, column=0, sticky='ew')
         ttk.Button(buttons, text='キャンセル', command=self.window.destroy).pack(side='right')
         ttk.Button(buttons, text='保存', command=self._save).pack(side='right', padx=8)
         self.window.bind('<Escape>', lambda e:self.window.destroy())
-        restore_dialog_window(self.window, parent, state_store(window_state_store, 'author_edit'), default_size=(660, 540))
+        restore_dialog_window(self.window, parent, state_store(window_state_store, 'author_edit'), default_size=(760, 640))
         entry.focus_set()
+
+    def _copy_name(self):
+        try:
+            name = research_author_name(self._name.get())
+            self.window.clipboard_clear()
+            self.window.clipboard_append(name)
+            self._research_status.set('著者名をコピーしました。検索欄へ貼り付けできます。')
+        except Exception as error:
+            show_error(self.window, error)
+
+    def _open_browser(self, url):
+        if not webbrowser.open(url, new=2):
+            raise RuntimeError('ブラウザーを開けませんでした。URLを手動で開いてください。')
+        self._research_status.set('ブラウザーで確認し、必要な情報をコピーしてメモへ追記してください。')
+
+    def _search_amazon(self):
+        try:
+            self._open_browser(amazon_author_search_url(self._name.get()))
+        except Exception as error:
+            show_error(self.window, error)
+
+    def _open_source(self):
+        try:
+            self._open_browser(validate_author_source_url(self._source_url.get()))
+        except Exception as error:
+            show_error(self.window, error)
+
+    def _set_research_note(self, value):
+        self._note.delete('1.0', 'end')
+        self._note.insert('1.0', value)
+        self._note.see('end')
+        self._research_status.set('メモへ追記しました。「保存」で確定します。')
+
+    def _paste_note(self):
+        try:
+            current = self._note.get('1.0', 'end-1c')
+            updated = append_author_note(current, self.window.clipboard_get())
+            if updated != current:
+                self._set_research_note(updated)
+        except Exception as error:
+            show_error(self.window, error)
+
+    def _append_source(self):
+        try:
+            current = self._note.get('1.0', 'end-1c')
+            updated = append_author_source(current, self._source_url.get())
+            if updated != current:
+                self._set_research_note(updated)
+        except Exception as error:
+            show_error(self.window, error)
 
     def _save(self):
         try:
             name = self._name.get()
             aliases = tuple(line for line in self._aliases.get('1.0', 'end-1c').splitlines() if line.strip())
             note = self._note.get('1.0', 'end-1c') or None
+            source = getattr(self, '_source_url', None)
+            if source is not None and source.get().strip():
+                note = append_author_source(note or '', source.get())
             if self._author is None:
                 candidates = [c for c in self._service.search(name) if c.match_kind != 'note']
                 if candidates and not messagebox.askyesno('同名・類似する著者の確認',
