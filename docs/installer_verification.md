@@ -116,4 +116,23 @@ PowerShellの環境変数は起動後finallyで復元する。
 - インストール済みEXEのFileVersion・ProductVersionはいずれも2.11.0。
 - 最終実機6項目: 蔵書・管理著者・タグ・履歴・既存書影、Amazon検索・コピー、貼り付け・追加・比較・取消、ローカル書影とURL取得、更新後の検索維持・一覧操作、通常ショートカットからの再起動とデータ・画面配置保持を利用者が確認。
 
-残作業: 確定コミット・タグv2.11.0のpushとGitHub Release公開。
+確定コミットdeb16ec、タグv2.11.0のpushとGitHub Release公開を完了。
+
+
+
+## Version 2.11.1 修正検証（2026年11月20日）
+
+- 修正コミット: bcb1c6e。全2545件＋13 subtests成功。
+- 原因: 通常版のインストール先に2.8.0・2.9.0・2.10.0・2.11.0のメタデータが共存し、設定画面が2.10.0を表示。
+- 修正: 新版配置前に本アプリの`_internal/book_manager-*.dist-info`だけを除去する。
+- 検証に使った修正版setupは版番号2.11.0。SHA-256: `FCD4AC86E07C3AD37AABFC3130E8B1D4AEF9214B28A3265B02563C14A96C4E47`。公開済みsetupとは別物。
+- 退避先: `%LOCALAPPDATA%/book_manager_release_backups/version_fix_20261120_145131/book_manager`。
+- 同一版上書き後・初回起動前に利用者データ837ファイルのSHA-256一致を確認。
+- メタデータは`book_manager-2.11.0.dist-info`の1件だけになった。
+- 設定画面・EXEのFileVersion・ProductVersionは2.11.0で一致。書籍一覧・書影・再起動後の表示も利用者確認済み。
+- 正式2.11.1のEXE・配布ZIP・通常版setupと各SHA-256を生成。通常版setupのSHA-256: `33F4E899BE61877896FF73C577735E2FF619004FAD62B9E2F18707648D8ED339`。
+- 正式版退避先: `%LOCALAPPDATA%/book_manager_release_backups/before_2111_20261120_150934/book_manager`。退避コピー837ファイルをSHA-256照合。
+- 正式2.11.1の通常版上書き後・初回起動前に利用者データ837ファイルのSHA-256一致を確認。
+- インストール先のメタデータは`book_manager-2.11.1.dist-info`の1件だけ。EXEのFileVersion・ProductVersionは2.11.1。
+- 最終実機3項目: 設定画面の2.11.1表示、書籍一覧・書影・書籍入力支援、終了・再起動後の2.11.1表示を利用者確認済み。
+- 残作業: 版番号・検証記録の確定コミット、タグv2.11.1のpush、GitHub Release公開。公開済みv2.11.0タグは変更しない。
