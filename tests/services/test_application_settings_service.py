@@ -649,3 +649,15 @@ def test_create_backup_now_wraps_failure(tmp_path: Path) -> None:
 
     with pytest.raises(BackupSettingsError):
         service.create_backup_now()
+
+
+def test_effective_api_key_uses_same_source_as_configured_status(tmp_path):
+    """親プロセスの環境が古くても保存済みキーをClientへ渡せる。"""
+    store = MagicMock()
+    store.get.return_value = " stored-key "
+    service, _, _, _ = create_service(tmp_path, environment={}, user_environment_store=store)
+    assert service.get_google_books_api_key() == "stored-key"
+    assert service.get_snapshot().google_books_api_key_is_configured is True
+    service, _, store, _ = create_service(tmp_path, environment={GOOGLE_BOOKS_API_KEY_ENVIRONMENT_VARIABLE: " current-key "})
+    assert service.get_google_books_api_key() == "current-key"
+    store.get.assert_not_called()

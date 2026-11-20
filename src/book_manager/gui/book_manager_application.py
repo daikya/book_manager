@@ -25,6 +25,7 @@ from collections import OrderedDict
 from time import perf_counter
 from book_manager.gui.long_text_dialog import FormTextValue, LongTextDialog, text_dialog_store
 from book_manager.gui.cover_url_dialog import CoverUrlDialog
+from book_manager.gui.book_research_dialog import BookResearchDialog
 from book_manager.gui.author_dialogs import AuthorSelectionDialog
 from book_manager.services.author_service import AuthorService
 from book_manager.gui.excel_column_mapping_dialog import ExcelColumnMappingDialog
@@ -456,6 +457,7 @@ class BookManagerApplication:
 
         self._configure_root()
         self._create_widgets()
+        self._refresh_google_books_availability()
         self._restore_list_view_state()
         self._refresh_tag_options()
         self._load_all_books()
@@ -1656,6 +1658,8 @@ class BookManagerApplication:
             command=self._on_search_book_candidates,
         )
         self._candidate_search_button.grid(row=0, column=5, sticky="w")
+        self._google_books_hint = ttk.Label(identifier_frame)
+        self._google_books_hint.grid(row=0, column=6, sticky="w", padx=6)
 
         ttk.Label(
             form_frame,
@@ -1707,6 +1711,8 @@ class BookManagerApplication:
             command=lambda:self._on_edit_long_text("notes")).pack(side="left", padx=8)
         ttk.Button(text_buttons, text="書影URLを編集",
             command=self._on_edit_cover_url).pack(side="left")
+        ttk.Button(text_buttons, text="書籍入力支援",
+            command=self._on_book_research).pack(side="left", padx=8)
 
         cover_frame = ttk.LabelFrame(
             form_frame,
@@ -4869,6 +4875,8 @@ class BookManagerApplication:
 
         try:
             self._on_google_books_api_key_changed(api_key)
+            self._google_books_configured = bool(api_key.strip())
+            self._update_candidate_search_availability()
         except Exception:
             traceback.print_exc()
             messagebox.showwarning(
@@ -4942,6 +4950,8 @@ class BookManagerApplication:
 
         try:
             self._on_google_books_api_key_changed(None)
+            self._google_books_configured = False
+            self._update_candidate_search_availability()
         except Exception:
             traceback.print_exc()
             messagebox.showwarning(
@@ -6309,8 +6319,36 @@ class BookManagerApplication:
                 exc_info=True,
             )
 
+    def _on_book_research(self) -> None:
+        BookResearchDialog(
+            self._root, isbn=self._isbn_var.get(), title=self._title_var.get(),
+            author=self._author_var.get(),
+            state_store=text_dialog_store(getattr(self, "_window_state_store", None), "book_research"),
+        ).show()
+
+    def _refresh_google_books_availability(self) -> None:
+        try:
+            api_key = self._application_settings_service.get_google_books_api_key()
+            self._on_google_books_api_key_changed(api_key)
+            configured = bool(api_key)
+        except ApplicationSettingsError:
+            logger.warning("Google Booksの設定状態を確認できませんでした。", exc_info=True)
+            configured = False
+        self._google_books_configured = bool(configured)
+        self._update_candidate_search_availability()
+
+    def _update_candidate_search_availability(self) -> None:
+        configured = getattr(self, "_google_books_configured", True)
+        self._candidate_search_button.configure(state="normal" if configured else "disabled")
+        hint = getattr(self, "_google_books_hint", None)
+        if hint is not None:
+            hint.configure(text="" if configured else "Googleキー未設定（設定から登録）")
+
     def _on_search_book_candidates(self) -> None:
         """登録前・登録済みフォームから候補を検索し、比較後に反映する。"""
+        if not getattr(self, "_google_books_configured", True):
+            messagebox.showinfo("書籍候補検索", "設定画面でGoogle Books APIキーを登録してください。ISBNからの書誌情報取得はopenBDを利用できます。", parent=self._root)
+            return
         task = getattr(self, "_candidate_search_task", None)
         if task is None:
             task = CandidateSearchTask()
@@ -6370,7 +6408,7 @@ class BookManagerApplication:
         finally:
             try:
                 if self._root.winfo_exists():
-                    self._candidate_search_button.configure(state="normal")
+                    self._update_candidate_search_availability()
             except tk.TclError:
                 pass  # 親ウィンドウも終了済み。
 

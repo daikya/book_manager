@@ -285,25 +285,24 @@ class ApplicationSettingsService:
 
     def _is_google_books_api_key_configured(self) -> bool:
         """現在環境または利用者環境の設定有無を返す。"""
+        return self.get_google_books_api_key() is not None
+
+    def get_google_books_api_key(self) -> str | None:
+        """起動中のClientに渡すキー。画面・ログ・Snapshotへは含めない。"""
         current_value = self._environment.get(
-            GOOGLE_BOOKS_API_KEY_ENVIRONMENT_VARIABLE,
-            "",
+            GOOGLE_BOOKS_API_KEY_ENVIRONMENT_VARIABLE, "",
         )
-
         if current_value.strip():
-            return True
-
+            return current_value.strip()
         try:
             stored_value = self._user_environment_store.get(
                 GOOGLE_BOOKS_API_KEY_ENVIRONMENT_VARIABLE,
             )
         except UserEnvironmentStoreError as error:
             raise UserEnvironmentUpdateError(
-                "Google Books APIキーの設定状態を"
-                "確認できません。"
+                "Google Books APIキーの設定状態を確認できません。"
             ) from error
-
-        return bool(stored_value and stored_value.strip())
+        return stored_value.strip() if stored_value and stored_value.strip() else None
 
     @staticmethod
     def _normalize_api_key(api_key: str) -> str:

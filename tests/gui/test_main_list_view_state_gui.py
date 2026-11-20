@@ -268,6 +268,7 @@ def test_init_restores_state_before_first_book_load() -> None:
     def create_widgets(application: BookManagerApplication) -> None:
         events.append("create_widgets")
         application._title_entry = Mock()
+        application._candidate_search_button = Mock()
 
     with (
         patch(

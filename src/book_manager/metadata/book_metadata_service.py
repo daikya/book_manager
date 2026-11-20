@@ -85,7 +85,8 @@ class BookMetadataService:
             raise TypeError("取得件数は整数で指定してください。")
         if not 1 <= max_results <= 40:
             raise ValueError("取得件数は1から40の範囲で指定してください。")
-        if self._search_client is None:
+        if (self._search_client is None
+                or getattr(self._search_client, "is_available", True) is False):
             raise BookMetadataConfigurationError(
                 "書籍候補検索Clientが設定されていません。"
             )
@@ -101,7 +102,8 @@ class BookMetadataService:
 
     def fetch_candidate(self, candidate: BookSearchCandidate, *, isbn: str = "") -> FetchedBookData:
         """候補の詳細情報を取得する。DBの読み書きは行わない。"""
-        if self._search_client is None:
+        if (self._search_client is None
+                or getattr(self._search_client, "is_available", True) is False):
             raise BookMetadataConfigurationError("候補の取得先が設定されていません。")
         return self._search_client.fetch_candidate(candidate, isbn=isbn)
 
@@ -144,6 +146,8 @@ class BookMetadataService:
         errors: list[BookMetadataError] = []
 
         for client in self._clients:
+            if getattr(client, "is_available", True) is False:
+                continue
             try:
                 result = client.fetch_by_isbn(
                     query_isbn13,

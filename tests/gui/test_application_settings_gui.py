@@ -83,6 +83,7 @@ def create_application() -> BookManagerApplication:
         BookManagerApplication,
     )
     application._root = Mock()
+    application._candidate_search_button = Mock()
     application._application_settings_service = Mock()
     application._application_settings_service.get_cover_cache_status.return_value = (
         CoverCacheStatus(file_count=2, total_size_bytes=1536)

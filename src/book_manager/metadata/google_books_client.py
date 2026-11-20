@@ -50,6 +50,11 @@ class GoogleBooksClient:
         self._api_key = api_key
 
     @property
+    def is_available(self) -> bool:
+        """アプリケーションからキー未設定時の問い合わせを省略する。"""
+        return bool(self._api_key and self._api_key.strip())
+
+    @property
     def source_name(self) -> str:
         """取得元名を返す。"""
         return "Google Books"
