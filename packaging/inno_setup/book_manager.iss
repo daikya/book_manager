@@ -62,6 +62,10 @@ Name: "desktopicon"; Description: "デスクトップにショートカットを
 
 #endif
 
+[InstallDelete]
+; Remove only this application's stale package metadata before installing the new copy.
+Type: filesandordirs; Name: "{app}\_internal\book_manager-*.dist-info"
+
 [Files]
 Source: "..\..\dist\BookManager\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 

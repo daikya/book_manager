@@ -171,3 +171,12 @@ def test_build_script_deletes_only_named_installer_artifacts() -> None:
     ]
     assert remove_commands == ["Remove-Item $existingArtifact -Force"]
     assert "Remove-Item $installerOutputDirectory" not in content
+
+
+def test_upgrade_replaces_only_application_package_metadata() -> None:
+    """旧版メタデータを残さず、削除範囲を本体の専用ディレクトリに限定する。"""
+    content = read_inno_setup_script()
+    section = content.split("[InstallDelete]", 1)[1].split("[Files]", 1)[0]
+    entries = re.findall(r'^Type: (.+); Name: "([^"]+)"$', section, re.MULTILINE)
+    assert entries == [("filesandordirs", r"{app}\_internal\book_manager-*.dist-info")]
+    assert content.index("[InstallDelete]") < content.index("[Files]")
