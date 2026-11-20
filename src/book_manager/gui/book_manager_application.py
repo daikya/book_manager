@@ -6320,11 +6320,29 @@ class BookManagerApplication:
             )
 
     def _on_book_research(self) -> None:
-        BookResearchDialog(
-            self._root, isbn=self._isbn_var.get(), title=self._title_var.get(),
-            author=self._author_var.get(),
+        snapshot = self._metadata_form_snapshot()
+        current = {
+            "isbn": self._isbn_var.get(), "title": self._title_var.get(),
+            "author": self._author_var.get(), "publisher": self._publisher_var.get(),
+            "publication_format": self._publication_format_var.get(),
+            "description": self._description_text.get("1.0", "end-1c"),
+        }
+        result = BookResearchDialog(
+            self._root, isbn=current["isbn"], title=current["title"], author=current["author"],
+            current=current,
             state_store=text_dialog_store(getattr(self, "_window_state_store", None), "book_research"),
         ).show()
+        if not result:
+            return
+        if self._metadata_form_snapshot() != snapshot:
+            messagebox.showwarning("書誌情報の貼り付け", "対象書籍またはフォームが変わりました。もう一度確認してください。", parent=self._root)
+            return
+        for key, value in result.items():
+            if key == "description":
+                self._replace_text(self._description_text, value)
+            elif key in ("isbn", "title", "author", "publisher", "publication_format"):
+                getattr(self, f"_{key}_var").set(value)
+        self._edit_status_var.set("貼り付けた書誌情報を反映しました。保存するには登録または更新してください。")
 
     def _refresh_google_books_availability(self) -> None:
         try:

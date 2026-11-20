@@ -4,19 +4,24 @@ from tkinter import messagebox, ttk
 import webbrowser
 
 from book_manager.gui.dialog_window_state import restore_dialog_window
+from book_manager.gui.long_text_dialog import text_dialog_store
+from book_manager.gui.book_text_import_dialog import BookTextImportDialog
 from book_manager.services.book_research import (
     amazon_book_search_url, book_search_query, research_book_title, research_isbn,
 )
 
 
 class BookResearchDialog:
-    def __init__(self, parent, *, isbn='', title='', author='', state_store=None):
+    def __init__(self, parent, *, isbn='', title='', author='', state_store=None, current=None):
+        self.result = None
         self._values = dict(isbn=isbn, title=title, author=author)
+        self._current = dict(current) if current is not None else dict(self._values)
+        self._paste_state_store = text_dialog_store(state_store, 'book_paste')
         self.window = tk.Toplevel(parent)
         self.window.title('書籍入力支援')
         self.window.transient(parent)
-        self.window.geometry('680x360')
-        self.window.minsize(480, 320)
+        self.window.geometry('680x440')
+        self.window.minsize(480, 420)
         self._status = tk.StringVar(master=self.window)
         body = ttk.Frame(self.window, padding=12)
         body.pack(fill='both', expand=True)
@@ -41,10 +46,12 @@ class BookResearchDialog:
                    state='normal' if title.strip() else 'disabled').pack(side='left', padx=6)
         ttk.Label(body, textvariable=self._status, wraplength=430).grid(
             row=6, column=0, columnspan=2, sticky='w')
+        ttk.Button(body, text='書誌情報を貼り付け・確認', command=self._paste_book_text).grid(
+            row=7, column=0, columnspan=2, sticky='w', pady=6)
         body.rowconfigure(7, weight=1)
         ttk.Button(body, text='閉じる', command=self.window.destroy).grid(row=8, column=1, sticky='e')
         self.window.bind('<Escape>', lambda event:self.window.destroy())
-        restore_dialog_window(self.window, parent, state_store, default_size=(680, 360))
+        restore_dialog_window(self.window, parent, state_store, default_size=(680, 440))
 
     def _search(self):
         try:
@@ -69,6 +76,16 @@ class BookResearchDialog:
         except (ValueError, tk.TclError) as error:
             messagebox.showerror('コピー', str(error), parent=self.window)
 
+    def _paste_book_text(self):
+        result = BookTextImportDialog(self.window, current=self._current,
+                                     state_store=self._paste_state_store).show()
+        if result is not None:
+            self.result = result
+            self.window.destroy()
+        else:
+            self.window.grab_set()
+
     def show(self):
         self.window.grab_set()
         self.window.wait_window()
+        return self.result

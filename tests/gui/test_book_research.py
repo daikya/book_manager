@@ -75,16 +75,21 @@ def test_clipboard_error_is_reported():
 
 def test_dialog_uses_independent_geometry_store():
     with patch(f'{MODULE}.tk'), patch(f'{MODULE}.ttk'), patch(f'{MODULE}.restore_dialog_window') as restore:
-        store = Mock();d = BookResearchDialog(Mock(), title='本', state_store=store)
+        store = Mock();store.path = __import__('pathlib').Path('/tmp/window_state.json');d = BookResearchDialog(Mock(), title='本', state_store=store)
         assert restore.call_args.args[2] is store
-        assert restore.call_args.kwargs['default_size'] == (680, 360)
+        assert restore.call_args.kwargs['default_size'] == (680, 440)
 
 
 def test_main_passes_edited_form_without_reference_isbn():
     app = BookManagerApplication.__new__(BookManagerApplication);app._root = Mock()
     for name, value in [('isbn', ''), ('reference_isbn', ISBN), ('title', '編集中の題名'), ('author', '編集中の著者')]:
         var = Mock();var.get.return_value = value;setattr(app, f'_{name}_var', var)
+    app._metadata_form_snapshot = Mock(return_value=())
+    app._publisher_var = Mock();app._publisher_var.get.return_value = ''
+    app._publication_format_var = Mock();app._publication_format_var.get.return_value = ''
+    app._description_text = Mock();app._description_text.get.return_value = ''
     with patch('book_manager.gui.book_manager_application.BookResearchDialog') as cls:
+        cls.return_value.show.return_value = None
         app._on_book_research()
         assert cls.call_args.kwargs['isbn'] == ''
         assert cls.call_args.kwargs['title'] == '編集中の題名'
