@@ -28,6 +28,7 @@ from book_manager.models.fetched_book_data import (
 )
 from book_manager.services.cover_image_service import (
     CoverImageService,
+    PreparedCoverImage,
 )
 from book_manager.validators.reading_status_validator import (
     validate_reading_status,
@@ -1066,6 +1067,14 @@ class BookService:
         return self._cover_image_service.fetch(
             image_url,
         )
+
+    def prepare_local_cover_image(self, image_path: Path) -> PreparedCoverImage:
+        """プレビュー用に読み込む。DBや保存先へ書き込まない。"""
+        return self._require_cover_image_service().prepare_local_image(image_path)
+
+    def store_local_cover_image(self, prepared: PreparedCoverImage) -> Path:
+        """確認済み画像を利用者データ内へ保存する。DB更新は行わない。"""
+        return self._require_cover_image_service().store_local_image(prepared)
 
     def create_stored_cover_image_path(
         self,

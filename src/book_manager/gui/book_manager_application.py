@@ -1709,7 +1709,7 @@ class BookManagerApplication:
             command=lambda:self._on_edit_long_text("description")).pack(side="left")
         ttk.Button(text_buttons, text="備考を表示・編集",
             command=lambda:self._on_edit_long_text("notes")).pack(side="left", padx=8)
-        ttk.Button(text_buttons, text="書影URLを編集",
+        ttk.Button(text_buttons, text="書影を編集",
             command=self._on_edit_cover_url).pack(side="left")
         ttk.Button(text_buttons, text="書籍入力支援",
             command=self._on_book_research).pack(side="left", padx=8)
@@ -2229,6 +2229,7 @@ class BookManagerApplication:
         before = self._metadata_form_snapshot()
         result = CoverUrlDialog(self._root, url=self._current_cover_image_url,
             fetch=self._service.fetch_cover_image,
+            prepare_file=self._service.prepare_local_cover_image,
             state_store=text_dialog_store(getattr(self, "_window_state_store", None), "cover_url")).show()
         if result is None:
             return
@@ -2236,10 +2237,12 @@ class BookManagerApplication:
             messagebox.showwarning("書影URL", "編集中の書籍情報が変わりました。もう一度確認してください。", parent=self._root)
             return
         url, path = result
-        if not url:
+        if url == "" and path is None:
             self._clear_cover_state()
             return
         try:
+            if url is None:
+                path = self._service.store_local_cover_image(path)
             stored = self._service.create_stored_cover_image_path(path)
             self._display_cover_image(str(path))
         except Exception as error:
@@ -4377,8 +4380,9 @@ class BookManagerApplication:
         ttk.Label(
             frame,
             text=(
-                "削除しても書籍情報は残ります。必要な表紙画像は、"
-                "書籍を選択したときに再取得されます。"
+                "URLから取得した画像キャッシュだけを削除します。"
+                "画像ファイルから登録した書影は件数・削除対象に含めません。"
+                "URLの画像は書籍を選択したときに再取得されます。"
             ),
             wraplength=650,
         ).grid(
@@ -4476,8 +4480,8 @@ class BookManagerApplication:
                 f"{status.file_count}件・"
                 f"{self._format_file_size(status.total_size_bytes)}の"
                 "表紙画像キャッシュを削除します。\n\n"
-                "DBに保存された書籍情報は削除しません。"
-                "必要な表紙画像は書籍を選択したときに再取得されます。\n\n"
+                "DBに保存された書籍情報と、画像ファイルから登録した書影は削除しません。"
+                "URLの画像は書籍を選択したときに再取得されます。\n\n"
                 "この操作は取り消せません。続行しますか？"
             ),
             parent=dialog,

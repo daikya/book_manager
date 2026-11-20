@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -11,6 +13,8 @@ from urllib.parse import urlparse
 import requests
 from requests import Session
 
+
+from book_manager.services.local_cover_image import PreparedCoverImage, prepare_local_cover
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +163,31 @@ class CoverImageService:
         )
 
         return cache_path
+
+    def prepare_local_image(self, path: Path) -> PreparedCoverImage:
+        """元ファイルを読み取り、保存せずにプレビュー用データを返す。"""
+        return prepare_local_cover(path)
+
+    def store_local_image(self, prepared: PreparedCoverImage) -> Path:
+        """明示反映時に、キャッシュ削除対象外のlocal配下へ原子的に保存する。"""
+        if not isinstance(prepared, PreparedCoverImage) or not prepared.png_data:
+            raise ValueError("プレビューした画像を指定してください。")
+        directory = (self._cache_directory / "local").resolve(strict=False)
+        self._require_cover_cache_path(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+        digest = hashlib.sha256(prepared.png_data).hexdigest()
+        destination = directory / f"{digest}.png"
+        self._require_cover_cache_path(destination.resolve(strict=False))
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=directory, prefix=".local_", suffix=".tmp", delete=False) as stream:
+                temporary = Path(stream.name)
+                stream.write(prepared.png_data)
+            os.replace(temporary, destination)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+        return destination
 
     def get_cache_status(self) -> CoverCacheStatus:
         """管理対象キャッシュの件数と合計サイズを返す。
