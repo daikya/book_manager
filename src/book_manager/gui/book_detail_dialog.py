@@ -35,8 +35,8 @@ def detail_sections(book, authors=(), histories=()):
             value = {'unread': '未読', 'reading': '読書中', 'completed': '読了'}.get(value, value)
         elif name == 'tags':
             value = ' ／ '.join(value)
-        elif name == 'rating' and value is not None:
-            value = f'{value} / 5'
+        elif name == 'rating':
+            value = '★' * value if value is not None else '未評価'
         result.append((LABELS[name], str(value) if value is not None and value != '' else '未設定'))
     result.insert(3, ('管理著者', '\n'.join(f'{a.name} [ID:{a.id}]' for a in authors) or '未設定'))
     history_text = []

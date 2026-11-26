@@ -32,7 +32,7 @@ def test_all_book_fields_and_related_information_are_preserved():
 
 def test_empty_values_remain_readable():
     values = dict(detail_sections(BookItem(title='本')))
-    assert values['評価'] == '未設定'
+    assert values['評価'] == '未評価'
     assert values['管理著者'] == '未設定'
     assert values['読書履歴'] == '登録なし'
     assert values['お気に入り'] == 'いいえ'
@@ -113,3 +113,10 @@ def test_history_selection_shows_full_note_and_resets_scroll(key, note):
     d._history_note.insert.assert_called_once_with('1.0', expected)
     d._history_note.yview_moveto.assert_called_once_with(0)
     assert d._history_note.configure.call_args.kwargs == {'state': 'disabled'}
+
+
+@pytest.mark.parametrize('rating', range(1, 6))
+def test_rating_matches_input_stars(rating):
+    book = BookItem(title='本', rating=rating)
+    assert dict(detail_sections(book))['評価'] == BookManagerApplication.RATING_LABELS[rating]
+    assert book.rating == rating
