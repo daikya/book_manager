@@ -26,6 +26,7 @@ from time import perf_counter
 from book_manager.gui.long_text_dialog import FormTextValue, LongTextDialog, text_dialog_store
 from book_manager.gui.cover_url_dialog import CoverUrlDialog
 from book_manager.gui.book_research_dialog import BookResearchDialog
+from book_manager.gui.book_detail_dialog import BookDetailDialog
 from book_manager.gui.author_dialogs import AuthorSelectionDialog
 from book_manager.services.author_service import AuthorService
 from book_manager.gui.excel_column_mapping_dialog import ExcelColumnMappingDialog
@@ -699,6 +700,9 @@ class BookManagerApplication:
         self._delete_button.configure(
             state=state,
         )
+        detail_button = getattr(self, "_book_detail_button", None)
+        if detail_button is not None:
+            detail_button.configure(state=state)
 
     def _create_search_frame(
         self,
@@ -1713,6 +1717,10 @@ class BookManagerApplication:
             command=self._on_edit_cover_url).pack(side="left")
         ttk.Button(text_buttons, text="書籍入力支援",
             command=self._on_book_research).pack(side="left", padx=8)
+
+        self._book_detail_button = ttk.Button(text_buttons, text="書籍詳細",
+            command=self._on_show_book_detail, state="disabled")
+        self._book_detail_button.pack(side="left")
 
         cover_frame = ttk.LabelFrame(
             form_frame,
@@ -6322,6 +6330,26 @@ class BookManagerApplication:
                 "ウィンドウ状態を保存できませんでした。",
                 exc_info=True,
             )
+
+    def _on_show_book_detail(self) -> None:
+        """フォームを変更せず、選択した書籍の保存済み情報を表示する。"""
+        if self._selected_book_id is None:
+            messagebox.showwarning("書籍未選択", "書籍を選択してください。", parent=self._root)
+            return
+        try:
+            book = self._service.get_book(self._selected_book_id)
+            if book is None:
+                messagebox.showwarning("書籍が見つかりません", "対象の書籍が見つかりませんでした。", parent=self._root)
+                return
+            authors = (self._author_service.get_book_authors(book.id)
+                       if self._author_service is not None else ())
+            histories = self._reading_history_service.get_histories_for_book(book.id)
+            path = self._service.resolve_cover_image_path(book.cover_image_path) if book.cover_image_path else None
+            BookDetailDialog(self._root, book=book, authors=authors,
+                             histories=histories, cover_path=path).show()
+        except Exception:
+            logging.getLogger(__name__).exception("書籍詳細を表示できませんでした。")
+            messagebox.showerror("書籍詳細", "書籍詳細を表示できませんでした。", parent=self._root)
 
     def _on_book_research(self) -> None:
         snapshot = self._metadata_form_snapshot()
